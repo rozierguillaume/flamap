@@ -25,10 +25,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # ~5 min : les flux FIRMS répondent vite, le WFS d'EFFIS met 40 à 250 s
-      # par requête. Si une source est indisponible, le script lève et le job
-      # échoue — le site déjà en ligne reste intact, ce qui vaut mieux que
-      # publier une carte vide.
+      # ~6 s depuis un runner : le WFS d'EFFIS, très lent depuis une connexion
+      # résidentielle (40 à 250 s), répond quasi instantanément en datacenter.
+      # Si une source est indisponible, le script lève et le job échoue — le
+      # site déjà en ligne reste intact, ce qui vaut mieux qu'une carte vide.
       - name: Récupérer les données
         run: python3 fetch_fires.py
         timeout-minutes: 25

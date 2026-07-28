@@ -28,7 +28,10 @@ python3 fetch_fires.py
 
 Écrit `data/hotspots.geojson`, `data/burnt_dated.geojson` et
 `data/burnt_nrt.geojson`. Bibliothèque standard uniquement, aucune clé d'API.
-Compter environ 5 minutes : le WFS d'EFFIS répond en 40 à 250 s par requête.
+
+Compter quelques minutes depuis une connexion résidentielle : le WFS d'EFFIS y
+répond en 40 à 250 s par requête. Depuis un datacenter il répond en quelques
+secondes — le job GitHub Actions complet tourne en une quinzaine de secondes.
 
 Pour une autre zone, en `west south east north` :
 
@@ -89,7 +92,8 @@ les détections récentes au-dessus des anciennes sans tri manuel.
 Le site est publié par GitHub Pages, via le workflow
 [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) : toutes les
 2 heures, un runner exécute `fetch_fires.py`, assemble `index.html` + `data/`
-dans `_site`, et livre le tout à Pages sous forme d'artefact.
+dans `_site`, et livre le tout à Pages sous forme d'artefact. L'ensemble prend
+une quinzaine de secondes.
 
 Les données rafraîchies ne sont **jamais commitées**. À 3 Mo par version et
 12 exécutions par jour, l'historique git gonflerait de plusieurs gigaoctets par
