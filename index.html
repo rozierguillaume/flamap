@@ -1,0 +1,476 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Flamap — feu de Gironde</title>
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5/dist/maplibre-gl.css">
+<script src="https://unpkg.com/maplibre-gl@5/dist/maplibre-gl.js"></script>
+<style>
+  :root {
+    --burnt:      #2a2320;   /* terre brulee, feu eteint     */
+    --burnt-edge: #6b5a4e;
+    --old:        #7d3b28;   /* brule il y a plus de 72 h    */
+    --recent:     #b1341f;   /* brule il y a 24-72 h         */
+    --hot:        #ff6b1a;   /* brule il y a 6-24 h          */
+    --front:      #ffd84d;   /* front actif (< 6 h)          */
+    --bg:         #0d0f12;
+    --ink:        #e8e6e3;
+    --ink-dim:    #a8a29c;
+    --safe-b:     env(safe-area-inset-bottom, 0px);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden;
+               background: var(--bg); color: var(--ink);
+               font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+               -webkit-text-size-adjust: 100%; }
+  #map { position: absolute; inset: 0; background: var(--bg); }
+  .maplibregl-ctrl-attrib { display: none; }   /* credits en clair dans #credits */
+
+  .glass {
+    background: rgba(13,15,18,.9); backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid rgba(255,255,255,.10); border-radius: 12px;
+  }
+
+  /* ---- logo ---- */
+  #head { position: absolute; z-index: 500; top: 14px; left: 14px; padding: 11px 18px 12px; }
+  #head h1 { margin: 0; font-size: 21px; font-weight: 700; letter-spacing: .4px; }
+  #head h1 span { color: var(--hot); }
+
+  /* ---- calques ---- */
+  #layers { position: absolute; z-index: 500; top: 14px; right: 14px;
+            padding: 11px 14px; font-size: 12.5px; }
+  #layers label { display: flex; align-items: center; gap: 8px; margin: 3px 0;
+                  cursor: pointer; white-space: nowrap; }
+  #layers input { accent-color: var(--hot); margin: 0; }
+  #layers-btn { display: none; }   /* mobile uniquement, voir plus bas */
+
+  /* ---- barre du bas ---- */
+  #legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12.5px; }
+  #legend span { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+  #legend i { width: 12px; height: 12px; border-radius: 50%; flex: none; }
+  #legend i.poly { border-radius: 3px; }
+
+  #timerow { display: flex; align-items: center; gap: 12px; }
+  #play { background: #21252b; color: var(--ink); border: 1px solid #363b43;
+          border-radius: 8px; flex: none; width: 38px; height: 34px;
+          cursor: pointer; font-size: 13px; }
+  #play:hover { background: #2c313a; }
+
+  /* la reglette et ses crans : un cran = une mise a jour d'une source */
+  #track { flex: 1; min-width: 0; }
+  /* les crans au-dessus de la reglette, sinon le remplissage de celle-ci les masque */
+  #ticks { position: relative; height: 10px; margin: 0 9px 1px; pointer-events: none; }
+  #ticks b { position: absolute; bottom: 0; width: 1.5px; height: 6px;
+             margin-left: -.75px; background: #6f747d; border-radius: 1px; }
+  #ticks b.effis { height: 10px; width: 2px; margin-left: -1px; background: #c98b5e; }
+  #slider { width: 100%; margin: 0; accent-color: var(--hot); height: 24px; display: block; }
+
+  #read { text-align: right; line-height: 1.25; white-space: nowrap; }
+  #probe { position: absolute; visibility: hidden; white-space: nowrap;
+           top: -9999px; left: -9999px; }
+  #clock { font-variant-numeric: tabular-nums; font-size: 12.5px; }
+  #sub { font-size: 10.5px; color: var(--ink-dim); }
+  #sub b { color: var(--front); font-variant-numeric: tabular-nums; }
+
+  #credits { font-size: 10.5px; line-height: 1.5; color: #7d7873; }
+  #credits a { color: #9a948e; text-decoration: none; border-bottom: 1px solid #3a3733; }
+
+  .maplibregl-ctrl-group { background: rgba(13,15,18,.9) !important;
+    border: 1px solid rgba(255,255,255,.10) !important; border-radius: 12px !important;
+    box-shadow: none !important; }
+  .maplibregl-ctrl-group button + button { border-top-color: rgba(255,255,255,.10) !important; }
+  .maplibregl-ctrl-group button span { filter: invert(1) brightness(1.4); }
+
+  .maplibregl-popup-content { background: #171a1f; color: var(--ink);
+    border-radius: 10px; padding: 11px 14px; font-size: 13px; box-shadow: none; }
+  .maplibregl-popup-tip { border-top-color: #171a1f !important;
+    border-bottom-color: #171a1f !important; }
+  .maplibregl-popup-close-button { color: var(--ink-dim); font-size: 17px; padding: 2px 7px; }
+
+  /* =======================  DESKTOP  ======================= */
+  @media (min-width: 721px) {
+    #dock { position: absolute; z-index: 500; left: 14px; right: 14px; bottom: 14px;
+            display: flex; align-items: flex-end; gap: 14px; pointer-events: none; }
+    #dock > * { pointer-events: auto; }
+    #legend { flex-direction: column; gap: 7px; padding: 13px 16px; }
+    #timebar { flex: 1; max-width: 620px; margin: 0 auto; padding: 13px 16px; }
+    /* largeur figée sur le libellé le plus large : sinon « EFFIS · 0 foyers »
+       et « VIIRS/NOAA-20 · 1103 foyers » font varier la course du curseur */
+    #read { flex: none; width: var(--read-w, 168px); }
+    #credits { width: 280px; padding: 11px 14px; text-align: right; }
+    #layers { top: 60px; }   /* sous les boutons de zoom */
+  }
+
+  /* =======================  MOBILE  ======================== */
+  @media (max-width: 720px) {
+    #head { top: 10px; left: 10px; padding: 9px 15px 10px; }
+    #head h1 { font-size: 19px; }
+
+    /* les calques repliés derrière un bouton : sur 375 px de large, le panneau
+       ouvert en permanence mangeait le quart supérieur de l'écran */
+    #layers-btn { display: block; position: absolute; z-index: 501;
+                  top: 10px; right: 10px; width: 42px; height: 42px;
+                  color: var(--ink); font-size: 17px; line-height: 1; cursor: pointer; }
+    #layers { top: 60px; right: 10px; padding: 10px 13px; font-size: 12px; }
+    #layers:not(.open) { display: none; }
+
+    /* tout le bas dans une seule feuille : plus aucun chevauchement */
+    #dock {
+      position: absolute; z-index: 500; left: 0; right: 0; bottom: 0;
+      background: rgba(13,15,18,.94); backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border-top: 1px solid rgba(255,255,255,.10); border-radius: 14px 14px 0 0;
+      padding: 12px 14px calc(12px + var(--safe-b));
+      display: flex; flex-direction: column; gap: 11px;
+    }
+    #dock > .glass { background: none; border: none; border-radius: 0; padding: 0;
+                     backdrop-filter: none; -webkit-backdrop-filter: none; }
+    #legend { font-size: 11.5px; gap: 5px 14px; }
+    #legend i { width: 10px; height: 10px; }
+    #play { width: 42px; height: 38px; }   /* cible tactile */
+    #slider { height: 32px; }
+
+    /* la lecture sur sa propre ligne : à côté du curseur elle lui volait
+       120 px des 350 disponibles */
+    #timerow { flex-wrap: wrap; row-gap: 3px; }
+    #read { order: -1; width: 100%; text-align: left;
+            display: flex; justify-content: space-between; align-items: baseline; }
+    #clock { font-size: 13px; }
+    #credits { text-align: left; }
+  }
+</style>
+</head>
+<body>
+<div id="map"></div>
+
+<div id="head" class="glass"><h1>Fla<span>map</span></h1></div>
+
+<button id="layers-btn" class="glass" aria-label="Calques" aria-expanded="false">≡</button>
+<div id="layers" class="glass">
+  <label><input type="checkbox" id="ck-dated" checked> surfaces brûlées (datées)</label>
+  <label><input type="checkbox" id="ck-nrt" checked> surfaces brûlées (NRT)</label>
+</div>
+
+<div id="dock">
+  <div id="legend" class="glass">
+    <span><i class="poly" style="background:var(--burnt);border:1px solid var(--burnt-edge)"></i>terre brûlée</span>
+    <span><i style="background:var(--recent)"></i>brûlé il y a 24–72 h</span>
+    <span><i style="background:var(--hot)"></i>brûlé il y a 6–24 h</span>
+    <span><i style="background:var(--front)"></i>front actif (&lt; 6 h)</span>
+  </div>
+
+  <div id="timebar" class="glass">
+    <div id="timerow">
+      <button id="play" aria-label="Lancer l'animation">▶</button>
+      <div id="track">
+        <div id="ticks"></div>
+        <input id="slider" type="range" min="0" max="0" step="1" value="0"
+               aria-label="Mise à jour affichée">
+      </div>
+      <div id="read">
+        <div id="clock">—</div>
+        <div id="sub"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="credits" class="glass">
+    Foyers actifs : <a href="https://firms.modaps.eosdis.nasa.gov/" target="_blank" rel="noopener">NASA FIRMS</a>
+    (VIIRS 375 m &amp; MODIS, LANCE/EOSDIS).
+    Surfaces brûlées : <a href="https://forest-fire.emergency.copernicus.eu/" target="_blank" rel="noopener">Copernicus EFFIS</a>.
+    Fond : <a href="https://www.esri.com/" target="_blank" rel="noopener">Esri</a> World Imagery ;
+    toponymes <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a> /
+    <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>.
+    Rendu <a href="https://maplibre.org/" target="_blank" rel="noopener">MapLibre GL</a>.
+    <span id="updated"></span>
+  </div>
+</div>
+
+<script>
+const MOBILE = matchMedia('(max-width: 720px)').matches;
+const H = 3600, DAY = 86400;
+const V = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+// paliers d'anciennete : [seuil (s), couleur, rayon]
+const RAMP = [
+  [  6 * H, V('--front'),  MOBILE ? 5.0 : 4.4],
+  [ 24 * H, V('--hot'),    MOBILE ? 4.2 : 3.8],
+  [ 72 * H, V('--recent'), MOBILE ? 3.6 : 3.2],
+  [Infinity, V('--old'),   MOBILE ? 3.0 : 2.6],
+];
+const MAX_AGE = 5 * DAY;   // au-dela, c'est le polygone qui parle
+
+const map = new maplibregl.Map({
+  container: 'map',
+  attributionControl: false,
+  center: [-0.85, 44.78], zoom: 8,
+  style: {
+    version: 8,
+    sources: {
+      sat: {
+        type: 'raster', tileSize: 256, maxzoom: 18,
+        tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
+      },
+      labels: {
+        type: 'raster', tileSize: 256, maxzoom: 19,
+        tiles: ['a', 'b', 'c', 'd'].map(s =>
+          `https://${s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}${devicePixelRatio > 1 ? '@2x' : ''}.png`),
+      },
+    },
+    layers: [
+      { id: 'sat', type: 'raster', source: 'sat' },
+      { id: 'labels', type: 'raster', source: 'labels', paint: { 'raster-opacity': .85 } },
+    ],
+  },
+});
+if (!MOBILE) map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
+map.touchZoomRotate.disableRotation();
+
+document.getElementById('layers-btn').addEventListener('click', e => {
+  const open = document.getElementById('layers').classList.toggle('open');
+  e.currentTarget.setAttribute('aria-expanded', open);
+});
+
+const slider  = document.getElementById('slider');
+const ticksEl = document.getElementById('ticks');
+const clockEl = document.getElementById('clock');
+const subEl   = document.getElementById('sub');
+
+const fmt = ts => new Date(ts * 1000).toLocaleString('fr-FR',
+  { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Paris' });
+
+let steps = [], playing = null;
+
+/**
+ * Les données ne sont pas continues : VIIRS/MODIS ne voient la zone que lors
+ * d'un passage orbital, et EFFIS ne republie ses polygones qu'une à deux fois
+ * par jour. On reconstruit donc la liste des mises à jour réelles, et le
+ * curseur saute de l'une à l'autre — un cran = une actualisation.
+ */
+function buildSteps(hs, dated) {
+  const out = [];
+
+  // un passage satellite = une rafale de détections en quelques minutes
+  const GAP = 25 * 60;
+  let cur = null;
+  for (const f of hs.features) {          // deja trie par date
+    const p = f.properties;
+    if (cur && p.ts - cur.ts <= GAP) { cur.n++; continue; }
+    cur = { ts: p.ts, kind: 'sat', label: p.source, n: 1 };
+    out.push(cur);
+  }
+
+  // Chaque publication EFFIS d'un polygone, mais seulement dans la fenêtre
+  // couverte par les foyers : les flux FIRMS ne remontent qu'à 7 jours, alors
+  // que la couche EFFIS contient toute la saison. Sans ce filtre, une
+  // publication de mars étirerait la frise sur cinq mois et tasserait tous les
+  // passages satellite à l'extrémité droite.
+  const t0 = out.length ? out[0].ts : 0;
+  for (const t of new Set(dated.features.map(f => f.properties.lu).filter(Boolean))) {
+    if (t >= t0) out.push({ ts: t, kind: 'effis', label: 'EFFIS', n: 0 });
+  }
+
+  return out.sort((a, b) => a.ts - b.ts);
+}
+
+function drawTicks() {
+  const t0 = steps[0].ts, span = steps[steps.length - 1].ts - t0 || 1;
+  ticksEl.innerHTML = steps.map(s =>
+    `<b class="${s.kind}" style="left:${((s.ts - t0) / span * 100).toFixed(3)}%"></b>`).join('');
+}
+
+function show(i) {
+  const s = steps[i], now = s.ts;
+
+  // filtre + couleurs recalculés à partir de `now` : MapLibre garde les données
+  // en mémoire GPU, on ne repousse jamais le GeoJSON
+  const age = ['-', now, ['get', 'ts']];
+  map.setFilter('hotspots', ['all', ['<=', ['get', 'ts'], now], ['>=', ['get', 'ts'], now - MAX_AGE]]);
+  map.setPaintProperty('hotspots', 'circle-color',
+    ['step', age, RAMP[0][1], 6 * H, RAMP[1][1], 24 * H, RAMP[2][1], 72 * H, RAMP[3][1]]);
+  map.setPaintProperty('hotspots', 'circle-radius',
+    ['step', age, RAMP[0][2], 6 * H, RAMP[1][2], 24 * H, RAMP[2][2], 72 * H, RAMP[3][2]]);
+  map.setPaintProperty('hotspots', 'circle-opacity',
+    ['step', age, 1, 6 * H, .95, 24 * H, .8, 72 * H, .55]);
+
+  // les polygones EFFIS n'apparaissent qu'à partir du moment où ils ont été publiés
+  for (const id of ['burnt-fill', 'burnt-line']) {
+    map.setFilter(id, ['<=', ['get', 'lu'], now]);
+  }
+
+  clockEl.textContent = fmt(now);
+  subEl.innerHTML = `${s.label} · <b>${liveAt(now)}</b> foyers`;
+}
+
+// détections des 6 dernières heures à l'instant donné
+function liveAt(now) {
+  return steps.filter(x => x.kind === 'sat' && x.ts > now - 6 * H && x.ts <= now)
+              .reduce((a, x) => a + x.n, 0);
+}
+
+/*
+ * La lecture de droite change de largeur d'un cran à l'autre (« EFFIS · 0
+ * foyers » contre « VIIRS/NOAA-20 · 1103 foyers »), ce qui raccourcissait ou
+ * rallongeait la réglette à chaque déplacement. On réserve une bonne fois la
+ * place du pire cas, mesuré sur les données réellement chargées.
+ */
+function lockReadWidth() {
+  const probe = document.createElement('div');
+  probe.id = 'probe';
+  document.body.appendChild(probe);
+
+  const widest = (html, model) => {
+    const cs = getComputedStyle(model);
+    for (const k of ['fontSize', 'fontFamily', 'fontWeight', 'letterSpacing',
+                     'fontVariantNumeric']) probe.style[k] = cs[k];
+    probe.innerHTML = html;
+    return probe.offsetWidth;
+  };
+
+  const maxLive = Math.max(...steps.map(s => liveAt(s.ts)));
+  const label = steps.reduce((a, s) => s.label.length > a.length ? s.label : a, '');
+  const w = Math.max(
+    widest(`${label} · <b>${maxLive}</b> foyers`, subEl),
+    widest(fmt(steps[0].ts), clockEl),
+  );
+
+  probe.remove();
+  // +4 px : la sonde sous-estime de 1-2 px (arrondis sous-pixel, chiffres
+  // tabulaires du <b>), et le texte est aligné à droite — un dépassement
+  // viendrait mordre sur la réglette
+  document.documentElement.style.setProperty('--read-w', Math.ceil(w) + 4 + 'px');
+}
+
+// Les données partent tout de suite, sans attendre la carte.
+const dataP = Promise.all([
+  fetch('data/burnt_nrt.geojson').then(r => r.json()),
+  fetch('data/burnt_dated.geojson').then(r => r.json()),
+  fetch('data/hotspots.geojson').then(r => r.json()),
+  fetch('data/meta.json').then(r => r.json()).catch(() => null),
+]);
+
+/*
+ * On ne s'accroche pas au seul événement 'load' : il n'est émis qu'après la
+ * première frame rendue, et un onglet ouvert en arrière-plan a son
+ * requestAnimationFrame gelé — la carte resterait vide indéfiniment. On
+ * démarre dès que le style est prêt, avec un sondage en filet de sécurité.
+ */
+let started = false, poll = null;
+function start() {
+  if (started || !map.isStyleLoaded()) return;
+  started = true;
+  clearInterval(poll);
+  init();
+}
+map.on('style.load', start);
+map.on('load', start);
+poll = setInterval(start, 80);
+
+async function init() {
+  const [nrt, dated, hs, meta] = await dataP;
+
+  map.addSource('nrt', { type: 'geojson', data: nrt });
+  map.addSource('dated', { type: 'geojson', data: dated });
+  map.addSource('hs', { type: 'geojson', data: hs });
+
+  // surfaces brûlées datées : la « terre brûlée » de référence
+  map.addLayer({ id: 'burnt-fill', type: 'fill', source: 'dated',
+    paint: { 'fill-color': V('--burnt'), 'fill-opacity': .70 } });
+  map.addLayer({ id: 'burnt-line', type: 'line', source: 'dated',
+    paint: { 'line-color': V('--burnt-edge'), 'line-width': 1.2, 'line-opacity': .95 } });
+
+  // produit NRT : contour plus frais, mais sans date ni surface, et qui contient
+  // aussi d'anciennes cicatrices -> simple trait de référence, non animé
+  map.addLayer({ id: 'nrt-line', type: 'line', source: 'nrt',
+    paint: { 'line-color': '#8d7a6b', 'line-width': 1, 'line-opacity': .55 } });
+
+  // foyers : sort-key sur la date pour que les plus récents passent au-dessus
+  map.addLayer({ id: 'hotspots', type: 'circle', source: 'hs',
+    layout: { 'circle-sort-key': ['get', 'ts'] },
+    paint: { 'circle-color': V('--front'), 'circle-radius': 4, 'circle-stroke-width': 0 } });
+
+  steps = buildSteps(hs, dated);
+  slider.max = steps.length - 1;
+  slider.value = steps.length - 1;
+  drawTicks();
+  lockReadWidth();
+  show(steps.length - 1);
+
+  if (meta && meta.generated_at) {
+    document.getElementById('updated').textContent =
+      '— données extraites le ' + fmt(Date.parse(meta.generated_at) / 1000) + ' (heure de Paris).';
+  }
+
+  // Cadrage sur les incendies significatifs de la période affichée. Sans ce
+  // tri, un feu d'un hectare à l'autre bout du département — ou une cicatrice
+  // de février encore présente dans la couche saison — élargit la bbox et
+  // écrase la zone qui nous intéresse.
+  const t0 = steps[0].ts;
+  const big = dated.features.filter(f =>
+    +f.properties.AREA_HA >= 100 && f.properties.lu >= t0);
+  const b = new maplibregl.LngLatBounds();
+  for (const f of (big.length ? big : dated.features)) {
+    const walk = c => Array.isArray(c[0]) ? c.forEach(walk) : b.extend(c);
+    walk(f.geometry.coordinates);
+  }
+  const dockH = document.getElementById('dock').offsetHeight;
+  map.fitBounds(b, {
+    padding: {
+      top: document.getElementById('head').offsetHeight + (MOBILE ? 22 : 28),
+      bottom: (MOBILE ? dockH : 0) + 28,
+      left: MOBILE ? 14 : 28, right: MOBILE ? 14 : 28,
+    },
+    duration: 0,
+  });
+
+  // détail d'un polygone au clic
+  map.on('click', 'burnt-fill', e => {
+    const p = e.features[0].properties;
+    new maplibregl.Popup({ closeButton: true })
+      .setLngLat(e.lngLat)
+      .setHTML(`<b>${p.COMMUNE || '?'}</b><br>${(+p.AREA_HA).toLocaleString('fr-FR')} ha`
+             + `<br>départ ${String(p.FIREDATE).slice(0, 10)}`
+             + `<br><span style="opacity:.6">publié ${String(p.LASTUPDATE).slice(0, 16)}</span>`)
+      .addTo(map);
+  });
+  map.on('mouseenter', 'burnt-fill', () => map.getCanvas().style.cursor = 'pointer');
+  map.on('mouseleave', 'burnt-fill', () => map.getCanvas().style.cursor = '');
+
+  // le conteneur peut avoir été mesuré à zéro avant la mise en page
+  map.resize();
+}
+
+// onglet ouvert en arrière-plan puis affiché : on relance le rendu
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) { map.resize(); map.triggerRepaint(); }
+});
+
+slider.addEventListener('input', () => { if (steps.length) show(+slider.value); });
+
+document.getElementById('ck-dated').addEventListener('change', e => {
+  const v = e.target.checked ? 'visible' : 'none';
+  map.setLayoutProperty('burnt-fill', 'visibility', v);
+  map.setLayoutProperty('burnt-line', 'visibility', v);
+});
+document.getElementById('ck-nrt').addEventListener('change', e => {
+  map.setLayoutProperty('nrt-line', 'visibility', e.target.checked ? 'visible' : 'none');
+});
+
+document.getElementById('play').addEventListener('click', e => {
+  const btn = e.currentTarget;
+  if (playing) { clearInterval(playing); playing = null; btn.textContent = '▶'; return; }
+  btn.textContent = '❚❚';
+  if (+slider.value >= steps.length - 1) slider.value = 0;
+  playing = setInterval(() => {
+    slider.value = +slider.value + 1;   // un cran par frame
+    show(+slider.value);
+    if (+slider.value >= steps.length - 1) {
+      clearInterval(playing); playing = null; btn.textContent = '▶';
+    }
+  }, 320);
+});
+</script>
+</body>
+</html>

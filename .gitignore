@@ -1,0 +1,10 @@
+# notes de travail locales, non publiées
+AGENTS.md
+
+# outillage local
+.claude/
+__pycache__/
+*.pyc
+
+# macOS
+.DS_Store
