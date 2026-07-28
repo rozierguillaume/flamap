@@ -17,6 +17,13 @@ Trois états du terrain plus le vent, superposés sur un fond satellite :
 
 Un curseur temporel rejoue la progression du feu.
 
+Sur la vue nationale, les détections des six dernières heures sont regroupées
+spatialement. Toute concentration d'au moins 25 foyers reçoit un halo et un
+raccourci sous le titre ; il s'agit d'un seuil fixe, pas d'un classement limité
+à trois incendies. Cliquer sur un raccourci charge directement sa zone
+détaillée. La position et le zoom sont conservés dans le fragment `#map=` de
+l'URL, qui peut donc être copié pour partager exactement la vue courante.
+
 ## Démarrage
 
 ```bash

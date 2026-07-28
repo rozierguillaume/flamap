@@ -72,11 +72,28 @@
   }
 
   /* ---- logo ---- */
-  #head { position: absolute; z-index: 500; top: 14px; left: 14px; padding: 11px 18px 12px; }
+  #head { position: absolute; z-index: 500; top: 14px; left: 14px;
+          max-width: min(430px, calc(100vw - 90px)); padding: 11px 18px 12px; }
   #head .brand { display: flex; align-items: center; gap: 10px; }
   #head .mark { display: block; width: 42px; height: auto; flex: none; }
   #head h1 { margin: 0; font-size: 21px; font-weight: 700; letter-spacing: .4px; }
   #head h1 span { color: var(--hot); }
+  #incidents { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  #incidents[hidden] { display: none; }
+  #incidents button {
+    min-width: 0; padding: 5px 9px 5px 8px; border: 1px solid rgba(255,216,77,.34);
+    border-radius: 999px; background: rgba(42,25,18,.82); color: var(--ink);
+    font: inherit; font-size: 11.5px; line-height: 1.2; cursor: pointer;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  #incidents button::before {
+    content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 6px;
+    border-radius: 50%; background: var(--front);
+    box-shadow: 0 0 0 3px rgba(255,107,26,.22);
+  }
+  #incidents button:hover, #incidents button:focus-visible {
+    background: rgba(82,38,19,.94); border-color: rgba(255,216,77,.68);
+  }
 
   /* ---- calques ---- */
   #layers { position: absolute; z-index: 500; top: 14px; right: 14px;
@@ -202,10 +219,15 @@
 
   /* =======================  MOBILE  ======================== */
   @media (max-width: 720px) {
-    #head { top: 10px; left: 10px; padding: 9px 15px 10px; }
+    #head { top: 10px; left: 10px; max-width: calc(100vw - 72px);
+            padding: 9px 15px 10px; }
     #head .brand { gap: 8px; }
     #head .mark { width: 36px; }
     #head h1 { font-size: 19px; }
+    #incidents { flex-wrap: nowrap; max-width: calc(100vw - 102px);
+                 overflow-x: auto; scrollbar-width: none; }
+    #incidents::-webkit-scrollbar { display: none; }
+    #incidents button { flex: none; max-width: 220px; font-size: 11px; }
 
     /* les calques repliés derrière un bouton : sur 375 px de large, le panneau
        ouvert en permanence mangeait le quart supérieur de l'écran */
@@ -273,6 +295,7 @@
     </svg>
     <h1>Fla<span>map</span></h1>
   </div>
+  <div id="incidents" hidden aria-label="Raccourcis vers les incendies importants"></div>
   <p class="sr-only">Carte des incendies en quasi temps réel. Les foyers détectés
   par les satellites NASA FIRMS et les surfaces brûlées publiées par Copernicus
   EFFIS sont rafraîchis toutes les deux heures ; le curseur temporel rejoue la
@@ -447,9 +470,14 @@ drawAgeKey();
 const ZOOM_SCALE = MOBILE ? [[5, .28], [8, .50], [11, .85], [14, 1.35]]
                           : [[5, .34], [8, .60], [11, .95], [14, 1.40]];
 
+// MapLibre lit et maintient automatiquement #map=zoom/latitude/longitude.
+// Le test sert plus bas à ne pas recadrer sur la France par-dessus un lien
+// partagé qui porte déjà une caméra.
+const HAS_MAP_HASH = /^#map=/.test(location.hash);
 const map = new maplibregl.Map({
   container: 'map',
   attributionControl: false,
+  hash: 'map',
   center: [2.2, 46.5], zoom: 5,
   style: {
     version: 8,
@@ -951,6 +979,7 @@ function show(ts) {
     ...rampAfter(AGE_OPACITY, APPEAR)];
   for (const id of ['hotspots-overview', 'hotspots'])
     if (map.getLayer(id)) map.setPaintProperty(id, 'circle-opacity', opacity);
+  updateMajorFires(now);
 
   const was = atLatest;
   atLatest = ts >= steps[lastObs].ts;
@@ -1038,6 +1067,142 @@ const json = async url => {
   if (!response.ok) throw new Error(`${response.status} ${url}`);
   return response.json();
 };
+
+/*
+ * Sur la vue nationale, les points d'une meme zone active restent difficiles
+ * a distinguer du bruit de fond. On regroupe donc les detections des six
+ * dernieres heures distantes de moins de 30 km. A partir de 25 foyers, le
+ * groupe gagne un halo, un compteur et un raccourci sous le titre.
+ *
+ * Ce seuil est absolu, pas un « top 3 » : une journee calme peut n'afficher
+ * aucun raccourci, une journee difficile peut en afficher davantage.
+ */
+const MAJOR_WINDOW = 6 * H, MAJOR_KM = 30, MAJOR_MIN = 25;
+const MAJOR = { overview: [], places: [], bucket: null };
+const incidentsEl = document.getElementById('incidents');
+
+function distanceKm(a, b) {
+  const lat = (a[1] + b[1]) / 2 * Math.PI / 180;
+  const dx = (a[0] - b[0]) * Math.cos(lat) * 111.32;
+  const dy = (a[1] - b[1]) * 110.57;
+  return Math.hypot(dx, dy);
+}
+
+function geometryCenter(geometry) {
+  const points = [];
+  const walk = value => {
+    if (!Array.isArray(value)) return;
+    if (typeof value[0] === 'number') points.push(value);
+    else for (const child of value) walk(child);
+  };
+  walk(geometry.coordinates);
+  if (!points.length) return null;
+  return [
+    points.reduce((sum, point) => sum + point[0], 0) / points.length,
+    points.reduce((sum, point) => sum + point[1], 0) / points.length,
+  ];
+}
+
+function nearestFireName(center) {
+  let best = null, bestDistance = 45;
+  for (const place of MAJOR.places) {
+    const distance = distanceKm(center, place.center);
+    if (distance < bestDistance) {
+      best = place.name;
+      bestDistance = distance;
+    }
+  }
+  return best || '';
+}
+
+function renderIncidentButtons(features) {
+  incidentsEl.replaceChildren();
+  for (const feature of features) {
+    const { center, n, name } = feature.properties;
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = `${name ? name + ' · ' : ''}${n} foyers`;
+    button.title = `${n} foyers détectés en six heures — zoomer sur cette zone`;
+    button.setAttribute('aria-label', `Zoomer sur ${name || 'un incendie important'}, ${n} foyers`);
+    button.addEventListener('click', () => {
+      stopPlay();
+      map.easeTo({ center, zoom: Math.max(map.getZoom(), 8.5), duration: 850 });
+    });
+    incidentsEl.appendChild(button);
+  }
+  incidentsEl.hidden = !features.length;
+}
+
+function updateMajorFires(now) {
+  const bucket = Math.floor(now / H);
+  if (bucket === MAJOR.bucket || !map.getSource('major-hs')) return;
+  MAJOR.bucket = bucket;
+
+  const points = MAJOR.overview
+    .filter(feature => feature.properties.ts > now - MAJOR_WINDOW
+                    && feature.properties.ts <= now)
+    .map(feature => ({
+      center: feature.geometry.coordinates,
+      n: +feature.properties.n || 1,
+    }));
+
+  // Composantes connexes : un front qui occupe plusieurs cellules de 0,25°
+  // devient un seul signal, sans fusionner deux incendies éloignes.
+  const parent = points.map((_, index) => index);
+  const root = index => {
+    while (parent[index] !== index) {
+      parent[index] = parent[parent[index]];
+      index = parent[index];
+    }
+    return index;
+  };
+  const join = (a, b) => {
+    a = root(a); b = root(b);
+    if (a !== b) parent[b] = a;
+  };
+  // Index spatial sommaire : chaque point n'est compare qu'aux cellules
+  // voisines, pas a toute la France. Une cellule de 0,5° est plus large que
+  // les 30 km du regroupement sous nos latitudes.
+  const bins = new Map(), cell = .5;
+  for (let i = 0; i < points.length; i++) {
+    const [lon, lat] = points[i].center;
+    const bx = Math.floor(lon / cell), by = Math.floor(lat / cell);
+    for (let x = bx - 1; x <= bx + 1; x++)
+      for (let y = by - 1; y <= by + 1; y++)
+        for (const j of bins.get(`${x}/${y}`) || [])
+          if (distanceKm(points[i].center, points[j].center) <= MAJOR_KM) join(i, j);
+    const key = `${bx}/${by}`;
+    if (!bins.has(key)) bins.set(key, []);
+    bins.get(key).push(i);
+  }
+
+  const groups = new Map();
+  for (let i = 0; i < points.length; i++) {
+    const key = root(i);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(points[i]);
+  }
+
+  const features = [...groups.values()].map(group => {
+    const n = group.reduce((sum, point) => sum + point.n, 0);
+    const center = [
+      group.reduce((sum, point) => sum + point.center[0] * point.n, 0) / n,
+      group.reduce((sum, point) => sum + point.center[1] * point.n, 0) / n,
+    ];
+    const name = nearestFireName(center);
+    return {
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: center },
+      properties: {
+        center, n, name,
+      },
+    };
+  }).filter(feature => feature.properties.n >= MAJOR_MIN)
+    .sort((a, b) => b.properties.n - a.properties.n);
+
+  map.getSource('major-hs').setData({ type: 'FeatureCollection', features });
+  renderIncidentButtons(features);
+}
 
 /* Cellules detaillees. Le cache applicatif reste borne ; le cache HTTP garde
  * les octets des cellules visitees sans laisser leurs gros objets JS en vie. */
@@ -1189,6 +1354,7 @@ async function init() {
 
   map.addSource('recent', { type: 'geojson', data: recent });
   map.addSource('overview-hs', { type: 'geojson', data: overview });
+  map.addSource('major-hs', { type: 'geojson', data: EMPTY });
   map.addSource('nrt', { type: 'geojson', data: detail ? detail.nrt : EMPTY });
   map.addSource('dated', { type: 'geojson', data: detail ? detail.dated : EMPTY });
   map.addSource('hs', { type: 'geojson', data: detail ? detail.hotspots : EMPTY });
@@ -1216,6 +1382,19 @@ async function init() {
     minzoom: manifest.legacy ? 0 : manifest.detail_zoom,
     paint: { 'line-color': '#8d7a6b', 'line-width': 1,
              'line-opacity': .55, 'line-opacity-transition': FADE } });
+
+  // Lecture nationale : halo franc autour des seules concentrations majeures.
+  // Le remplissage diffus localise la zone, le trait reste visible sur les
+  // orthophotos claires comme sombres.
+  map.addLayer({ id: 'major-halo', type: 'circle', source: 'major-hs',
+    maxzoom: manifest.detail_zoom,
+    paint: {
+      'circle-radius': ['interpolate', ['linear'], ['get', 'n'],
+        MAJOR_MIN, 15, 50, 20, 100, 28, 250, 38],
+      'circle-color': V('--hot'), 'circle-opacity': .16,
+      'circle-stroke-color': V('--front'), 'circle-stroke-width': 2.2,
+      'circle-stroke-opacity': .95, 'circle-blur': .12,
+    } });
 
   // Foyers : sort-key sur la date pour que les plus récents passent au-dessus.
   // Transitions à zéro, contrairement aux polygones : la douceur vient déjà de
@@ -1249,6 +1428,11 @@ async function init() {
   if (!manifest.legacy) map.on('moveend', loadVisibleZones);
 
   steps = timeline;
+  MAJOR.overview = overview.features;
+  MAJOR.places = recent.features.map(feature => ({
+    center: geometryCenter(feature.geometry),
+    name: feature.properties.COMMUNE || feature.properties.PROVINCE || '',
+  })).filter(place => place.center && place.name);
   addForecast(W.data);
   // le curseur porte des secondes epoch ; un pas d'une minute suffit à un
   // déplacement fluide à la souris et évite d'appeler `show` pour rien
@@ -1266,17 +1450,19 @@ async function init() {
       '— données extraites le ' + fmt(Date.parse(manifest.generated_at) / 1000) + ' (heure de Paris).';
   }
 
-  const b = new maplibregl.LngLatBounds(
-    [manifest.bbox[0], manifest.bbox[1]], [manifest.bbox[2], manifest.bbox[3]]);
-  const dockH = document.getElementById('dock').offsetHeight;
-  map.fitBounds(b, {
-    padding: {
-      top: document.getElementById('head').offsetHeight + (MOBILE ? 22 : 28),
-      bottom: (MOBILE ? dockH : 0) + 28,
-      left: MOBILE ? 14 : 28, right: MOBILE ? 14 : 28,
-    },
-    duration: 0,
-  });
+  if (!HAS_MAP_HASH) {
+    const b = new maplibregl.LngLatBounds(
+      [manifest.bbox[0], manifest.bbox[1]], [manifest.bbox[2], manifest.bbox[3]]);
+    const dockH = document.getElementById('dock').offsetHeight;
+    map.fitBounds(b, {
+      padding: {
+        top: document.getElementById('head').offsetHeight + (MOBILE ? 22 : 28),
+        bottom: (MOBILE ? dockH : 0) + 28,
+        left: MOBILE ? 14 : 28, right: MOBILE ? 14 : 28,
+      },
+      duration: 0,
+    });
+  }
 
   // détail d'un polygone au clic, aussi bien dans l'aperçu que dans une cellule
   const popup = e => {
