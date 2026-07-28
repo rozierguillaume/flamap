@@ -30,20 +30,9 @@ import io
 import json
 import math
 import os
-import socket
 import sys
 import urllib.request
 from datetime import datetime, timedelta, timezone
-
-# FIRMS publie desormais un enregistrement AAAA, et les runners GitHub Actions
-# n'ont aucune route IPv6 : urllib essaie l'adresse v6 en premier et reste
-# bloque 120 s sur "Errno 101 Network is unreachable", flux apres flux. Le job
-# repartait alors avec zero foyer et le garde-fou annulait le deploiement.
-# On force donc toute la resolution en IPv4 : les trois sources ont un A.
-_getaddrinfo = socket.getaddrinfo
-socket.getaddrinfo = lambda *a, **kw: [
-    r for r in _getaddrinfo(*a, **kw) if r[0] == socket.AF_INET
-]
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "data")
