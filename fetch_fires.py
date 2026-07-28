@@ -60,6 +60,7 @@ WIND_MARGIN_KM = 60
 WIND_DETAIL_STRIDE = 3
 WIND_COARSE_N = 15
 FIRMS_FINE_MIN = 50
+WIND_REQUEST_PAUSE = 6
 
 EMPTY_FC = {"type": "FeatureCollection", "features": []}
 
@@ -429,9 +430,10 @@ def request_wind_batches(points, model):
     chunks = []
     for batch in batches:
         chunks.append(wind_request(batch, model))
-        # Le quota porte aussi sur le nombre de coordonnees. Une petite pause
-        # evite les rafales que l'API libre refuse par HTTP 429.
-        time.sleep(2)
+        # Les runners GitHub partagent leurs IP avec beaucoup de jobs. Espacer
+        # franchement les requêtes évite qu'une série de grilles fines soit
+        # prise pour une rafale, même loin du quota journalier.
+        time.sleep(WIND_REQUEST_PAUSE)
     return [series for chunk in chunks for series in chunk]
 
 
@@ -592,11 +594,21 @@ def main():
         # ensuite cette marge dans le champ national : sans débord, la rupture
         # de résolution dessinerait un carré net dans les particules.
         fine_box = wind_box((ix, iy, ix + TILE_DEG, iy + TILE_DEG))
-        raw = fetch_wind(
-            fine_box,
-            WIND_SPACING_KM,
-            f"    {tile_id(ix, iy)}",
-        )
+        name = tile_id(ix, iy)
+        try:
+            raw = fetch_wind(
+                fine_box,
+                WIND_SPACING_KM,
+                f"    {name}",
+            )
+        except Exception as error:
+            # Le champ national grossier reste disponible partout : une maille
+            # fine est un enrichissement, pas une raison de bloquer la mise à
+            # jour des foyers et périmètres pendant plusieurs heures. Après un
+            # épuisement des reprises, les cellules suivantes rencontreraient
+            # vraisemblablement la même limite : on arrête proprement la série.
+            print(f"  ! {name} : fin du vent fin ({error})", file=sys.stderr)
+            break
         fine_wind[(ix, iy)] = whole_wind(raw, WIND_DETAIL_STRIDE)
 
     print("\nDecoupage")
@@ -639,7 +651,7 @@ def main():
         "overview_count": len(overview["features"]),
         "dated_count": len(burnt["burnt_dated"]["features"]),
         "nrt_count": len(burnt["burnt_nrt"]["features"]),
-        "fine_wind_zones": [tile_id(*key) for key in sorted(fine_keys)],
+        "fine_wind_zones": [tile_id(*key) for key in sorted(fine_wind)],
         "wind_model": coarse_wind["model"],
     }
 

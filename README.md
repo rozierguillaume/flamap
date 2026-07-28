@@ -131,7 +131,10 @@ affiché : la nappe ne présente ni trou ni bord carré.
 - Open-Meteo sert le modèle **AROME HD** de Météo-France en JSON, sans clé. Le
   script demande 225 points pour le champ national, puis de petites grilles à
   20 km dans les cellules actives. Les requêtes sont séquentielles avec reprise
-  bornée sur HTTP 429. Vitesse et azimut sont convertis en composantes est/nord.
+  bornée sur HTTP 429 et espacées de six secondes pour les IP partagées des
+  runners GitHub. Si une grille fine reste indisponible, la série fine s'arrête
+  proprement : le vent national grossier demeure affiché partout. Vitesse et
+  azimut sont convertis en composantes est/nord.
 
 **Rendu** (`index.html`) — MapLibre GL, sans build ni bundler. Seules les
 détections des cellules visibles forment la couche `circle`. Avancer dans le
@@ -179,7 +182,8 @@ de publication est de 1 Go et le déploiement doit finir en moins de 10 minutes 
 l'artefact dispose donc d'une marge très large. La génération Python elle-même
 n'utilise que la bibliothèque standard et dispose de 25 minutes dans le
 workflow. Les reprises bornées sur HTTP 429 protègent les requêtes Open-Meteo
-sans pouvoir bloquer le runner indéfiniment.
+sans pouvoir bloquer le runner indéfiniment ; l'échec d'une seule grille fine
+ne bloque pas le rafraîchissement des incendies.
 
 Deux points de vigilance propres aux workflows planifiés :
 
