@@ -17,6 +17,11 @@ Trois états du terrain plus le vent, superposés sur un fond satellite :
 
 Un curseur temporel rejoue la progression du feu.
 
+Le menu **Calques** permet d'afficher ou masquer les foyers dans leur ensemble,
+ou séparément pour chacun des flux FIRMS (VIIRS/NOAA-20, VIIRS/NOAA-21,
+VIIRS/S-NPP et MODIS). Le bouton `i` à droite de la frise ouvre le journal des
+40 dernières mises à jour : heure, source et volume de données reçu.
+
 Sur la vue nationale, les détections des dernières 24 heures sont regroupées
 spatialement. Un groupe reçoit un halo et un raccourci lorsqu'il compte au
 moins 25 foyers près d'un périmètre EFFIS, ou lorsque quelques détections
@@ -68,7 +73,8 @@ qu'une à deux fois par jour. Entre deux passages, il ne se passe littéralement
 rien dans les données. La frise nationale regroupe les détections par satellite
 et par passage : traits gris pour FIRMS, traits ocres plus hauts pour EFFIS.
 
-Ces mises à jour restent visibles comme telles dans les traits de la frise.
+Ces mises à jour restent visibles comme telles dans les traits de la frise et
+dans le journal ouvert par le bouton `i`.
 L'horodatage complet flotte au-dessus pour préserver toute la largeur utile du
 curseur, qui **balaie le temps en continu**. La version précédente sautait d'un
 cran au suivant : chaque saut avançait l'horloge de deux à trois heures d'un

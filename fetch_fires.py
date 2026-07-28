@@ -217,12 +217,24 @@ def build_timeline(hotspots, dated):
         steps.append(current)
 
     first = steps[0]["ts"] if steps else 0
-    for stamp in sorted({
-        feature["properties"].get("lu")
-        for feature in dated["features"]
-        if feature["properties"].get("lu", 0) >= first
-    }):
-        steps.append({"ts": stamp, "kind": "effis", "label": "EFFIS", "n": 0})
+    # Une publication EFFIS peut mettre a jour plusieurs perimetres. Les
+    # regrouper donne a la frise, et au journal d'information, une mesure utile
+    # de chaque reponse du service plutot qu'une simple date repetitive.
+    effis_updates = {}
+    for feature in dated["features"]:
+        prop = feature["properties"]
+        stamp = prop.get("lu")
+        if not stamp or stamp < first:
+            continue
+        update = effis_updates.setdefault(stamp, {"n": 0, "ha": 0})
+        update["n"] += 1
+        try:
+            update["ha"] += float(prop.get("AREA_HA") or 0)
+        except (TypeError, ValueError):
+            pass
+    for stamp, update in effis_updates.items():
+        steps.append({"ts": stamp, "kind": "effis", "label": "EFFIS",
+                      "n": update["n"], "ha": round(update["ha"], 1)})
 
     for step in steps:
         step.pop("last", None)

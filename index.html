@@ -103,7 +103,14 @@
   #layers label { display: flex; align-items: center; gap: 8px; margin: 3px 0;
                   cursor: pointer; white-space: nowrap; }
   #layers label[hidden] { display: none; }   /* `display:flex` gagnerait sinon */
-  #layers input { accent-color: var(--hot); margin: 0; }
+  /* L'input est une cible a part entière : on peut cocher sa case, pas
+     seulement cliquer sur le libellé. Sa taille reste compacte mais tactile. */
+  #layers input { accent-color: var(--hot); margin: 0; width: 16px; height: 16px;
+                  flex: none; cursor: pointer; }
+  #layers fieldset { margin: 7px 0 5px; padding: 6px 0 1px 10px;
+                     border: 0; border-left: 1px solid #3a3f47; }
+  #layers legend { padding: 0; color: var(--ink-dim); font-size: 11px; }
+  #layers fieldset label { font-size: 11.5px; }
   /* EFFIS ne publie qu'un etat de chaque polygone : hors du cran le plus
      recent les surfaces sont masquees, et l'interface doit le dire */
   #layers .hint { display: none; margin-top: 7px; max-width: 186px;
@@ -171,6 +178,26 @@
   /* les crans a venir : plus rien n'y est observe, seul le vent est prevu */
   #ticks b.wind { height: 4px; background: var(--wind); opacity: .5; }
   #slider { width: 100%; margin: 0; accent-color: var(--hot); height: 24px; display: block; }
+  #updates-btn { background: #21252b; color: var(--ink); border: 1px solid #363b43;
+                 border-radius: 8px; flex: none; width: 34px; height: 34px;
+                 cursor: pointer; font: 700 15px/1 Georgia, serif; }
+  #updates-btn:hover { background: #2c313a; }
+  #updates-panel { display: none; }
+  #updates-panel.open { display: block; }
+  #updates-panel header { display: flex; align-items: center; justify-content: space-between;
+                          gap: 12px; padding-bottom: 10px; border-bottom: 1px solid #343941; }
+  #updates-panel h2 { margin: 0; font-size: 14px; }
+  #updates-close { background: #21252b; color: var(--ink); border: 1px solid #363b43;
+                   border-radius: 8px; flex: none; width: 30px; height: 30px;
+                   cursor: pointer; padding: 0; font: 400 21px/1 system-ui, sans-serif; }
+  #updates-close:hover { background: #2c313a; }
+  #updates-list { margin: 0; padding: 4px 0 0; list-style: none; overflow: auto; }
+  #updates-list li { display: grid; grid-template-columns: 76px 1fr; gap: 3px 10px;
+                     padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,.08); }
+  #updates-list time { color: var(--ink-dim); font-variant-numeric: tabular-nums; font-size: 11px; }
+  #updates-list strong { font-size: 12px; }
+  #updates-list span { grid-column: 2; color: var(--ink-dim); font-size: 11px; }
+  #updates-empty { color: var(--ink-dim); font-size: 12px; padding: 16px 0; }
 
   #probe { position: absolute; visibility: hidden; white-space: nowrap;
            top: -9999px; left: -9999px; }
@@ -228,6 +255,10 @@
        viendrait mordre dessus. */
     #credits { position: absolute; right: 0; bottom: calc(100% + 10px);
                width: 280px; padding: 11px 14px; text-align: right; }
+    #updates-panel { position: fixed; z-index: 502; right: 14px; bottom: 84px;
+                     width: 350px; max-height: min(570px, calc(100vh - 120px));
+                     padding: 15px 17px; }
+    #updates-list { max-height: min(470px, calc(100vh - 220px)); }
   }
 
   /* =======================  MOBILE  ======================== */
@@ -274,6 +305,7 @@
     #windkey { grid-column: 1 / -1; }
     #legend i { width: 10px; height: 10px; }
     #play { width: 42px; height: 38px; }   /* cible tactile */
+    #updates-btn { width: 42px; height: 38px; font-size: 17px; } /* cible tactile */
     #slider { height: 32px; }
     #timebar { grid-area: timeline; width: 100%; padding: 9px 12px; }
     #clock { font-size: clamp(19px, 5.5vw, 24px); }
@@ -290,6 +322,15 @@
       position: fixed; z-index: 501; top: 60px; right: 10px; bottom: auto;
       width: min(330px, calc(100vw - 20px)); padding: 12px 14px; text-align: left;
     }
+    #updates-panel { position: fixed; z-index: 503; inset: 10px;
+                     padding: 18px; }
+    #updates-panel h2 { font-size: 17px; }
+    #updates-close { width: 38px; height: 38px; font-size: 25px; } /* cible tactile */
+    #updates-list { max-height: calc(100vh - 100px); }
+    #updates-list li { grid-template-columns: 84px 1fr; padding: 13px 0; }
+    #updates-list time { font-size: 12px; }
+    #updates-list strong { font-size: 13px; }
+    #updates-list span { font-size: 12px; }
   }
 
   @media (max-width: 360px) {
@@ -352,6 +393,14 @@
 <button id="layers-btn" class="glass" aria-label="Calques" aria-expanded="false"
         aria-controls="layers"><span class="wide">Calques</span><span class="compact" aria-hidden="true">≡</span></button>
 <div id="layers" class="glass">
+  <label><input type="checkbox" id="ck-hotspots" checked> foyers détectés</label>
+  <fieldset>
+    <legend>Sources FIRMS</legend>
+    <label><input type="checkbox" class="ck-source" value="VIIRS/NOAA-20" checked> VIIRS/NOAA-20</label>
+    <label><input type="checkbox" class="ck-source" value="VIIRS/NOAA-21" checked> VIIRS/NOAA-21</label>
+    <label><input type="checkbox" class="ck-source" value="VIIRS/S-NPP" checked> VIIRS/S-NPP</label>
+    <label><input type="checkbox" class="ck-source" value="MODIS" checked> MODIS</label>
+  </fieldset>
   <label class="ba"><input type="checkbox" id="ck-dated" checked> surfaces brûlées (datées)</label>
   <label class="ba"><input type="checkbox" id="ck-nrt" checked> surfaces brûlées (NRT)</label>
   <label><input type="checkbox" id="ck-wind" checked> vent à 10 m</label>
@@ -387,8 +436,15 @@
         <input id="slider" type="range" min="0" max="0" step="1" value="0"
                aria-label="Mise à jour affichée">
       </div>
+      <button id="updates-btn" aria-label="Dernières mises à jour des données"
+              aria-expanded="false" aria-controls="updates-panel">i</button>
     </div>
   </div>
+
+  <aside id="updates-panel" class="glass" aria-label="Dernières mises à jour des données">
+    <header><h2>Mises à jour des données</h2><button id="updates-close" aria-label="Fermer">×</button></header>
+    <ul id="updates-list"></ul>
+  </aside>
 
   <!-- `glass` pour le fond sur ordinateur, où le bouton flotte seul au-dessus de
        l'imagerie ; sur téléphone la règle `#dock > .glass` le remet à plat, il
@@ -553,6 +609,7 @@ document.getElementById('cr-btn').addEventListener('click', e => {
   e.currentTarget.setAttribute('aria-expanded', open);
   document.getElementById('incidents').classList.toggle('credits-open', open);
   if (open) {
+    setUpdatesOpen(false);
     document.getElementById('layers').classList.remove('open');
     document.getElementById('layers-btn').setAttribute('aria-expanded', 'false');
     document.getElementById('incidents').classList.remove('layers-open');
@@ -564,6 +621,7 @@ document.getElementById('layers-btn').addEventListener('click', e => {
   e.currentTarget.setAttribute('aria-expanded', open);
   document.getElementById('incidents').classList.toggle('layers-open', open);
   if (open) {
+    setUpdatesOpen(false);
     document.getElementById('credits').classList.remove('open');
     document.getElementById('cr-btn').setAttribute('aria-expanded', 'false');
     document.getElementById('incidents').classList.remove('credits-open');
@@ -573,6 +631,23 @@ document.getElementById('layers-btn').addEventListener('click', e => {
 const slider  = document.getElementById('slider');
 const ticksEl = document.getElementById('ticks');
 const clockEl = document.getElementById('clock');
+const updatesPanel = document.getElementById('updates-panel');
+const updatesBtn = document.getElementById('updates-btn');
+
+function setUpdatesOpen(open) {
+  updatesPanel.classList.toggle('open', open);
+  updatesBtn.setAttribute('aria-expanded', open);
+  if (open) {
+    document.getElementById('credits').classList.remove('open');
+    document.getElementById('cr-btn').setAttribute('aria-expanded', 'false');
+    document.getElementById('layers').classList.remove('open');
+    document.getElementById('layers-btn').setAttribute('aria-expanded', 'false');
+    document.getElementById('incidents').classList.remove('credits-open', 'layers-open');
+  }
+}
+updatesBtn.addEventListener('click', () => setUpdatesOpen(!updatesPanel.classList.contains('open')));
+document.getElementById('updates-close').addEventListener('click', () => setUpdatesOpen(false));
+addEventListener('keydown', event => { if (event.key === 'Escape') setUpdatesOpen(false); });
 
 const fmt = ts => new Date(ts * 1000).toLocaleString('fr-FR',
   { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Paris' });
@@ -615,7 +690,11 @@ let lastObs = 0;
  * large que les foyers de l'instant. Elles ne sont visibles qu'au cran le plus
  * recent ; ailleurs, seuls les foyers datent la progression.
  */
-const shown = { dated: true, nrt: true };
+const FIRMS_SOURCES = ['VIIRS/NOAA-20', 'VIIRS/NOAA-21', 'VIIRS/S-NPP', 'MODIS'];
+const shown = {
+  dated: true, nrt: true,
+  hotspots: Object.fromEntries(FIRMS_SOURCES.map(source => [source, true])),
+};
 let atLatest = true;
 
 /* La case à cocher coupe la couche net ; le passage au passé, lui, se fait en
@@ -633,6 +712,22 @@ function applyBurnt() {
   for (const id of ['recent-line', 'burnt-line'])
     if (map.getLayer(id)) map.setPaintProperty(id, 'line-opacity', .95 * k);
   if (map.getLayer('nrt-line')) map.setPaintProperty('nrt-line', 'line-opacity', .55 * k);
+}
+
+/* Le filtre ne change que quand l'utilisateur coche une source. Il ne doit
+ * surtout pas entrer dans `show()` : le réécrire à chaque frame ferait
+ * reparser les milliers de foyers pendant l'animation. */
+function applyHotspots() {
+  const enabled = FIRMS_SOURCES.filter(source => shown.hotspots[source]);
+  const filter = enabled.length === FIRMS_SOURCES.length ? null
+    : ['in', ['get', 'source'], ['literal', enabled]];
+  for (const id of ['hotspots-overview', 'hotspots'])
+    if (map.getLayer(id)) map.setFilter(id, filter);
+
+  // Les halos et raccourcis d'incidents sont calculés hors de MapLibre : il
+  // faut leur appliquer la même sélection de sources que celle des points.
+  MAJOR.bucket = null;
+  if (steps.length) updateMajorFires(curTs);
 }
 
 /* =====================================================================
@@ -997,6 +1092,23 @@ function drawTicks() {
     `<b class="${s.kind}" style="left:${((s.ts - t0) / span * 100).toFixed(3)}%"></b>`).join('');
 }
 
+function formatUpdate(step) {
+  if (step.kind === 'sat') return `${step.n.toLocaleString('fr-FR')} foyers détectés`;
+  if (step.kind === 'effis') {
+    const area = step.ha ? ` · ${step.ha.toLocaleString('fr-FR', { maximumFractionDigits: 1 })} ha` : '';
+    return step.n ? `${step.n.toLocaleString('fr-FR')} périmètres récupérés${area}` : 'Périmètres de zones brûlées actualisés';
+  }
+  return 'Prévision de vent actualisée';
+}
+
+function drawUpdates() {
+  const recent = steps.filter(step => step.kind !== 'wind').slice(-40).reverse();
+  document.getElementById('updates-list').innerHTML = recent.length ? recent.map(step => {
+    const source = step.kind === 'sat' ? step.label : 'Copernicus EFFIS';
+    return `<li><time datetime="${new Date(step.ts * 1000).toISOString()}">${fmt(step.ts)}</time><strong>${source}</strong><span>${formatUpdate(step)}</span></li>`;
+  }).join('') : '<li id="updates-empty">Aucune mise à jour disponible.</li>';
+}
+
 /* Naissance et mort d'un foyer à l'écran.
  *
  * Le curseur ne saute plus de cran en cran : il balaie le temps en continu (voir
@@ -1205,7 +1317,8 @@ function updateMajorFires(now) {
 
   const points = MAJOR.overview
     .filter(feature => feature.properties.ts > now - MAJOR_WINDOW
-                    && feature.properties.ts <= now)
+                    && feature.properties.ts <= now
+                    && shown.hotspots[feature.properties.source])
     .map(feature => ({
       center: feature.geometry.coordinates,
       n: +feature.properties.n || 1,
@@ -1510,6 +1623,7 @@ async function init() {
   slider.step = 60;
   buildWarp();
   drawTicks();
+  drawUpdates();
   lockWidths();
   // on ouvre sur le dernier état observé, pas sur le bout de la prévision
   setTime(steps[lastObs].ts);
@@ -1584,6 +1698,24 @@ document.getElementById('ck-dated').addEventListener('change', e => {
 });
 document.getElementById('ck-nrt').addEventListener('change', e => {
   shown.nrt = e.target.checked; applyBurnt();
+});
+const hotspotsCheck = document.getElementById('ck-hotspots');
+const sourceChecks = [...document.querySelectorAll('.ck-source')];
+function syncHotspotsCheck() {
+  const count = FIRMS_SOURCES.filter(source => shown.hotspots[source]).length;
+  hotspotsCheck.checked = count === FIRMS_SOURCES.length;
+  hotspotsCheck.indeterminate = count > 0 && count < FIRMS_SOURCES.length;
+}
+hotspotsCheck.addEventListener('change', event => {
+  for (const source of FIRMS_SOURCES) shown.hotspots[source] = event.target.checked;
+  for (const check of sourceChecks) check.checked = event.target.checked;
+  hotspotsCheck.indeterminate = false;
+  applyHotspots();
+});
+for (const check of sourceChecks) check.addEventListener('change', event => {
+  shown.hotspots[event.target.value] = event.target.checked;
+  syncHotspotsCheck();
+  applyHotspots();
 });
 document.getElementById('ck-wind').addEventListener('change', e => {
   W.on = e.target.checked; windLoop(); windBadge();
