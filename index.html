@@ -103,11 +103,30 @@
   #legend i { width: 12px; height: 12px; border-radius: 50%; flex: none; }
   #legend i.poly { border-radius: 3px; }
 
+  /* Echelle continue d'anciennete. Le degrade et la position des reperes sont
+     poses par `drawAgeKey()` a partir de la table qui peint la carte : une
+     seule source, elles ne peuvent pas diverger. */
+  #agekey { align-items: flex-start; }
+  #ageramp { position: relative; display: block; width: 156px; height: 8px;
+             border-radius: 4px; margin-bottom: 13px; }
+  #ageramp b { position: absolute; top: 11px; font-weight: 400; font-size: 9.5px;
+               line-height: 1; color: var(--ink-dim); white-space: nowrap; }
+
   /* lecture du vent : la fleche pointe la ou le vent pousse */
   #windkey { color: var(--wind); font-variant-numeric: tabular-nums; }
   #windkey svg { width: 13px; height: 13px; flex: none;
                  transform: rotate(var(--dir, 0deg)); transition: transform .35s ease; }
-  #windkey[hidden] { display: none; }
+  /* Largeur figee sur le pire cas, pose par `lockWidths()`. Sans elle, la
+     legende s'elargissait en passant de « 6 km/h » a « 127 km/h » — un panneau
+     qui respire au rythme des rafales pendant la lecture. */
+  #windval { display: inline-block; width: var(--wind-w, 156px); }
+  /* Champ momentanement indisponible — cran hors de la fenetre du modele, carte
+     centree hors grille : la ligne garde sa place. La faire disparaitre ferait
+     sauter la legende en pleine animation. */
+  #windkey[hidden] { visibility: hidden; }
+  /* Couche decochee, en revanche : c'est un geste de l'utilisateur, la ligne
+     s'en va pour de bon. */
+  #windkey.off { display: none; }
 
   #timerow { display: flex; align-items: center; gap: 12px; }
   #play { background: #21252b; color: var(--ink); border: 1px solid #363b43;
@@ -133,9 +152,17 @@
   #sub { font-size: 10.5px; color: var(--ink-dim); }
   #sub b { color: var(--front); font-variant-numeric: tabular-nums; }
 
+  /* Les credits prenaient six lignes de mentions qu'on lit une fois : sur
+     telephone un bon tiers de l'ecran, sur ordinateur 280 px pris en largeur au
+     detriment de la reglette. Replies derriere un lien dans les deux cas. */
   #credits { font-size: 10.5px; line-height: 1.5; color: #7d7873; }
   #credits a { color: #9a948e; text-decoration: none; border-bottom: 1px solid #3a3733; }
-  #cr-btn { display: none; }   /* mobile uniquement, voir plus bas */
+  #credits:not(.open) { display: none; }
+  #cr-btn { display: block; font: inherit; font-size: 10.5px; color: var(--ink-dim);
+            text-align: left; cursor: pointer; }
+  #cr-btn:hover { color: var(--ink); }
+  #cr-btn::after { content: " ›"; }
+  #cr-btn[aria-expanded="true"]::after { content: " ⌄"; }
 
   .maplibregl-ctrl-group { background: rgba(13,15,18,.9) !important;
     border: 1px solid rgba(255,255,255,.10) !important; border-radius: 12px !important;
@@ -159,7 +186,17 @@
     /* largeur figée sur le libellé le plus large : sinon « EFFIS · 0 foyers »
        et « VIIRS/NOAA-20 · 1103 foyers » font varier la course du curseur */
     #read { flex: none; width: var(--read-w, 168px); }
-    #credits { width: 280px; padding: 11px 14px; text-align: right; }
+    /* Le bouton reste dans la ligne du dock, le panneau vient se poser au-dessus
+       de lui plutôt qu'à côté : hors du flux, il ne rétrécit pas la réglette en
+       s'ouvrant. C'est aussi ce qui rendait la barre du bas inutilisable entre
+       721 et 900 px de large, où les 280 px de crédits mangeaient le curseur. */
+    #cr-btn { align-self: flex-end; padding: 8px 12px; }
+    /* Au-dessus de toute la barre, pas seulement du bouton : la réglette est
+       centrée dans la place qui reste et, sous 1300 px de large, il n'y a plus
+       les 280 px du panneau entre son bord droit et celui de l'écran — il
+       viendrait mordre dessus. */
+    #credits { position: absolute; right: 0; bottom: calc(100% + 10px);
+               width: 280px; padding: 11px 14px; text-align: right; }
     #layers { top: 60px; }   /* sous les boutons de zoom */
   }
 
@@ -201,16 +238,8 @@
             display: flex; justify-content: space-between; align-items: baseline; }
     #clock { font-size: 13px; }
 
-    /* les crédits prenaient six lignes sous la réglette, soit un bon tiers de
-       l'écran pour des mentions qu'on lit une fois : repliés derrière un lien */
-    #cr-btn { display: block; align-self: flex-start;
-              background: none; border: 0; padding: 0;
-              font: inherit; font-size: 10.5px; color: #7d7873;
-              text-align: left; cursor: pointer; }
-    #cr-btn::after { content: " ›"; }
-    #cr-btn[aria-expanded="true"]::after { content: " ⌄"; }
+    #cr-btn { align-self: flex-start; color: #7d7873; }
     #credits { text-align: left; }
-    #credits:not(.open) { display: none; }
   }
 </style>
 
@@ -273,9 +302,13 @@
 <div id="dock">
   <div id="legend" class="glass">
     <span class="burnt-key"><i class="poly" style="background:var(--burnt);border:1px solid var(--burnt-edge)"></i>terre brûlée</span>
-    <span><i style="background:var(--recent)"></i>brûlé il y a 24–72 h</span>
-    <span><i style="background:var(--hot)"></i>brûlé il y a 6–24 h</span>
-    <span><i style="background:var(--front)"></i>front actif (&lt; 6 h)</span>
+    <!-- l'échelle d'ancienneté : le dégradé et la position des repères sont
+         posés par le script, à partir de la rampe qui peint la carte -->
+    <span id="agekey" title="Couleur d'un foyer selon son ancienneté, de cinq jours à l'instant de la détection">
+      <span id="ageramp">
+        <b data-age="432000">5 j</b><b data-age="86400">24 h</b><b data-age="0">à l'instant</b>
+      </span>
+    </span>
     <span id="windkey" hidden>
       <svg viewBox="0 0 12 12" aria-hidden="true" focusable="false">
         <path d="M6 .8 9.5 11.2 6 8.9 2.5 11.2Z" fill="currentColor"></path>
@@ -299,7 +332,10 @@
     </div>
   </div>
 
-  <button id="cr-btn" aria-expanded="false" aria-controls="credits">Sources &amp; crédits</button>
+  <!-- `glass` pour le fond sur ordinateur, où le bouton flotte seul au-dessus de
+       l'imagerie ; sur téléphone la règle `#dock > .glass` le remet à plat, il
+       est alors une ligne parmi d'autres dans la feuille du bas -->
+  <button id="cr-btn" class="glass" aria-expanded="false" aria-controls="credits">Sources &amp; crédits</button>
 
   <div id="credits" class="glass">
     Foyers actifs : <a href="https://firms.modaps.eosdis.nasa.gov/" target="_blank" rel="noopener">NASA FIRMS</a>
@@ -322,23 +358,94 @@ const MOBILE = matchMedia('(max-width: 720px)').matches;
 const H = 3600, DAY = 86400;
 const V = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 
-// paliers d'anciennete : [seuil (s), couleur, rayon de reference a z12]
-const RAMP = [
-  [  6 * H, V('--front'),  MOBILE ? 4.0 : 4.4],
-  [ 24 * H, V('--hot'),    MOBILE ? 3.4 : 3.8],
-  [ 72 * H, V('--recent'), MOBILE ? 2.9 : 3.2],
-  [Infinity, V('--old'),   MOBILE ? 2.4 : 2.6],
+const MAX_AGE = 5 * DAY;   // au-dela, c'est le polygone qui parle
+
+/*
+ * Anciennete d'un foyer : une echelle continue, du jaune clair de la detection
+ * fraiche au brun-rouge des braises de plusieurs jours.
+ *
+ * Ce fut d'abord quatre paliers francs — d'ou les variables --front / --hot /
+ * --recent / --old, qui restent les ancres de la rampe et servent toujours
+ * ailleurs dans l'interface. Le probleme d'un palier, c'est qu'a l'animation il
+ * fait basculer toute une rafale d'une couleur a l'autre en une frame.
+ *
+ * Les crans ne sont volontairement pas regulierement espaces : tout se joue
+ * dans les premieres heures, ou le feu court, et les trois derniers jours ne
+ * sont qu'une longue extinction. On tient donc quatre crans dans les six
+ * premieres heures et un seul sur les deux derniers jours.
+ */
+const AGE_COLOR = [
+  [      0, '#fff3b8'],   // detection de l'instant, presque blanche
+  [  1 * H, V('--front')],
+  [  3 * H, '#ffab2e'],
+  [  6 * H, V('--hot')],
+  [ 12 * H, '#ec481d'],
+  [ 24 * H, V('--recent')],
+  [ 48 * H, '#8f3623'],
+  [ 72 * H, V('--old')],
+  [MAX_AGE, '#4f2a1f'],   // brun sombre, la limite du visible
 ];
+
+// rayon de reference a z12, et opacite : memes bornes, moins de crans — l'oeil
+// ne lit pas une taille au dixieme de pixel
+const AGE_SIZE = [
+  [0, MOBILE ? 4.0 : 4.4], [6 * H, MOBILE ? 3.5 : 3.9],
+  [24 * H, MOBILE ? 3.0 : 3.3], [72 * H, MOBILE ? 2.5 : 2.7],
+  [MAX_AGE, MOBILE ? 2.1 : 2.2],
+];
+const AGE_OPACITY = [
+  [0, 1], [6 * H, .95], [24 * H, .82], [72 * H, .6],
+  [MAX_AGE - 12 * H, .45], [MAX_AGE, 0],   // le dernier cran est l'extinction
+];
+
+// interpolation lineaire dans une table [[age, valeur], …]
+function rampAt(tbl, a) {
+  if (a <= tbl[0][0]) return tbl[0][1];
+  for (let i = 1; i < tbl.length; i++) {
+    const [x1, v1] = tbl[i], [x0, v0] = tbl[i - 1];
+    if (a <= x1) return v0 + (v1 - v0) * (a - x0) / (x1 - x0);
+  }
+  return tbl[tbl.length - 1][1];
+}
+
+// les crans strictement au-dela de `a`, aplatis pour `interpolate`
+const rampAfter = (tbl, a, k = 1) =>
+  tbl.filter(([x]) => x > a).flatMap(([x, v]) => [x, v * k]);
+
+/*
+ * La cle de lecture est fabriquee a partir d'AGE_COLOR : la meme table peint
+ * les foyers et dessine le degrade, elles ne peuvent donc pas diverger.
+ *
+ * L'axe est en racine carree, pas lineaire. Les premieres heures — celles ou le
+ * feu court, et ou la couleur change le plus vite — tiendraient sinon dans les
+ * trois premiers pour cent de la barre, et la cle serait un aplat brun. Un axe
+ * deforme se doit d'etre chiffre : d'ou le repere « 24 h » au milieu, qui
+ * empeche de lire la barre comme une regle graduee.
+ */
+const agePos = a => (1 - Math.sqrt(a / MAX_AGE)) * 100;
+
+function drawAgeKey() {
+  const ramp = document.getElementById('ageramp');
+  // sens de lecture : l'ancien a gauche, la detection fraiche a droite
+  ramp.style.background = 'linear-gradient(90deg,'
+    + AGE_COLOR.map(([a, c]) => `${c} ${agePos(a).toFixed(1)}%`).reverse().join(',') + ')';
+  for (const b of ramp.querySelectorAll('b')) {
+    const p = agePos(+b.dataset.age);
+    b.style.left = p.toFixed(1) + '%';
+    // les reperes des extremites rentrent dans la barre, celui du milieu se centre
+    b.style.transform = `translateX(${p < 8 ? 0 : p > 92 ? -100 : -50}%)`;
+  }
+}
+drawAgeKey();
 
 /*
  * Un pixel VIIRS couvre 375 m au sol : a z9 il vaut 2 px d'ecran, a z14 il en
  * vaut 60. Avec un rayon fixe, la carte dezoomee — le cadrage par defaut sur
  * telephone — devient une flaque de points colles. On fait donc grossir les
- * cercles avec le zoom, en gardant les paliers d'anciennete comme sorties.
+ * cercles avec le zoom, en gardant la rampe d'anciennete comme sortie.
  */
 const ZOOM_SCALE = MOBILE ? [[8, .50], [11, .85], [14, 1.35]]
                           : [[8, .60], [11, .95], [14, 1.40]];
-const MAX_AGE = 5 * DAY;   // au-dela, c'est le polygone qui parle
 
 const map = new maplibregl.Map({
   container: 'map',
@@ -396,6 +503,9 @@ const fmt = ts => new Date(ts * 1000).toLocaleString('fr-FR',
   { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Paris' });
 
 let steps = [], playing = null;
+// instant affiché, en secondes epoch : la frise est parcourue en continu, ce
+// n'est plus un numéro de cran
+let curTs = 0;
 // dernier cran réellement observé : au-delà, la frise n'est plus qu'une
 // prévision de vent et le feu reste figé dans cet état
 let lastObs = 0;
@@ -411,11 +521,19 @@ let lastObs = 0;
 const shown = { dated: true, nrt: true };
 let atLatest = true;
 
+/* La case à cocher coupe la couche net ; le passage au passé, lui, se fait en
+ * fondu (transitions déclarées à la création des couches). Deux leviers
+ * différents pour deux gestes différents : décocher, c'est éteindre, alors que
+ * remonter la frise, c'est glisser. */
 function applyBurnt() {
-  const vis = k => atLatest && shown[k] ? 'visible' : 'none';
+  const vis = k => shown[k] ? 'visible' : 'none';
   map.setLayoutProperty('burnt-fill', 'visibility', vis('dated'));
   map.setLayoutProperty('burnt-line', 'visibility', vis('dated'));
   map.setLayoutProperty('nrt-line', 'visibility', vis('nrt'));
+  const k = atLatest ? 1 : 0;
+  map.setPaintProperty('burnt-fill', 'fill-opacity', .70 * k);
+  map.setPaintProperty('burnt-line', 'line-opacity', .95 * k);
+  map.setPaintProperty('nrt-line', 'line-opacity', .55 * k);
 }
 
 /* =====================================================================
@@ -458,7 +576,7 @@ const CARD = ['nord', 'nord-nord-est', 'nord-est', 'est-nord-est', 'est',
               'sud-ouest', 'ouest-sud-ouest', 'ouest', 'ouest-nord-ouest',
               'nord-ouest', 'nord-nord-ouest'];
 
-const W = { data: null, cur: null, on: true, parts: [], raf: null, last: 0, w: 0, h: 0 };
+const W = { data: null, cur: null, ts: 0, on: true, parts: [], raf: null, last: 0, w: 0, h: 0 };
 
 // interpolation bilinéaire du champ courant, en degrés
 function windAt(lon, lat, out) {
@@ -483,6 +601,11 @@ function windAt(lon, lat, out) {
 function windTime(ts) {
   const d = W.data;
   if (!d) return;
+  // `show()` est maintenant appelé à chaque frame de lecture. Le champ, lui, ne
+  // bouge qu'à l'échelle de l'heure : refabriquer la grille pour deux minutes
+  // de modèle brûlerait des allocations pour un résultat identique à l'œil.
+  if (W.cur && Math.abs(ts - W.ts) < 120) return;
+  W.ts = ts;
 
   W.cur = null;
   const x = (ts - d.t0) / d.dt;
@@ -502,16 +625,22 @@ function windTime(ts) {
 // lecture chiffrée au centre de la carte
 function windBadge() {
   const o = {}, c = map.getCenter();
-  if (!W.on || !W.cur || !windAt(c.lng, c.lat, o)) { windKey.hidden = true; return; }
+  // deux façons de ne rien afficher, qui n'ont pas le même effet sur la mise en
+  // page : voir les règles de `#windkey`
+  windKey.classList.toggle('off', !W.on);
+  windKey.hidden = !W.on || !W.cur || !windAt(c.lng, c.lat, o);
+  if (windKey.hidden) return;
 
   const kmh = Math.hypot(o.u, o.v) * 3.6;
   const to = (Math.atan2(o.u, o.v) * 180 / Math.PI + 360) % 360;  // vers où il pousse
   const from = CARD[Math.round(((to + 180) % 360) / 22.5) % 16];
 
-  windKey.hidden = false;
   windKey.style.setProperty('--dir', to.toFixed(0) + 'deg');
-  windVal.textContent = `${Math.round(kmh)} km/h · rafales ${Math.round(o.g)}`;
-  windKey.title = `Vent de ${from}, ${Math.round(kmh)} km/h au centre de la carte`;
+  // les rafales sont déjà en km/h dans `wind.json` (`fetch_fires.py` les
+  // convertit), contrairement à u/v qui sont en m/s
+  windVal.textContent = `${Math.round(kmh)} km/h (raf. ${Math.round(o.g)} km/h)`;
+  windKey.title = `Vent de ${from}, ${Math.round(kmh)} km/h au centre de la carte,`
+                + ` rafales à ${Math.round(o.g)} km/h`;
 }
 
 function windSpawn(p) {
@@ -650,48 +779,171 @@ function addForecast(wind) {
   }
 }
 
+/* =====================================================================
+ * LECTURE — le temps balayé en continu, à vitesse variable
+ *
+ * Les mises à jour ne sont pas réparties uniformément : deux ou trois passages
+ * satellite se suivent en une heure, puis plus rien pendant douze. Une lecture
+ * à vitesse constante passerait l'essentiel de son temps sur du vide et
+ * expédierait les rafales ; une lecture cran par cran — l'ancienne — donnait
+ * des sauts de plusieurs heures d'un coup, d'où l'impression de à-coups.
+ *
+ * On calcule donc un coût de lecture le long de la frise : élevé là où les
+ * mises à jour se pressent, plancher ailleurs. Le curseur avance vite dans les
+ * creux et ralentit dans les rafales. Le noyau gaussien rend ce coût continu,
+ * donc l'accélération l'est aussi — aucune cassure de vitesse aux crans.
+ * ===================================================================== */
+const WARP_N   = 720;                       // échantillons de la table
+const WARP_K   = 6;                         // ralentissement max dans une rafale
+const PLAY_MS  = MOBILE ? 19000 : 23000;    // durée d'une lecture complète
+const WARP = { t0: 0, span: 1, C: null };
+
+function buildWarp() {
+  const t0 = steps[0].ts, span = (steps[steps.length - 1].ts - t0) || 1;
+  // largeur du noyau : une rafale « pèse » environ deux heures de frise
+  const sigma = Math.max(span / 120, 45 * 60);
+  const C = new Float64Array(WARP_N + 1);
+  let acc = 0;
+  for (let i = 0; i < WARP_N; i++) {
+    const t = t0 + span * (i + .5) / WARP_N;
+    let d = 0;
+    for (const s of steps) {
+      const z = (t - s.ts) / sigma;
+      // au-delà de 4 sigma la gaussienne ne pèse plus rien
+      if (z > -4 && z < 4) d += Math.exp(-.5 * z * z) * (s.kind === 'sat' ? 1 : .35);
+    }
+    acc += 1 + WARP_K * (d / (1 + d));   // saturé : dix passages ne figent pas la lecture
+    C[i + 1] = acc;
+  }
+  for (let i = 0; i <= WARP_N; i++) C[i] /= acc;
+  WARP.t0 = t0; WARP.span = span; WARP.C = C;
+}
+
+// progression de lecture (0→1) → instant de la frise
+function warpTime(p) {
+  const C = WARP.C;
+  let lo = 0, hi = WARP_N;
+  while (hi - lo > 1) { const m = (lo + hi) >> 1; if (C[m] <= p) lo = m; else hi = m; }
+  const a = C[lo], b = C[lo + 1];
+  return WARP.t0 + WARP.span * (lo + (b > a ? (p - a) / (b - a) : 0)) / WARP_N;
+}
+
+// l'inverse, pour reprendre la lecture là où le curseur a été lâché
+function warpProgress(ts) {
+  const x = (ts - WARP.t0) / WARP.span * WARP_N;
+  if (x <= 0) return 0;
+  if (x >= WARP_N) return 1;
+  const i = x | 0, f = x - i;
+  return WARP.C[i] + (WARP.C[i + 1] - WARP.C[i]) * f;
+}
+
+// démarrage et arrivée adoucis, sans écraser la modulation par densité
+const ease = p => .72 * p + .28 * (p * p * (3 - 2 * p));
+// monotone, mais sans forme fermée commode : on l'inverse par dichotomie, une
+// seule fois par appui sur Lecture
+function unease(y) {
+  let lo = 0, hi = 1;
+  for (let i = 0; i < 24; i++) { const m = (lo + hi) / 2; if (ease(m) < y) lo = m; else hi = m; }
+  return (lo + hi) / 2;
+}
+
 function drawTicks() {
   const t0 = steps[0].ts, span = steps[steps.length - 1].ts - t0 || 1;
   ticksEl.innerHTML = steps.map(s =>
     `<b class="${s.kind}" style="left:${((s.ts - t0) / span * 100).toFixed(3)}%"></b>`).join('');
 }
 
-function show(i) {
-  const s = steps[i];
-  // sur un cran de prévision, le feu reste celui du dernier passage satellite :
-  // le vieillir jusqu'à demain le ferait s'éteindre à l'écran alors qu'on n'en
-  // sait tout simplement rien
-  const now = s.kind === 'wind' ? steps[lastObs].ts : s.ts;
+/* Naissance et mort d'un foyer à l'écran.
+ *
+ * Le curseur ne saute plus de cran en cran : il balaie le temps en continu (voir
+ * `warpTime`). L'âge d'un point est donc lui aussi continu, et on peut le faire
+ * naître au lieu de le faire apparaître.
+ *
+ * La durée de cette naissance est donnée en secondes *de lecture*, pas en
+ * secondes de temps modèle : la frise défile à vitesse très variable — dix
+ * heures de terrain par seconde dans un creux, une heure et demie dans une
+ * rafale — et une constante en temps modèle donnerait tantôt un clignotement,
+ * tantôt une éternité. `appearAt()` la reconvertit à chaque frame. */
+const BIRTH_S = .55;   // durée à l'écran de la montée d'un foyer
 
-  // filtre + couleurs recalculés à partir de `now` : MapLibre garde les données
-  // en mémoire GPU, on ne repousse jamais le GeoJSON
+/* Secondes de temps modèle avalées par une seconde de lecture au voisinage de
+ * `ts`, converties en durée de naissance. Bornée des deux côtés : sous dix
+ * minutes la montée n'est plus lisible, au-delà de quatre heures le foyer
+ * finirait d'apparaître alors qu'il a déjà bien viré vers l'orange. */
+function appearAt(ts) {
+  if (!WARP.C) return 45 * 60;
+  const q = unease(warpProgress(ts)), h = .004;
+  const speed = (warpTime(ease(Math.min(q + h, 1))) - warpTime(ease(Math.max(q - h, 0))))
+              / (2 * h * PLAY_MS / 1000);
+  return Math.min(Math.max(speed * BIRTH_S, 10 * 60), 4 * H);
+}
+
+function show(ts) {
+  const APPEAR = appearAt(ts);
+  // le feu ne se prolonge pas dans la prévision : au-delà du dernier passage
+  // satellite il reste dans son dernier état observé, le vieillir jusqu'à demain
+  // le ferait s'éteindre à l'écran alors qu'on n'en sait tout simplement rien
+  const now = Math.min(ts, steps[lastObs].ts);
+
+  // Couleurs recalculées à partir de `now` : MapLibre garde les données en
+  // mémoire GPU, on ne repousse jamais le GeoJSON.
+  //
+  // Il n'y a délibérément plus de `setFilter` : ce sont les bornes de la rampe
+  // d'opacité qui masquent le futur et l'au-delà de MAX_AGE — `interpolate`
+  // plafonne aux extrémités, donc tout ce qui sort de la fenêtre est à zéro.
+  // Un filtre refait invalider les tuiles et repasser les 9 000 foyers au
+  // parseur à chaque frame ; sur cette boucle, il doublait le coût.
   const age = ['-', now, ['get', 'ts']];
-  map.setFilter('hotspots', ['all', ['<=', ['get', 'ts'], now], ['>=', ['get', 'ts'], now - MAX_AGE]]);
   map.setPaintProperty('hotspots', 'circle-color',
-    ['step', age, RAMP[0][1], 6 * H, RAMP[1][1], 24 * H, RAMP[2][1], 72 * H, RAMP[3][1]]);
+    ['interpolate', ['linear'], age, ...AGE_COLOR.flat()]);
   // MapLibre n'accepte 'zoom' qu'en entrée de l'expression la plus externe :
-  // c'est donc l'interpolation de zoom qui enveloppe les paliers d'âge, et non
+  // c'est donc l'interpolation de zoom qui enveloppe la rampe d'âge, et non
   // l'inverse — un facteur multiplicatif appliqué par-dessus serait refusé.
-  const radiiAt = k => ['step', age, RAMP[0][2] * k,
-    6 * H, RAMP[1][2] * k, 24 * H, RAMP[2][2] * k, 72 * H, RAMP[3][2] * k];
+  //
+  // Le début de la rampe est la naissance : le disque sort de rien, dépasse
+  // légèrement sa taille de croisière puis s'y pose. Sans ce léger dépassement
+  // la rafale s'installe mollement ; avec, elle claque comme une détection. La
+  // valeur d'atterrissage est lue dans la rampe elle-même, pour que le raccord
+  // se fasse sans marche quelle que soit la durée retenue.
+  const land = rampAt(AGE_SIZE, APPEAR);
+  const radiiAt = k => ['interpolate', ['linear'], age,
+    0, .25 * land * k,
+    APPEAR * .45, 1.18 * land * k,
+    APPEAR, land * k,
+    ...rampAfter(AGE_SIZE, APPEAR, k)];
   map.setPaintProperty('hotspots', 'circle-radius',
     ['interpolate', ['linear'], ['zoom'],
       ...ZOOM_SCALE.flatMap(([z, k]) => [z, radiiAt(k)])]);
+  // et la mort : plutôt que de disparaître net à MAX_AGE, le point s'efface sur
+  // les dernières heures — la coupure ne tombe plus que sur du vide
   map.setPaintProperty('hotspots', 'circle-opacity',
-    ['step', age, 1, 6 * H, .95, 24 * H, .8, 72 * H, .55]);
+    ['interpolate', ['linear'], age,
+      0, 0, APPEAR, rampAt(AGE_OPACITY, APPEAR),
+      ...rampAfter(AGE_OPACITY, APPEAR)]);
 
-  atLatest = i >= lastObs;
-  document.body.classList.toggle('past', !atLatest);
-  applyBurnt();
+  const was = atLatest;
+  atLatest = ts >= steps[lastObs].ts;
+  // fondu des surfaces brûlées : le basculement ne se fait qu'au franchissement,
+  // sinon la transition MapLibre serait relancée à chaque frame et figée à zéro
+  if (was !== atLatest) {
+    document.body.classList.toggle('past', !atLatest);
+    applyBurnt();
+  }
 
-  clockEl.textContent = fmt(s.ts);
+  // dernière source à avoir parlé à cet instant
+  let s = steps[0];
+  for (const x of steps) { if (x.ts > ts) break; s = x; }
+
+  const clock = fmt(ts);
+  if (clock !== clockEl.textContent) clockEl.textContent = clock;
   // le dernier passage satellite date souvent de plusieurs heures : les
   // premiers crans « à venir » sont déjà du passé pour le modèle, seuls ceux
   // qui dépassent l'instant présent sont vraiment une prévision
-  subEl.innerHTML = s.kind === 'wind'
+  const sub = s.kind === 'wind'
     ? `${s.ts > Date.now() / 1000 ? 'prévision vent' : 'vent'} · <b>+${s.h} h</b>`
     : `${s.label} · <b>${liveAt(now)}</b> foyers`;
-  windTime(s.ts);
+  if (sub !== subEl.innerHTML) subEl.innerHTML = sub;
+  windTime(ts);
 }
 
 // détections des 6 dernières heures à l'instant donné
@@ -701,12 +953,19 @@ function liveAt(now) {
 }
 
 /*
- * La lecture de droite change de largeur d'un cran à l'autre (« EFFIS · 0
- * foyers » contre « VIIRS/NOAA-20 · 1103 foyers »), ce qui raccourcissait ou
- * rallongeait la réglette à chaque déplacement. On réserve une bonne fois la
- * place du pire cas, mesuré sur les données réellement chargées.
+ * Deux lectures chiffrées changent de largeur au fil de l'animation, et les
+ * deux faisaient bouger la mise en page sous l'œil :
+ *
+ *  - à droite de la réglette, « EFFIS · 0 foyers » contre « VIIRS/NOAA-20 ·
+ *    1103 foyers », ce qui rallongeait ou raccourcissait la course du curseur ;
+ *  - dans la légende, « 6 km/h (raf. 12 km/h) » contre « 127 km/h (raf. 216
+ *    km/h) », ce qui faisait respirer tout le panneau.
+ *
+ * On réserve une bonne fois la place du pire cas. Pour la frise il est connu —
+ * les données sont chargées ; pour le vent on prend trois chiffres partout, ce
+ * qui couvre tout ce qui se mesure au sol.
  */
-function lockReadWidth() {
+function lockWidths() {
   const probe = document.createElement('div');
   probe.id = 'probe';
   document.body.appendChild(probe);
@@ -728,11 +987,18 @@ function lockReadWidth() {
     widest(fmt(steps[0].ts), clockEl),
   );
 
+  // les chiffres sont tabulaires : trois zéros mesurent comme n'importe quel
+  // nombre à trois chiffres. Sans fichier de vent la ligne a été retirée du
+  // document, et mesurer un élément détaché ne donnerait rien de bon.
+  const wind = windVal.isConnected ? widest('000 km/h (raf. 000 km/h)', windVal) : 0;
+
   probe.remove();
   // +4 px : la sonde sous-estime de 1-2 px (arrondis sous-pixel, chiffres
   // tabulaires du <b>), et le texte est aligné à droite — un dépassement
   // viendrait mordre sur la réglette
-  document.documentElement.style.setProperty('--read-w', Math.ceil(w) + 4 + 'px');
+  const px = document.documentElement.style;
+  px.setProperty('--read-w', Math.ceil(w) + 4 + 'px');
+  px.setProperty('--wind-w', Math.ceil(wind) + 2 + 'px');
 }
 
 // Les données partent tout de suite, sans attendre la carte.
@@ -770,20 +1036,29 @@ async function init() {
   map.addSource('hs', { type: 'geojson', data: hs });
 
   // surfaces brûlées datées : la « terre brûlée » de référence
+  const FADE = { duration: 450, delay: 0 };
   map.addLayer({ id: 'burnt-fill', type: 'fill', source: 'dated',
-    paint: { 'fill-color': V('--burnt'), 'fill-opacity': .70 } });
+    paint: { 'fill-color': V('--burnt'), 'fill-opacity': .70, 'fill-opacity-transition': FADE } });
   map.addLayer({ id: 'burnt-line', type: 'line', source: 'dated',
-    paint: { 'line-color': V('--burnt-edge'), 'line-width': 1.2, 'line-opacity': .95 } });
+    paint: { 'line-color': V('--burnt-edge'), 'line-width': 1.2,
+             'line-opacity': .95, 'line-opacity-transition': FADE } });
 
   // produit NRT : contour plus frais, mais sans date ni surface, et qui contient
   // aussi d'anciennes cicatrices -> simple trait de référence, non animé
   map.addLayer({ id: 'nrt-line', type: 'line', source: 'nrt',
-    paint: { 'line-color': '#8d7a6b', 'line-width': 1, 'line-opacity': .55 } });
+    paint: { 'line-color': '#8d7a6b', 'line-width': 1,
+             'line-opacity': .55, 'line-opacity-transition': FADE } });
 
-  // foyers : sort-key sur la date pour que les plus récents passent au-dessus
+  // Foyers : sort-key sur la date pour que les plus récents passent au-dessus.
+  // Transitions à zéro, contrairement aux polygones : la douceur vient déjà de
+  // l'expression d'âge, que `show()` réécrit à chaque frame — une transition
+  // par-dessus ne ferait que traîner d'un tiers de seconde sur la précédente.
+  const NOW = { duration: 0, delay: 0 };
   map.addLayer({ id: 'hotspots', type: 'circle', source: 'hs',
     layout: { 'circle-sort-key': ['get', 'ts'] },
-    paint: { 'circle-color': V('--front'), 'circle-radius': 4, 'circle-stroke-width': 0 } });
+    paint: { 'circle-color': V('--front'), 'circle-radius': 4, 'circle-stroke-width': 0,
+             'circle-color-transition': NOW, 'circle-radius-transition': NOW,
+             'circle-opacity-transition': NOW } });
 
   if (windData && windData.nt > 1) {
     W.data = windData;
@@ -791,18 +1066,24 @@ async function init() {
     map.on('move', () => { windSync(); wctx.clearRect(0, 0, W.w, W.h); windBadge(); });
     map.on('resize', windResize);
   } else {
-    // fichier absent ou vide : pas de case à cocher sans rien derrière
+    // fichier absent ou vide : pas de case à cocher sans rien derrière, et pas
+    // de ligne réservée dans la légende pour une lecture qui ne viendra jamais
     document.getElementById('ck-wind').closest('label').hidden = true;
+    windKey.remove();
   }
 
   steps = buildSteps(hs, dated);
   addForecast(W.data);
-  slider.max = steps.length - 1;
-  // on ouvre sur le dernier état observé, pas sur le bout de la prévision
-  slider.value = lastObs;
+  // le curseur porte des secondes epoch ; un pas d'une minute suffit à un
+  // déplacement fluide à la souris et évite d'appeler `show` pour rien
+  slider.min = steps[0].ts;
+  slider.max = steps[steps.length - 1].ts;
+  slider.step = 60;
+  buildWarp();
   drawTicks();
-  lockReadWidth();
-  show(lastObs);
+  lockWidths();
+  // on ouvre sur le dernier état observé, pas sur le bout de la prévision
+  setTime(steps[lastObs].ts);
 
   if (meta && meta.generated_at) {
     document.getElementById('updated').textContent =
@@ -851,10 +1132,27 @@ async function init() {
 // onglet ouvert en arrière-plan puis affiché : on relance le rendu
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden) { map.resize(); map.triggerRepaint(); }
+  // onglet masqué : requestAnimationFrame gèle. La lecture reprendrait d'un
+  // bond de plusieurs secondes au retour — autant rendre la main proprement.
+  else stopPlay();
   windLoop();   // rien à animer tant que l'onglet est caché
 });
 
-slider.addEventListener('input', () => { if (steps.length) show(+slider.value); });
+/* Le curseur porte maintenant un instant, pas un numéro de cran : il se déplace
+ * proportionnellement au temps, donc il passe exactement sur les marques de la
+ * frise — ce qui n'était pas le cas avec une valeur indicielle et des marques
+ * placées à la date. */
+function setTime(ts, fromSlider) {
+  curTs = Math.min(Math.max(ts, steps[0].ts), steps[steps.length - 1].ts);
+  if (!fromSlider) slider.value = curTs;
+  show(curTs);
+}
+
+slider.addEventListener('input', () => {
+  if (!steps.length) return;
+  stopPlay();                     // prendre la main sur la frise met en pause
+  setTime(+slider.value, true);
+});
 
 document.getElementById('ck-dated').addEventListener('change', e => {
   shown.dated = e.target.checked; applyBurnt();
@@ -866,21 +1164,48 @@ document.getElementById('ck-wind').addEventListener('change', e => {
   W.on = e.target.checked; windLoop(); windBadge();
 });
 
-document.getElementById('play').addEventListener('click', e => {
-  const btn = e.currentTarget;
-  if (playing) { clearInterval(playing); playing = null; btn.textContent = '▶'; return; }
-  btn.textContent = '❚❚';
-  // la lecture repart toujours du début, et le premier cran s'affiche tout de
-  // suite : sans ça le retour à gauche ne se voyait qu'au bout de 320 ms
-  slider.value = 0;
-  show(0);
-  playing = setInterval(() => {
-    slider.value = +slider.value + 1;   // un cran par frame
-    show(+slider.value);
-    if (+slider.value >= steps.length - 1) {
-      clearInterval(playing); playing = null; btn.textContent = '▶';
-    }
-  }, 320);
+const playBtn = document.getElementById('play');
+
+function stopPlay() {
+  if (!playing) return;
+  cancelAnimationFrame(playing.raf);
+  playing = null;
+  playBtn.textContent = '▶';
+  playBtn.setAttribute('aria-label', "Lancer l'animation");
+}
+
+/* Chaque frame réécrit trois expressions de peinture, que MapLibre réévalue sur
+ * les quelques milliers de foyers chargés. C'est tenable — 2 à 3 ms par frame
+ * sur un portable — mais inutile de le faire 120 fois par seconde sur un écran
+ * qui rafraîchit à 120 Hz : la nappe de vent, elle, a besoin de ces frames. */
+const PAINT_MS = MOBILE ? 1000 / 30 : 1000 / 50;
+
+function playFrame(now) {
+  if (!playing) return;
+  const p = Math.min((now - playing.start) / PLAY_MS, 1);
+  if (p >= 1) { setTime(steps[steps.length - 1].ts); stopPlay(); return; }
+  if (now - playing.paint >= PAINT_MS) {
+    playing.paint = now;
+    setTime(warpTime(ease(p)));
+  }
+  playing.raf = requestAnimationFrame(playFrame);
+}
+
+playBtn.addEventListener('click', () => {
+  if (playing) { stopPlay(); return; }
+  if (!steps.length) return;
+
+  // une lecture terminée — ou lâchée tout au bout — repart du début ; ailleurs
+  // on reprend là où le curseur a été laissé, sans le renvoyer à gauche
+  let p = unease(warpProgress(curTs));
+  if (p > .995) p = 0;
+
+  playBtn.textContent = '❚❚';
+  playBtn.setAttribute('aria-label', "Suspendre l'animation");
+  // le premier instant s'affiche tout de suite, la boucle ne fait que continuer
+  setTime(warpTime(ease(p)));
+  playing = { start: performance.now() - p * PLAY_MS, paint: 0, raf: 0 };
+  playing.raf = requestAnimationFrame(playFrame);
 });
 </script>
 </body>

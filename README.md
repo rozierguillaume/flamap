@@ -15,11 +15,10 @@ Trois états du terrain plus le vent, superposés sur un fond satellite :
 | Couche | Source | Rendu |
 |---|---|---|
 | **Terre brûlée** | polygones Copernicus EFFIS | aplat sombre |
-| **Brûlé récemment** | détections FIRMS de 6 h à 72 h | dégradé rouge → orange |
-| **Foyers actifs** | détections FIRMS de moins de 6 h | jaune vif |
+| **Foyers** | détections FIRMS des 5 derniers jours | échelle continue, du jaune clair au brun |
 | **Vent à 10 m** | modèle AROME HD via Open-Meteo | nappe de particules blanches |
 
-Un curseur temporel rejoue la progression du feu, cran par cran.
+Un curseur temporel rejoue la progression du feu.
 
 ## Démarrage
 
@@ -50,18 +49,27 @@ python3 -m http.server 8777
 et ouvrir <http://localhost:8777>. Des données d'exemple sont versionnées, la
 carte s'affiche donc dès le clonage, sans rien exécuter.
 
-## Le curseur est cranté, et c'est voulu
+## Le temps est continu, les données ne le sont pas
 
-Les données ne sont pas continues. VIIRS et MODIS ne voient la zone que lors
-d'un passage orbital (environ 6 par jour pour VIIRS, à heures irrégulières), et
-EFFIS ne republie ses polygones qu'une à deux fois par jour. Entre deux
-passages, il ne se passe littéralement rien dans les données — un curseur lisse
-laisserait croire à un suivi continu qui n'existe pas.
+VIIRS et MODIS ne voient la zone que lors d'un passage orbital (environ 6 par
+jour pour VIIRS, à heures irrégulières), et EFFIS ne republie ses polygones
+qu'une à deux fois par jour. Entre deux passages, il ne se passe littéralement
+rien dans les données. Sur la fenêtre du feu de Gironde : **70 mises à jour
+réelles en 6,6 jours**, soit 61 passages satellite (traits gris sur la frise) et
+9 publications EFFIS (traits ocres, plus hauts).
 
-Le curseur saute donc d'une mise à jour réelle à la suivante. Sur la fenêtre du
-feu de Gironde : **70 crans en 6,6 jours**, soit 61 passages satellite (traits
-gris) et 9 publications EFFIS (traits ocres, plus hauts). L'étiquette sous
-l'horloge indique quelle source a produit le cran affiché.
+Ces mises à jour restent visibles comme telles — les traits de la frise, et
+l'étiquette sous l'horloge qui nomme la source ayant parlé en dernier. Mais le
+curseur, lui, **balaie le temps en continu**. La version précédente sautait d'un
+cran au suivant : chaque saut avançait l'horloge de deux à trois heures d'un
+coup, et toute une rafale de foyers apparaissait d'un bloc. Désormais un foyer
+naît — il monte en opacité et en taille — puis vieillit le long d'une échelle de
+couleur continue.
+
+La vitesse de défilement n'est pas uniforme : elle est modulée par la densité de
+mises à jour, calculée par un noyau gaussien le long de la frise. La lecture
+accélère dans les creux et ralentit dans les rafales, sans cassure de vitesse
+puisque la densité, elle, est continue.
 
 Les passages satellite sont reconstitués en regroupant les détections espacées
 de moins de 25 minutes — une rafale de détections correspond à un survol.
@@ -98,10 +106,21 @@ l'écran alors qu'on n'en sait rien. Désactivé pour l'instant : la constante
   angles qui bouclent à 360° donnerait des girouettes folles entre deux mailles.
 
 **Rendu** (`index.html`) — MapLibre GL, sans build ni bundler. Les ~9 000
-détections forment une seule couche `circle` en mémoire GPU. Changer de cran
-ne fait que réécrire un filtre et trois expressions de peinture : le GeoJSON
-n'est jamais renvoyé au moteur. Le `circle-sort-key` sur la date fait passer
-les détections récentes au-dessus des anciennes sans tri manuel.
+détections forment une seule couche `circle` en mémoire GPU. Avancer dans le
+temps ne fait que réécrire trois expressions de peinture — couleur, rayon,
+opacité, toutes fonction de l'âge : le GeoJSON n'est jamais renvoyé au moteur.
+Il n'y a délibérément **pas de filtre** dans cette boucle, ce sont les bornes de
+la rampe d'opacité qui masquent le futur et l'au-delà de 5 jours ; un `setFilter`
+réécrit à chaque frame invalide les tuiles et repasse les 9 000 foyers au
+parseur, ce qui doublait le coût mesuré de la frame. Le `circle-sort-key` sur la
+date fait passer les détections récentes au-dessus des anciennes sans tri manuel.
+
+L'échelle de couleur et le dégradé qui l'explique en légende sont produits par
+**la même table** (`AGE_COLOR`), pour qu'ils ne puissent pas diverger. L'axe de
+ce dégradé est en racine carrée : linéaire, les six premières heures — là où le
+feu court et où la couleur change le plus vite — tiendraient dans 3 % de la
+barre. Un axe déformé se doit d'être chiffré, d'où le repère « 24 h » en son
+milieu.
 
 Le vent, lui, est peint à la main dans un `<canvas>` posé sur la carte : 1 700
 particules (550 sur téléphone) advectées par le champ interpolé, et une traînée
@@ -171,7 +190,7 @@ pour le vent (AROME HD de Météo-France, maille 1,5 km, pas horaire).
 | | |
 |---|---|
 | `fetch_fires.py` | récupération des trois sources → GeoJSON + `wind.json` |
-| `index.html` | la carte : MapLibre GL, fond satellite, curseur cranté |
+| `index.html` | la carte : MapLibre GL, fond satellite, frise temporelle |
 | `make_og.py` | fabrique `og.png`, l'aperçu des liens (Pillow requis) |
 | `og.png` | image de partage, 1200 × 630, versionnée |
 | `SOURCES.md` | note de repérage sur les sources de données |
@@ -207,8 +226,8 @@ pour le vent (AROME HD de Météo-France, maille 1,5 km, pas horaire).
 
 ## Crédits
 
-Affichés en bas de page, et à conserver : les deux sources sont libres d'usage
-mais demandent d'être citées.
+Repliés derrière le lien « Sources & crédits » en bas de page, et à conserver :
+les sources sont libres d'usage mais demandent d'être citées.
 
 - Foyers actifs : **NASA FIRMS** (VIIRS 375 m et MODIS, LANCE/EOSDIS)
 - Surfaces brûlées : **Copernicus EFFIS**

@@ -249,13 +249,14 @@ ce qui existe :
 
 | Couche | Construction |
 |---|---|
-| **Foyers actifs** | hotspots FIRMS < 6 h |
-| **Brûlé récemment** | hotspots FIRMS de 6 h à ~72 h, en dégradé |
-| **Terre brûlée** | polygone EFFIS, moins la zone couverte par les deux précédentes |
+| **Foyers** | hotspots FIRMS des 5 derniers jours, couleur continue selon l'âge |
+| **Terre brûlée** | polygone EFFIS, moins la zone couverte par la précédente |
 
-C'est ce que fait `index.html`. Version plus ambitieuse : remplacer la 3e couche par
-un dNBR Sentinel-2, qui donne la sévérité et permet un vrai dégradé continu au lieu
-de trois paliers.
+C'est ce que fait `index.html`, où l'âge d'un foyer pilote une échelle continue du
+jaune clair au brun sombre. Attention à ne pas confondre les deux dégradés : celui
+de la carte représente l'**ancienneté** de la détection, pas la sévérité du feu.
+Version plus ambitieuse pour cette dernière : un dNBR Sentinel-2 sur la surface
+brûlée, qui donne la sévérité réelle plutôt que la seule date de passage.
 
 ---
 
