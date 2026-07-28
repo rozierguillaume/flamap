@@ -37,19 +37,24 @@ jobs:
       - name: Vérifier les données
         run: |
           python3 - <<'PY'
-          import json, sys
-          hs = json.load(open('data/hotspots.geojson'))['features']
-          ba = json.load(open('data/burnt_dated.geojson'))['features']
-          print(f"{len(hs)} foyers, {len(ba)} polygones datés")
-          if not hs:
-              sys.exit("aucun foyer récupéré, déploiement annulé")
+          import json, pathlib, sys
+          manifest = json.load(open('data/manifest.json'))
+          timeline = json.load(open('data/timeline.json'))
+          zones = list(pathlib.Path('data/zones').glob('*.json'))
+          print(f"{manifest['hotspot_count']} foyers, {manifest['dated_count']} "
+                f"polygones datés, {len(zones)} zones")
+          if not manifest['hotspot_count'] or not timeline or len(zones) != len(manifest['zones']):
+              sys.exit("export national incomplet, déploiement annulé")
           PY
 
       - name: Assembler le site
         run: |
-          mkdir -p _site
+          mkdir -p _site/data
           cp index.html og.png robots.txt _site/
-          cp -r data _site/
+          cp data/manifest.json data/overview_hotspots.geojson \
+             data/burnt_recent.geojson data/timeline.json \
+             data/wind_coarse.json _site/data/
+          cp -r data/zones _site/data/
 
       - uses: actions/upload-pages-artifact@v3
         with:

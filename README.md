@@ -1,12 +1,9 @@
 # Flamap
 
-Cartographie d'incendie en quasi temps réel, à partir de données satellite
-publiques. Aucune clé d'API, aucune dépendance, aucun serveur : deux fichiers
-de code et un dossier de GeoJSON.
-
-Le cas d'usage de départ est le feu de Gironde de juillet 2026
-(Le Porge / Lège-Cap-Ferret, 38 000 ha), mais la zone se change avec un
-argument en ligne de commande.
+Cartographie des incendies en France métropolitaine, en quasi temps réel, à
+partir de données satellite publiques. Aucune clé d'API, aucune dépendance,
+aucun serveur applicatif : Python fabrique des fichiers statiques que le
+navigateur charge progressivement selon le zoom.
 
 ## Ce que la carte montre
 
@@ -26,13 +23,14 @@ Un curseur temporel rejoue la progression du feu.
 python3 fetch_fires.py
 ```
 
-Écrit `data/hotspots.geojson`, `data/burnt_dated.geojson`,
-`data/burnt_nrt.geojson` et `data/wind.json`. Bibliothèque standard uniquement,
-aucune clé d'API.
+Écrit un aperçu national léger (`manifest.json`, foyers agrégés, EFFIS récent,
+frise et vent grossier), puis environ 176 paquets dans `data/zones/`.
+Bibliothèque standard uniquement, aucune clé d'API.
 
-Compter quelques minutes depuis une connexion résidentielle : le WFS d'EFFIS y
-répond en 40 à 250 s par requête. Depuis un datacenter il répond en quelques
-secondes — le job GitHub Actions complet tourne en une quinzaine de secondes.
+Compter quelques minutes depuis une connexion résidentielle : le WFS d'EFFIS
+peut répondre en 40 à 250 s par requête. Open-Meteo est interrogé sans rafale :
+un champ national grossier est produit partout et une maille d'environ 20 km
+seulement dans les cellules où EFFIS ou FIRMS signale un incendie récent.
 
 Pour une autre zone, en `west south east north` :
 
@@ -46,17 +44,16 @@ Puis servir le dossier — les `fetch()` de la page échouent en `file://` :
 python3 -m http.server 8777
 ```
 
-et ouvrir <http://localhost:8777>. Des données d'exemple sont versionnées, la
-carte s'affiche donc dès le clonage, sans rien exécuter.
+et ouvrir <http://localhost:8777>. Les anciens exemples Gironde restent le
+filet de sécurité avant la première génération nationale.
 
 ## Le temps est continu, les données ne le sont pas
 
 VIIRS et MODIS ne voient la zone que lors d'un passage orbital (environ 6 par
 jour pour VIIRS, à heures irrégulières), et EFFIS ne republie ses polygones
 qu'une à deux fois par jour. Entre deux passages, il ne se passe littéralement
-rien dans les données. Sur la fenêtre du feu de Gironde : **70 mises à jour
-réelles en 6,6 jours**, soit 61 passages satellite (traits gris sur la frise) et
-9 publications EFFIS (traits ocres, plus hauts).
+rien dans les données. La frise nationale regroupe les détections par satellite
+et par passage : traits gris pour FIRMS, traits ocres plus hauts pour EFFIS.
 
 Ces mises à jour restent visibles comme telles — les traits de la frise, et
 l'étiquette sous l'horloge qui nomme la source ayant parlé en dernier. Mais le
@@ -81,10 +78,30 @@ qu'on la reconstruit après coup.
 
 La frise peut se prolonger **après le dernier passage satellite**, heure par
 heure : le vent est le seul paramètre dont on connaisse la suite, et
-`data/wind.json` porte 24 h de prévision. Le feu y resterait figé dans son
+`data/wind_coarse.json` porte 24 h de prévision. Le feu y resterait figé dans son
 dernier état observé — le vieillir jusqu'à demain le ferait s'éteindre à
 l'écran alors qu'on n'en sait rien. Désactivé pour l'instant : la constante
 `FORECAST_H` d'`index.html` vaut 0, la remonter à 24 rouvre ces crans.
+
+## Chargement progressif
+
+À l'ouverture, la page ne télécharge qu'environ 230 ko compressés :
+
+- foyers FIRMS regroupés par cellule de 0,25°, heure et satellite ;
+- périmètres EFFIS français des sept derniers jours ;
+- vent national 15 × 15 ;
+- manifest et frise nationale.
+
+À partir du zoom 7, `moveend` charge les cellules de 1° qui coupent l'écran.
+Chaque paquet contient les détections FIRMS exactes, les périmètres EFFIS de la
+saison et NRT, et éventuellement le vent fin. Les polygones traversant une
+frontière de cellule portent un identifiant stable et sont dédupliqués avant
+leur envoi à MapLibre. Le cache JS reste borné à 20 cellules ; le cache HTTP
+conserve les fichiers déjà visités.
+
+Le vent fin remplace le vent grossier cellule par cellule lorsqu'il arrive. En
+dehors des cellules d'incendie, ou pendant le téléchargement, le champ national
+reste affiché : la nappe ne présente jamais de trou.
 
 ## Comment ça marche
 
@@ -97,21 +114,18 @@ l'écran alors qu'on n'en sait rien. Désactivé pour l'instant : la constante
   datés de la saison (`modis.ba.poly.season`) et le produit NRT
   (`effis.nrt.ba.poly`), et ajoute deux epochs (`ts`, `lu`) exploitables
   directement par le curseur.
-- Open-Meteo sert le modèle **AROME HD** de Météo-France (maille 1,5 km) en
-  JSON, sans clé. Une requête unique porte toute la grille — 256 points pour la
-  Gironde, 206 heures, 0,4 s. La grille déborde la bbox de 60 km sur chaque
-  bord : sur un écran large, la carte cadrée sur le feu montre bien plus de
-  terrain que la zone d'intérêt, et la nappe s'arrêterait net sur les bords.
-  Le script convertit vitesse + azimut en composantes est/nord : interpoler des
-  angles qui bouclent à 360° donnerait des girouettes folles entre deux mailles.
+- Open-Meteo sert le modèle **AROME HD** de Météo-France en JSON, sans clé. Le
+  script demande 225 points pour le champ national, puis de petites grilles à
+  20 km dans les cellules actives. Les requêtes sont séquentielles avec reprise
+  bornée sur HTTP 429. Vitesse et azimut sont convertis en composantes est/nord.
 
-**Rendu** (`index.html`) — MapLibre GL, sans build ni bundler. Les ~9 000
-détections forment une seule couche `circle` en mémoire GPU. Avancer dans le
+**Rendu** (`index.html`) — MapLibre GL, sans build ni bundler. Seules les
+détections des cellules visibles forment la couche `circle`. Avancer dans le
 temps ne fait que réécrire trois expressions de peinture — couleur, rayon,
 opacité, toutes fonction de l'âge : le GeoJSON n'est jamais renvoyé au moteur.
 Il n'y a délibérément **pas de filtre** dans cette boucle, ce sont les bornes de
 la rampe d'opacité qui masquent le futur et l'au-delà de 5 jours ; un `setFilter`
-réécrit à chaque frame invalide les tuiles et repasse les 9 000 foyers au
+réécrit à chaque frame invalide les tuiles et repasse les foyers visibles au
 parseur, ce qui doublait le coût mesuré de la frame. Le `circle-sort-key` sur la
 date fait passer les détections récentes au-dessus des anciennes sans tri manuel.
 
@@ -132,11 +146,10 @@ soit une nappe parfaitement immobile.
 
 Le site est publié par GitHub Pages, via le workflow
 [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) : toutes les
-2 heures, un runner exécute `fetch_fires.py`, assemble `index.html` + `data/`
-dans `_site`, et livre le tout à Pages sous forme d'artefact. L'ensemble prend
-une quinzaine de secondes.
+2 heures, un runner exécute `fetch_fires.py`, assemble les seuls exports
+nationaux dans `_site`, et livre le tout à Pages sous forme d'artefact.
 
-Les données rafraîchies ne sont **jamais commitées**. À 3 Mo par version et
+Les données rafraîchies ne sont **jamais commitées**. À plusieurs Mo par version et
 12 exécutions par jour, l'historique git gonflerait de plusieurs gigaoctets par
 an pour un dépôt qui contient 30 Ko de code utile. Le `data/` versionné reste
 figé : il sert uniquement à ce que la carte s'affiche dès le clonage.
@@ -189,13 +202,14 @@ pour le vent (AROME HD de Météo-France, maille 1,5 km, pas horaire).
 
 | | |
 |---|---|
-| `fetch_fires.py` | récupération des trois sources → GeoJSON + `wind.json` |
+| `fetch_fires.py` | récupération, agrégation nationale et paquets de 1° |
 | `index.html` | la carte : MapLibre GL, fond satellite, frise temporelle |
 | `make_og.py` | fabrique `og.png`, l'aperçu des liens (Pillow requis) |
 | `og.png` | image de partage, 1200 × 630, versionnée |
 | `SOURCES.md` | note de repérage sur les sources de données |
 | `.github/workflows/deploy.yml` | rafraîchissement toutes les 2 h + publication Pages |
-| `data/` | sorties du script, regénérables |
+| `data/manifest.json` | emprise, génération, liste et format des zones |
+| `data/zones/` | paquets détaillés générés, non versionnés |
 
 ## Limites connues
 
@@ -216,10 +230,9 @@ pour le vent (AROME HD de Météo-France, maille 1,5 km, pas horaire).
   en arrière-plan a son `requestAnimationFrame` gelé et l'événement `load`
   n'arrive jamais — d'où le démarrage par sondage de `isStyleLoaded()` et le
   `resize()` sur `visibilitychange`.
-- **Le vent est un modèle, pas une mesure.** AROME HD interpole à 1,5 km ;
-  la grille servie à la carte est dégrossie à ~15 km, et la nappe est lissée
-  entre les mailles. Elle donne une tendance à l'échelle du massif, pas la
-  rafale au coin d'une parcelle.
+- **Le vent est un modèle, pas une mesure.** La vue nationale est volontairement
+  grossière (~94 km). Dans les cellules d'incendie elle passe à ~20 km, toutes
+  les trois heures. Elle donne une tendance, pas la rafale d'une parcelle.
 - La vitesse de la nappe est relative, jamais une distance parcourue au sol :
   les chiffres justes sont ceux de la légende.
 - Tout est en UTC côté satellite ; l'affichage est converti en heure de Paris.

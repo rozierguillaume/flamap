@@ -1,49 +1,47 @@
 #!/usr/bin/env python3
 """
-Recupere les donnees incendie quasi temps reel pour une bbox donnee.
+Produit les donnees statiques de Flamap pour la France metropolitaine.
 
-Trois sources, complementaires :
+Le navigateur ne charge d'abord qu'un apercu national leger :
+  - foyers FIRMS agreges spatialement et par heure ;
+  - perimetres EFFIS des sept derniers jours ;
+  - vent national grossier ;
+  - frise et manifest.
 
-  1. NASA FIRMS - foyers actifs (points de detection thermique)
-     Flux CSV publics, sans cle API, remis a jour ~toutes les 3h.
-     VIIRS 375 m (NOAA-20, NOAA-21, Suomi-NPP) + MODIS 1 km.
-     -> data/hotspots.geojson
+Les detections detaillees, la saison EFFIS, le NRT et le vent fin sont repartis
+dans des cellules de 1 degre chargees seulement lorsque la carte zoome.
 
-  2. Copernicus EFFIS - surfaces brulees (polygones)
-     WFS MapServer, mis a jour ~1-2x/jour.
-     - modis.ba.poly.season : polygones dates (FIREDATE, AREA_HA, COMMUNE...)
-     - effis.nrt.ba.poly    : version NRT, plus fraiche mais sans attributs
-     -> data/burnt_dated.geojson, data/burnt_nrt.geojson
-
-  3. Open-Meteo / Meteo-France AROME HD - vent a 10 m
-     JSON public, sans cle. Grille reguliere debordant la bbox, 7 jours
-     passes et 24 h a venir, au pas horaire.
-     -> data/wind.json
-
-Usage:
-    python3 fetch_fires.py                  # bbox Gironde par defaut
-    python3 fetch_fires.py -1.6 44.3 -0.2 45.4
+Usage :
+    python3 fetch_fires.py
+    python3 fetch_fires.py west south east north
 """
 
 import csv
+import hashlib
 import io
 import json
 import math
 import os
+import shutil
 import sys
+import time
 import urllib.request
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "data")
+ZONES_OUT = os.path.join(OUT, "zones")
 
-# bbox par defaut : Gironde / bassin d'Arcachon / nord des Landes
-DEFAULT_BBOX = (-1.6, 44.2, -0.2, 45.4)  # west, south, east, north
+# France metropolitaine et Corse. La bbox assume volontairement une petite
+# couronne etrangere : elle evite les coupures sur les frontieres et en mer.
+DEFAULT_BBOX = (-5.5, 41.0, 10.0, 51.5)
+TILE_DEG = 1.0
+DETAIL_ZOOM = 7
+OVERVIEW_DEG = 0.25
+OVERVIEW_H = 1
+RECENT_DAYS = 7
 
 FIRMS_BASE = "https://firms.modaps.eosdis.nasa.gov/data/active_fire"
-
-# Flux regionaux sans cle API. "7d" = 7 derniers jours, "24h" aussi dispo.
-# La zone "Europe" couvre l'Europe continentale ; voir aussi Global, Russia_Asia...
 FIRMS_FEEDS = [
     ("VIIRS/NOAA-20", f"{FIRMS_BASE}/noaa-20-viirs-c2/csv/J1_VIIRS_C2_Europe_7d.csv"),
     ("VIIRS/NOAA-21", f"{FIRMS_BASE}/noaa-21-viirs-c2/csv/J2_VIIRS_C2_Europe_7d.csv"),
@@ -53,30 +51,43 @@ FIRMS_FEEDS = [
 
 EFFIS_WFS = "https://maps.effis.emergency.copernicus.eu/effis"
 
-# Vent : Open-Meteo sert le modele AROME HD de Meteo-France (maille 1,5 km sur
-# la France) en JSON, sans cle. Une seule requete accepte plusieurs centaines de
-# points : on y demande toute la grille d'un coup.
 OPEN_METEO = "https://api.open-meteo.com/v1/forecast"
 WIND_MODEL = "meteofrance_arome_france_hd"
-WIND_PAST_DAYS = 7      # meme profondeur que les flux FIRMS, donc que la frise
-WIND_SPACING_KM = 10    # pas vise de la grille
-WIND_MAX_POINTS = 260   # au-dela, l'URL et le fichier deviennent deraisonnables
-# La grille deborde largement la bbox : sur un ecran large, la carte cadree sur
-# le feu montre bien plus de terrain que la zone d'interet, et le vent
-# s'arreterait net sur les bords. Le pas s'elargit tout seul pour tenir dans le
-# budget de points — une nappe un peu plus lissee vaut mieux qu'un trou.
+WIND_PAST_DAYS = 7
+WIND_SPACING_KM = 20
+WIND_BATCH = 250
 WIND_MARGIN_KM = 60
+WIND_DETAIL_STRIDE = 3
+WIND_COARSE_N = 15
+FIRMS_FINE_MIN = 50
+
+EMPTY_FC = {"type": "FeatureCollection", "features": []}
 
 
 def get(url, timeout=300):
-    req = urllib.request.Request(url, headers={"User-Agent": "carte-incendie/0.1"})
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        return r.read()
+    req = urllib.request.Request(url, headers={"User-Agent": "flamap/0.2"})
+    with urllib.request.urlopen(req, timeout=timeout) as response:
+        return response.read()
 
 
-# --------------------------------------------------------------------------
-# 1. Foyers actifs (FIRMS)
-# --------------------------------------------------------------------------
+def write_json(path, data, compact=True):
+    with open(path, "w", encoding="utf-8") as output:
+        json.dump(
+            data,
+            output,
+            ensure_ascii=False,
+            separators=(",", ":") if compact else None,
+            indent=None if compact else 2,
+        )
+
+
+def fc(features):
+    return {"type": "FeatureCollection", "features": features}
+
+
+# ---------------------------------------------------------------------------
+# FIRMS
+# ---------------------------------------------------------------------------
 
 def fetch_hotspots(bbox):
     west, south, east, north = bbox
@@ -85,22 +96,20 @@ def fetch_hotspots(bbox):
     for label, url in FIRMS_FEEDS:
         try:
             raw = get(url, timeout=120).decode("utf-8")
-        except Exception as e:  # un flux peut etre temporairement indispo
-            print(f"  ! {label} : {e}", file=sys.stderr)
+        except Exception as error:
+            print(f"  ! {label} : {error}", file=sys.stderr)
             continue
 
-        n = 0
+        count = 0
         for row in csv.DictReader(io.StringIO(raw)):
             lon, lat = float(row["longitude"]), float(row["latitude"])
             if not (west <= lon <= east and south <= lat <= north):
                 continue
 
-            # acq_time est un HHMM en UTC, parfois sans zero initial
             hhmm = row["acq_time"].zfill(4)
             when = datetime.strptime(
                 f"{row['acq_date']} {hhmm}", "%Y-%m-%d %H%M"
             ).replace(tzinfo=timezone.utc)
-
             features.append({
                 "type": "Feature",
                 "geometry": {"type": "Point", "coordinates": [lon, lat]},
@@ -108,26 +117,98 @@ def fetch_hotspots(bbox):
                     "source": label,
                     "t": when.isoformat(),
                     "ts": int(when.timestamp()),
-                    # VIIRS: bright_ti4 / MODIS: brightness
-                    "brightness": float(row.get("bright_ti4") or row.get("brightness") or 0),
-                    "frp": float(row["frp"]),          # puissance radiative, MW
-                    "confidence": row["confidence"],   # low/nominal/high (VIIRS) ou 0-100 (MODIS)
+                    "brightness": float(
+                        row.get("bright_ti4") or row.get("brightness") or 0
+                    ),
+                    "frp": float(row["frp"]),
+                    "confidence": row["confidence"],
                     "daynight": row["daynight"],
-                    # empreinte au sol du pixel, utile pour dessiner a la bonne taille
                     "scan": float(row["scan"]),
                     "track": float(row["track"]),
                 },
             })
-            n += 1
-        print(f"  {label}: {n} detections")
+            count += 1
+        print(f"  {label}: {count} detections")
 
-    features.sort(key=lambda f: f["properties"]["ts"])
-    return {"type": "FeatureCollection", "features": features}
+    features.sort(key=lambda feature: feature["properties"]["ts"])
+    return fc(features)
 
 
-# --------------------------------------------------------------------------
-# 2. Surfaces brulees (EFFIS)
-# --------------------------------------------------------------------------
+def aggregate_hotspots(hotspots):
+    """Une feature par cellule de 0,25 degre, heure et satellite."""
+    groups = {}
+    seconds = OVERVIEW_H * 3600
+    for feature in hotspots["features"]:
+        lon, lat = feature["geometry"]["coordinates"]
+        prop = feature["properties"]
+        key = (
+            math.floor(lon / OVERVIEW_DEG),
+            math.floor(lat / OVERVIEW_DEG),
+            prop["ts"] // seconds,
+            prop["source"],
+        )
+        if key not in groups:
+            groups[key] = {
+                "type": "Feature",
+                "geometry": {
+                    "type": "Point",
+                    "coordinates": [
+                        round((key[0] + 0.5) * OVERVIEW_DEG, 4),
+                        round((key[1] + 0.5) * OVERVIEW_DEG, 4),
+                    ],
+                },
+                "properties": {
+                    "ts": key[2] * seconds,
+                    "source": prop["source"],
+                    "n": 0,
+                    "overview": 1,
+                },
+            }
+        groups[key]["properties"]["n"] += 1
+    features = sorted(groups.values(), key=lambda feature: feature["properties"]["ts"])
+    return fc(features)
+
+
+def build_timeline(hotspots, dated):
+    """Passages nationaux exacts, independants des donnees detaillees chargees."""
+    steps = []
+    current = None
+    gap = 25 * 60
+    for feature in hotspots["features"]:
+        prop = feature["properties"]
+        if (
+            current
+            and prop["source"] == current["label"]
+            and prop["ts"] - current["last"] <= gap
+        ):
+            current["n"] += 1
+            current["last"] = prop["ts"]
+            continue
+        current = {
+            "ts": prop["ts"],
+            "last": prop["ts"],
+            "kind": "sat",
+            "label": prop["source"],
+            "n": 1,
+        }
+        steps.append(current)
+
+    first = steps[0]["ts"] if steps else 0
+    for stamp in sorted({
+        feature["properties"].get("lu")
+        for feature in dated["features"]
+        if feature["properties"].get("lu", 0) >= first
+    }):
+        steps.append({"ts": stamp, "kind": "effis", "label": "EFFIS", "n": 0})
+
+    for step in steps:
+        step.pop("last", None)
+    return sorted(steps, key=lambda step: step["ts"])
+
+
+# ---------------------------------------------------------------------------
+# EFFIS
+# ---------------------------------------------------------------------------
 
 def effis_wfs(typename, bbox, timeout=300):
     west, south, east, north = bbox
@@ -136,111 +217,188 @@ def effis_wfs(typename, bbox, timeout=300):
         f"&typename=ms:{typename}&outputformat=geojson"
         f"&bbox={west},{south},{east},{north}"
     )
-    return json.loads(get(url, timeout=timeout))
+    for attempt in range(3):
+        try:
+            return json.loads(get(url, timeout=timeout))
+        except Exception:
+            if attempt == 2:
+                raise
+            delay = 4 * (attempt + 1)
+            print(f"  ! EFFIS {typename} indisponible, nouvel essai dans {delay} s",
+                  file=sys.stderr)
+            time.sleep(delay)
 
 
-def to_epoch(s):
-    """'2026-07-23 07:45:17.536' (UTC) -> timestamp, ou None."""
-    if not s:
+def to_epoch(value):
+    if not value:
         return None
     try:
-        return int(datetime.fromisoformat(str(s).replace(" ", "T"))
-                   .replace(tzinfo=timezone.utc).timestamp())
+        return int(
+            datetime.fromisoformat(str(value).replace(" ", "T"))
+            .replace(tzinfo=timezone.utc)
+            .timestamp()
+        )
     except ValueError:
         return None
 
 
-def swap_axes(geom):
-    """EFFIS renvoie du GeoJSON en [lat, lon] : on remet en [lon, lat]."""
-    def walk(c):
-        if isinstance(c[0], (int, float)):
-            return [c[1], c[0]]
-        return [walk(x) for x in c]
+def swap_axes(geometry):
+    """EFFIS emet [lat, lon], y compris dans des GeometryCollection."""
+    def walk(coords):
+        if isinstance(coords[0], (int, float)):
+            return [coords[1], coords[0]]
+        return [walk(child) for child in coords]
 
-    geom["coordinates"] = walk(geom["coordinates"])
-    return geom
+    if "coordinates" in geometry:
+        geometry["coordinates"] = walk(geometry["coordinates"])
+    for child in geometry.get("geometries", []):
+        swap_axes(child)
+    return geometry
+
+
+def stable_feature_id(feature, prefix):
+    value = feature.get("properties", {}).get("id")
+    if value in (None, ""):
+        raw = json.dumps(
+            feature["geometry"], sort_keys=True, separators=(",", ":")
+        ).encode()
+        value = hashlib.sha1(raw).hexdigest()[:16]
+    return f"{prefix}-{value}"
 
 
 def fetch_burnt(bbox):
-    out = {}
+    dated = effis_wfs("modis.ba.poly.season", bbox)
+    kept = []
+    for feature in dated["features"]:
+        # La couche datee fournit le pays : ne pas envoyer au navigateur les
+        # milliers de polygones espagnols et italiens pris dans la grande bbox.
+        if feature["properties"].get("COUNTRY") != "FR":
+            continue
+        swap_axes(feature["geometry"])
+        prop = feature["properties"]
+        prop["ts"] = to_epoch(prop.get("FIREDATE"))
+        prop["lu"] = to_epoch(prop.get("LASTUPDATE")) or prop["ts"]
+        prop["_id"] = stable_feature_id(feature, "d")
+        kept.append(feature)
+    dated["features"] = sorted(
+        kept, key=lambda feature: feature["properties"].get("FIREDATE") or ""
+    )
+    print(f"  EFFIS dates France : {len(kept)} polygones")
 
-    # Polygones dates : FIREDATE, FINALDATE, AREA_HA, COMMUNE, CLASS...
-    # CLASS vaut Today / 7DAYS / 30DAYS / FireSeason -> exactement la
-    # distinction "brule recemment" vs "brule plus tot dans la saison".
-    fc = effis_wfs("modis.ba.poly.season", bbox)
-    for f in fc["features"]:
-        swap_axes(f["geometry"])
-        p = f["properties"]
-        # epochs exploitables directement par le curseur temporel :
-        # 'lu' = date a laquelle EFFIS a publie/ravise ce polygone, donc le
-        # moment ou la carte aurait change si on l'avait suivie en direct.
-        p["ts"] = to_epoch(p.get("FIREDATE"))
-        p["lu"] = to_epoch(p.get("LASTUPDATE")) or p["ts"]
-    fc["features"].sort(key=lambda f: f["properties"].get("FIREDATE") or "")
-    print(f"  EFFIS dates : {len(fc['features'])} polygones")
-    for f in fc["features"]:
-        p = f["properties"]
-        print(f"    {p.get('FIREDATE','?')[:10]}  {p.get('COMMUNE','?'):<24} "
-              f"{p.get('AREA_HA','?'):>8} ha  [{p.get('CLASS','?')}]")
-    out["burnt_dated"] = fc
-
-    # Produit NRT : contour plus frais (mis a jour plus souvent) mais sans
-    # aucun attribut expose par le WFS - geometrie seule.
     nrt = effis_wfs("effis.nrt.ba.poly", bbox)
-    for f in nrt["features"]:
-        swap_axes(f["geometry"])
-    print(f"  EFFIS NRT   : {len(nrt['features'])} polygones")
-    out["burnt_nrt"] = nrt
+    for feature in nrt["features"]:
+        swap_axes(feature["geometry"])
+        feature.setdefault("properties", {})["_id"] = stable_feature_id(feature, "n")
+    print(f"  EFFIS NRT bbox     : {len(nrt['features'])} polygones")
+    return {"burnt_dated": dated, "burnt_nrt": nrt}
 
-    return out
+
+def recent_burnt(dated, reference):
+    threshold = reference - RECENT_DAYS * 86400
+    return fc([
+        feature for feature in dated["features"]
+        if (
+            feature["properties"].get("CLASS") in ("Today", "7DAYS")
+            or feature["properties"].get("ts", 0) >= threshold
+        )
+    ])
 
 
-# --------------------------------------------------------------------------
-# 3. Vent a 10 m (Open-Meteo / AROME HD)
-# --------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Decoupage spatial
+# ---------------------------------------------------------------------------
+
+def geometry_points(geometry):
+    def walk(coords):
+        if (
+            isinstance(coords, list)
+            and len(coords) >= 2
+            and isinstance(coords[0], (int, float))
+        ):
+            yield coords
+        elif isinstance(coords, list):
+            for child in coords:
+                yield from walk(child)
+
+    if "coordinates" in geometry:
+        yield from walk(geometry["coordinates"])
+    for child in geometry.get("geometries", []):
+        yield from geometry_points(child)
+
+
+def feature_bounds(feature):
+    points = list(geometry_points(feature["geometry"]))
+    lon = [point[0] for point in points]
+    lat = [point[1] for point in points]
+    return min(lon), min(lat), max(lon), max(lat)
+
+
+def tile_id(ix, iy):
+    return f"x{ix:+03d}_y{iy:+03d}"
+
+
+def tile_range(bbox):
+    west, south, east, north = bbox
+    return [
+        (ix, iy)
+        for iy in range(math.floor(south), math.floor(math.nextafter(north, -math.inf)) + 1)
+        for ix in range(math.floor(west), math.floor(math.nextafter(east, -math.inf)) + 1)
+    ]
+
+
+def feature_tiles(feature):
+    west, south, east, north = feature_bounds(feature)
+    return [
+        (ix, iy)
+        for iy in range(math.floor(south), math.floor(math.nextafter(north, -math.inf)) + 1)
+        for ix in range(math.floor(west), math.floor(math.nextafter(east, -math.inf)) + 1)
+    ]
+
+
+def partition_features(features, point=False):
+    cells = {}
+    for feature in features:
+        if point:
+            lon, lat = feature["geometry"]["coordinates"]
+            keys = [(math.floor(lon), math.floor(lat))]
+        else:
+            keys = feature_tiles(feature)
+        for key in keys:
+            cells.setdefault(key, []).append(feature)
+    return cells
+
+
+# ---------------------------------------------------------------------------
+# Vent
+# ---------------------------------------------------------------------------
 
 def wind_box(bbox):
-    """La bbox elargie de WIND_MARGIN_KM sur chaque bord."""
     west, south, east, north = bbox
     mid = math.radians((south + north) / 2)
     dy = WIND_MARGIN_KM / 111.0
     dx = WIND_MARGIN_KM / (111.0 * math.cos(mid))
-    return (max(west - dx, -180), max(south - dy, -85),
-            min(east + dx, 180), min(north + dy, 85))
+    return west - dx, south - dy, east + dx, north + dy
 
 
-def wind_grid(box):
-    """Points de la grille, en ordre ligne par ligne du sud au nord."""
+def wind_grid(box, spacing_km):
     west, south, east, north = box
     mid = math.radians((south + north) / 2)
-    km_lat, km_lon = 111.0, 111.0 * math.cos(mid)
-
-    def count(span_km):
-        return max(2, min(40, round(span_km / WIND_SPACING_KM) + 1))
-
-    nx = count((east - west) * km_lon)
-    ny = count((north - south) * km_lat)
-    # une requete unique porte toute la grille : on la degrossit tant qu'elle
-    # depasse le budget, en gardant les proportions
-    while nx * ny > WIND_MAX_POINTS:
-        if nx >= ny:
-            nx -= 1
-        else:
-            ny -= 1
-
-    pts = []
-    for j in range(ny):
-        for i in range(nx):
-            pts.append((
-                round(south + (north - south) * j / (ny - 1), 4),
-                round(west + (east - west) * i / (nx - 1), 4),
-            ))
-    return nx, ny, pts
+    nx = max(2, round((east - west) * 111 * math.cos(mid) / spacing_km) + 1)
+    ny = max(2, round((north - south) * 111 / spacing_km) + 1)
+    points = [
+        (
+            round(south + (north - south) * iy / (ny - 1), 4),
+            round(west + (east - west) * ix / (nx - 1), 4),
+        )
+        for iy in range(ny)
+        for ix in range(nx)
+    ]
+    return nx, ny, points
 
 
-def wind_request(pts, model):
-    lat = ",".join(str(p[0]) for p in pts)
-    lon = ",".join(str(p[1]) for p in pts)
+def wind_request(points, model):
+    lat = ",".join(str(point[0]) for point in points)
+    lon = ",".join(str(point[1]) for point in points)
     url = (
         f"{OPEN_METEO}?latitude={lat}&longitude={lon}"
         "&hourly=wind_speed_10m,wind_direction_10m,wind_gusts_10m"
@@ -249,115 +407,250 @@ def wind_request(pts, model):
     )
     if model:
         url += f"&models={model}"
-    data = json.loads(get(url, timeout=120))
-    return data if isinstance(data, list) else [data]
+    for attempt in range(4):
+        try:
+            data = json.loads(get(url, timeout=180))
+            return data if isinstance(data, list) else [data]
+        except Exception as error:
+            if getattr(error, "code", None) != 429 or attempt == 3:
+                raise
+            delay = (10, 30, 60)[attempt]
+            print(f"  ! Open-Meteo limite le debit, nouvel essai dans {delay} s",
+                  file=sys.stderr)
+            time.sleep(delay)
 
 
-def fetch_wind(bbox):
-    box = wind_box(bbox)
-    nx, ny, pts = wind_grid(box)
-    span = (box[2] - box[0]) * 111.0 * math.cos(math.radians((box[1] + box[3]) / 2))
-    print(f"  grille {nx}x{ny} = {len(pts)} points, pas ~{span / (nx - 1):.0f} km")
+def request_wind_batches(points, model):
+    batches = [
+        points[index:index + WIND_BATCH]
+        for index in range(0, len(points), WIND_BATCH)
+    ]
+    print(f"  {len(batches)} lots de {WIND_BATCH} points au plus")
+    chunks = []
+    for batch in batches:
+        chunks.append(wind_request(batch, model))
+        # Le quota porte aussi sur le nombre de coordonnees. Une petite pause
+        # evite les rafales que l'API libre refuse par HTTP 429.
+        time.sleep(2)
+    return [series for chunk in chunks for series in chunk]
 
-    series = wind_request(pts, WIND_MODEL)
-    holes = sum(1 for p in series for v in p["hourly"]["wind_speed_10m"] if v is None)
-    total = sum(len(p["hourly"]["wind_speed_10m"]) for p in series)
+
+def fetch_wind(box, spacing_km, label):
+    nx, ny, points = wind_grid(box, spacing_km)
+    dx = (box[2] - box[0]) * 111 * math.cos(math.radians((box[1] + box[3]) / 2))
+    print(f"  {label} {nx}x{ny} = {len(points)} points, pas ~{dx / (nx - 1):.0f} km")
+
+    series = request_wind_batches(points, WIND_MODEL)
+    holes = sum(
+        value is None
+        for location in series
+        for value in location["hourly"]["wind_speed_10m"]
+    )
+    total = sum(len(location["hourly"]["wind_speed_10m"]) for location in series)
     model = WIND_MODEL
-
-    # AROME ne couvre que la France et ses abords : hors domaine, la reponse est
-    # une grille de null. On retombe alors sur le modele automatique d'Open-Meteo
-    # (maille plus large, couverture mondiale).
     if holes > total * 0.2:
-        print(f"  ! AROME HD : {holes}/{total} valeurs manquantes, bascule sur "
-              f"le modele automatique", file=sys.stderr)
-        series = wind_request(pts, None)
+        print(
+            f"  ! AROME HD : {holes}/{total} valeurs manquantes, bascule best_match",
+            file=sys.stderr,
+        )
+        series = request_wind_batches(points, None)
         model = "best_match"
 
     times = series[0]["hourly"]["time"]
-    steps = [int(datetime.fromisoformat(t).replace(tzinfo=timezone.utc).timestamp())
-             for t in times]
-
-    # 7 jours passes, mais seulement 24 h a venir : au-dela on afficherait une
-    # prevision que plus rien ne vient corriger avant le prochain rafraichissement
+    timestamps = [
+        int(datetime.fromisoformat(value).replace(tzinfo=timezone.utc).timestamp())
+        for value in times
+    ]
     now = datetime.now(timezone.utc).timestamp()
-    keep = [k for k, ts in enumerate(steps) if ts <= now + 24 * 3600]
-    steps = [steps[k] for k in keep]
+    keep = [index for index, stamp in enumerate(timestamps) if stamp <= now + 24 * 3600]
+    timestamps = [timestamps[index] for index in keep]
 
-    u = [[0.0] * len(pts) for _ in steps]
-    v = [[0.0] * len(pts) for _ in steps]
-    gust = [[0] * len(pts) for _ in steps]
-
-    for n, p in enumerate(series):
-        h = p["hourly"]
-        for row, k in enumerate(keep):
-            spd, deg = h["wind_speed_10m"][k], h["wind_direction_10m"][k]
-            if spd is None or deg is None:
+    u = [[0.0] * len(points) for _ in timestamps]
+    v = [[0.0] * len(points) for _ in timestamps]
+    gust = [[0] * len(points) for _ in timestamps]
+    for column, location in enumerate(series):
+        hourly = location["hourly"]
+        for row, index in enumerate(keep):
+            speed = hourly["wind_speed_10m"][index]
+            direction = hourly["wind_direction_10m"][index]
+            if speed is None or direction is None:
                 continue
-            # direction meteo = d'ou vient le vent ; les composantes pointent
-            # donc a l'oppose
-            rad = math.radians(deg)
-            u[row][n] = round(-spd * math.sin(rad), 1)
-            v[row][n] = round(-spd * math.cos(rad), 1)
-            g = h["wind_gusts_10m"][k]
-            gust[row][n] = round(g * 3.6) if g is not None else 0   # km/h entiers
+            angle = math.radians(direction)
+            u[row][column] = round(-speed * math.sin(angle), 1)
+            v[row][column] = round(-speed * math.cos(angle), 1)
+            value = hourly["wind_gusts_10m"][index]
+            gust[row][column] = round(value * 3.6) if value is not None else 0
 
-    fastest = max((math.hypot(a, b) for row_u, row_v in zip(u, v)
-                   for a, b in zip(row_u, row_v)), default=0)
-    print(f"  {len(steps)} heures, du {times[keep[0]]} au {times[keep[-1]]} UTC")
-    print(f"  modele {model}, pointe a {fastest * 3.6:.0f} km/h")
-
+    print(f"  {len(timestamps)} heures, modele {model}")
     return {
         "model": model,
-        "unit": "m/s",          # u, v ; les rafales sont en km/h entiers
-        "bbox": [round(c, 4) for c in box],   # la bbox elargie, pas celle du feu
-        "nx": nx, "ny": ny,
-        "t0": steps[0], "dt": 3600, "nt": len(steps),
-        "u": u, "v": v, "gust": gust,
+        "box": box,
+        "nx": nx,
+        "ny": ny,
+        "t0": timestamps[0],
+        "dt": 3600,
+        "u": u,
+        "v": v,
+        "gust": gust,
     }
 
+
+def wind_subset(wind, xs, ys, time_stride=1):
+    indices = [iy * wind["nx"] + ix for iy in ys for ix in xs]
+    rows = range(0, len(wind["u"]), time_stride)
+    x0, x1 = xs[0], xs[-1]
+    y0, y1 = ys[0], ys[-1]
+    box = wind["box"]
+    dx = (box[2] - box[0]) / (wind["nx"] - 1)
+    dy = (box[3] - box[1]) / (wind["ny"] - 1)
+    return {
+        "model": wind["model"],
+        "unit": "m/s",
+        "bbox": [
+            round(box[0] + x0 * dx, 4),
+            round(box[1] + y0 * dy, 4),
+            round(box[0] + x1 * dx, 4),
+            round(box[1] + y1 * dy, 4),
+        ],
+        "nx": len(xs),
+        "ny": len(ys),
+        "t0": wind["t0"],
+        "dt": wind["dt"] * time_stride,
+        "nt": len(list(rows)),
+        "u": [[wind["u"][row][index] for index in indices] for row in rows],
+        "v": [[wind["v"][row][index] for index in indices] for row in rows],
+        "gust": [[wind["gust"][row][index] for index in indices] for row in rows],
+    }
+
+
+def whole_wind(wind, time_stride=1):
+    return wind_subset(
+        wind,
+        list(range(wind["nx"])),
+        list(range(wind["ny"])),
+        time_stride,
+    )
+
+
+def fine_wind_tiles(recent, hotspots, latest):
+    """Cellules avec feu confirme EFFIS ou rafale FIRMS recente significative."""
+    keys = set()
+    for feature in recent["features"]:
+        keys.update(feature_tiles(feature))
+
+    counts = {}
+    threshold = latest - 24 * 3600
+    for feature in hotspots["features"]:
+        if feature["properties"]["ts"] < threshold:
+            continue
+        lon, lat = feature["geometry"]["coordinates"]
+        key = math.floor(lon), math.floor(lat)
+        counts[key] = counts.get(key, 0) + 1
+    keys.update(key for key, count in counts.items() if count >= FIRMS_FINE_MIN)
+    return keys
+
+
+# ---------------------------------------------------------------------------
+# Assemblage
+# ---------------------------------------------------------------------------
 
 def main():
     bbox = DEFAULT_BBOX
     if len(sys.argv) == 5:
-        bbox = tuple(float(x) for x in sys.argv[1:5])
+        bbox = tuple(float(value) for value in sys.argv[1:5])
+    elif len(sys.argv) != 1:
+        raise SystemExit("usage: fetch_fires.py [west south east north]")
 
     os.makedirs(OUT, exist_ok=True)
     print(f"bbox {bbox}\n")
 
     print("NASA FIRMS - foyers actifs")
-    hs = fetch_hotspots(bbox)
-    with open(os.path.join(OUT, "hotspots.geojson"), "w") as f:
-        json.dump(hs, f)
+    hotspots = fetch_hotspots(bbox)
+    if not hotspots["features"]:
+        raise SystemExit("aucun foyer FIRMS : export annule")
+    latest = hotspots["features"][-1]["properties"]["ts"]
 
     print("\nCopernicus EFFIS - surfaces brulees")
     burnt = fetch_burnt(bbox)
-    for name, fc in burnt.items():
-        with open(os.path.join(OUT, f"{name}.geojson"), "w") as f:
-            json.dump(fc, f)
+    recent = recent_burnt(burnt["burnt_dated"], latest)
 
-    # Le vent n'est qu'un habillage : s'il manque, la carte reste juste. On ne
-    # fait donc pas echouer la recuperation entiere pour lui.
     print("\nOpen-Meteo / AROME HD - vent a 10 m")
-    wind = None
-    try:
-        wind = fetch_wind(bbox)
-        with open(os.path.join(OUT, "wind.json"), "w") as f:
-            json.dump(wind, f, separators=(",", ":"))
-    except Exception as e:
-        print(f"  ! vent indisponible : {e}", file=sys.stderr)
+    coarse_box = wind_box(bbox)
+    coarse_span = (
+        (coarse_box[2] - coarse_box[0])
+        * 111
+        * math.cos(math.radians((coarse_box[1] + coarse_box[3]) / 2))
+    )
+    coarse_spacing = coarse_span / (WIND_COARSE_N - 1)
+    coarse_wind = fetch_wind(coarse_box, coarse_spacing, "grille nationale")
 
-    meta = {
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+    fine_keys = fine_wind_tiles(recent, hotspots, latest)
+    fine_wind = {}
+    print(f"  {len(fine_keys)} cellules avec vent fin")
+    for ix, iy in sorted(fine_keys):
+        raw = fetch_wind(
+            (ix, iy, ix + TILE_DEG, iy + TILE_DEG),
+            WIND_SPACING_KM,
+            f"    {tile_id(ix, iy)}",
+        )
+        fine_wind[(ix, iy)] = whole_wind(raw, WIND_DETAIL_STRIDE)
+
+    print("\nDecoupage")
+    hotspot_cells = partition_features(hotspots["features"], point=True)
+    dated_cells = partition_features(burnt["burnt_dated"]["features"])
+    nrt_cells = partition_features(burnt["burnt_nrt"]["features"])
+    cells = tile_range(bbox)
+
+    if os.path.isdir(ZONES_OUT):
+        shutil.rmtree(ZONES_OUT)
+    os.makedirs(ZONES_OUT)
+
+    zone_ids = []
+    for ix, iy in cells:
+        name = tile_id(ix, iy)
+        zone_ids.append(name)
+        payload = {
+            "id": name,
+            "bbox": [ix, iy, ix + TILE_DEG, iy + TILE_DEG],
+            "hotspots": fc(hotspot_cells.get((ix, iy), [])),
+            "burnt_dated": fc(dated_cells.get((ix, iy), [])),
+            "burnt_nrt": fc(nrt_cells.get((ix, iy), [])),
+            "wind": fine_wind.get((ix, iy)),
+        }
+        write_json(os.path.join(ZONES_OUT, f"{name}.json"), payload)
+
+    generated = datetime.now(timezone.utc).isoformat()
+    timeline = build_timeline(hotspots, burnt["burnt_dated"])
+    overview = aggregate_hotspots(hotspots)
+    coarse = whole_wind(coarse_wind)
+    manifest = {
+        "version": 1,
+        "generated_at": generated,
         "bbox": list(bbox),
-        "hotspot_count": len(hs["features"]),
-        "latest_hotspot": hs["features"][-1]["properties"]["t"] if hs["features"] else None,
-        "wind_model": wind["model"] if wind else None,
+        "tile_deg": TILE_DEG,
+        "detail_zoom": DETAIL_ZOOM,
+        "zone_template": "data/zones/{id}.json",
+        "zones": zone_ids,
+        "hotspot_count": len(hotspots["features"]),
+        "overview_count": len(overview["features"]),
+        "dated_count": len(burnt["burnt_dated"]["features"]),
+        "nrt_count": len(burnt["burnt_nrt"]["features"]),
+        "fine_wind_zones": [tile_id(*key) for key in sorted(fine_keys)],
+        "wind_model": coarse_wind["model"],
     }
-    with open(os.path.join(OUT, "meta.json"), "w") as f:
-        json.dump(meta, f, indent=2)
 
-    print(f"\n-> {len(hs['features'])} foyers, dernier : {meta['latest_hotspot']}")
-    print(f"-> ecrit dans {OUT}/")
+    write_json(os.path.join(OUT, "overview_hotspots.geojson"), overview)
+    write_json(os.path.join(OUT, "burnt_recent.geojson"), recent)
+    write_json(os.path.join(OUT, "timeline.json"), timeline)
+    write_json(os.path.join(OUT, "wind_coarse.json"), coarse)
+    write_json(os.path.join(OUT, "manifest.json"), manifest, compact=False)
+
+    print(
+        f"  {len(zone_ids)} zones, {len(overview['features'])} foyers agreges, "
+        f"{len(recent['features'])} perimetres recents"
+    )
+    print(f"\n-> {len(hotspots['features'])} detections detaillees")
+    print(f"-> ecrit dans {OUT}/ (donnees generees non versionnees)")
 
 
 if __name__ == "__main__":

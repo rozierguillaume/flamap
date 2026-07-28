@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 
 <title>Flamap — carte des incendies en quasi temps réel</title>
-<meta name="description" content="Foyers actifs et surfaces brûlées vus par satellite (NASA FIRMS, Copernicus EFFIS), rafraîchis toutes les 2 h. Un curseur rejoue la progression du feu de Gironde.">
+<meta name="description" content="Carte des incendies en France : foyers actifs, surfaces brûlées et vent, rafraîchis toutes les 2 h à partir de données publiques.">
 <link rel="canonical" href="https://flamap.fr/">
 <meta name="theme-color" content="#0d0f12">
 <!-- l'icone tient dans l'attribut : pas de fichier a copier dans _site.
@@ -18,17 +18,17 @@
 <meta property="og:locale" content="fr_FR">
 <meta property="og:url" content="https://flamap.fr/">
 <meta property="og:title" content="Flamap — carte des incendies en quasi temps réel">
-<meta property="og:description" content="Foyers actifs et surfaces brûlées vus par satellite (NASA FIRMS, Copernicus EFFIS), rafraîchis toutes les 2 h. Un curseur rejoue la progression du feu de Gironde.">
+<meta property="og:description" content="Foyers actifs, surfaces brûlées et vent sur toute la France, rafraîchis toutes les 2 h.">
 <meta property="og:image" content="https://flamap.fr/og.png">
 <meta property="og:image:type" content="image/png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="Carte satellite du feu de Gironde : surface brûlée sombre et front de flammes en orange.">
+<meta property="og:image:alt" content="Flamap, carte satellite des incendies en France.">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Flamap — carte des incendies en quasi temps réel">
 <meta name="twitter:description" content="Foyers actifs et surfaces brûlées vus par satellite, rafraîchis toutes les 2 h.">
 <meta name="twitter:image" content="https://flamap.fr/og.png">
-<meta name="twitter:image:alt" content="Carte satellite du feu de Gironde : surface brûlée sombre et front de flammes en orange.">
+<meta name="twitter:image:alt" content="Flamap, carte satellite des incendies en France.">
 
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5/dist/maplibre-gl.css">
 <script src="https://unpkg.com/maplibre-gl@5/dist/maplibre-gl.js"></script>
@@ -284,9 +284,9 @@
   <p style="position:relative;z-index:600;margin:80px 14px;text-align:center">
     Flamap affiche les incendies détectés par satellite sur un fond
     cartographique interactif : <b>JavaScript est nécessaire</b> pour le rendu.
-    Les données brutes restent consultables en GeoJSON :
-    <a href="data/hotspots.geojson" style="color:#ff6b1a">foyers actifs</a> et
-    <a href="data/burnt_dated.geojson" style="color:#ff6b1a">surfaces brûlées</a>.
+    Les données nationales légères restent consultables :
+    <a href="data/overview_hotspots.geojson" style="color:#ff6b1a">foyers agrégés</a> et
+    <a href="data/burnt_recent.geojson" style="color:#ff6b1a">surfaces brûlées récentes</a>.
   </p>
 </noscript>
 
@@ -444,13 +444,13 @@ drawAgeKey();
  * telephone — devient une flaque de points colles. On fait donc grossir les
  * cercles avec le zoom, en gardant la rampe d'anciennete comme sortie.
  */
-const ZOOM_SCALE = MOBILE ? [[8, .50], [11, .85], [14, 1.35]]
-                          : [[8, .60], [11, .95], [14, 1.40]];
+const ZOOM_SCALE = MOBILE ? [[5, .28], [8, .50], [11, .85], [14, 1.35]]
+                          : [[5, .34], [8, .60], [11, .95], [14, 1.40]];
 
 const map = new maplibregl.Map({
   container: 'map',
   attributionControl: false,
-  center: [-0.85, 44.78], zoom: 8,
+  center: [2.2, 46.5], zoom: 5,
   style: {
     version: 8,
     sources: {
@@ -527,21 +527,23 @@ let atLatest = true;
  * remonter la frise, c'est glisser. */
 function applyBurnt() {
   const vis = k => shown[k] ? 'visible' : 'none';
-  map.setLayoutProperty('burnt-fill', 'visibility', vis('dated'));
-  map.setLayoutProperty('burnt-line', 'visibility', vis('dated'));
-  map.setLayoutProperty('nrt-line', 'visibility', vis('nrt'));
+  for (const id of ['recent-fill', 'recent-line', 'burnt-fill', 'burnt-line'])
+    if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', vis('dated'));
+  if (map.getLayer('nrt-line')) map.setLayoutProperty('nrt-line', 'visibility', vis('nrt'));
   const k = atLatest ? 1 : 0;
-  map.setPaintProperty('burnt-fill', 'fill-opacity', .70 * k);
-  map.setPaintProperty('burnt-line', 'line-opacity', .95 * k);
-  map.setPaintProperty('nrt-line', 'line-opacity', .55 * k);
+  for (const id of ['recent-fill', 'burnt-fill'])
+    if (map.getLayer(id)) map.setPaintProperty(id, 'fill-opacity', .70 * k);
+  for (const id of ['recent-line', 'burnt-line'])
+    if (map.getLayer(id)) map.setPaintProperty(id, 'line-opacity', .95 * k);
+  if (map.getLayer('nrt-line')) map.setPaintProperty('nrt-line', 'line-opacity', .55 * k);
 }
 
 /* =====================================================================
  * VENT — nappe de particules advectées par le champ AROME HD
  *
- * `data/wind.json` porte une grille régulière (nx × ny points sur une bbox plus
- * large que celle du feu, pour que la nappe ne s'arrête pas net sur les bords) et,
- * pour chaque heure, les composantes est/nord du vent à 10 m en m/s. On tire
+ * Le manifest porte une grille nationale grossière ; les paquets de zone
+ * peuvent lui substituer une grille fine. Toutes contiennent les composantes
+ * est/nord du vent à 10 m en m/s. On tire
  * quelques milliers de particules au hasard sur l'écran, on les déplace le long
  * du champ interpolé, et on laisse derrière elles une traînée qui s'estompe.
  *
@@ -576,11 +578,13 @@ const CARD = ['nord', 'nord-nord-est', 'nord-est', 'est-nord-est', 'est',
               'sud-ouest', 'ouest-sud-ouest', 'ouest', 'ouest-nord-ouest',
               'nord-ouest', 'nord-nord-ouest'];
 
-const W = { data: null, cur: null, ts: 0, on: true, parts: [], raf: null, last: 0, w: 0, h: 0 };
+const W = {
+  data: null, cur: null, tiles: new Map(), ts: 0, on: true,
+  parts: [], raf: null, last: 0, w: 0, h: 0,
+};
 
-// interpolation bilinéaire du champ courant, en degrés
-function windAt(lon, lat, out) {
-  const d = W.data, g = W.cur;
+function windAtGrid(d, g, lon, lat, out) {
+  if (!d || !g) return false;
   const gx = (lon - d.bbox[0]) / (d.bbox[2] - d.bbox[0]) * (d.nx - 1);
   const gy = (lat - d.bbox[1]) / (d.bbox[3] - d.bbox[1]) * (d.ny - 1);
   if (!(gx >= 0 && gy >= 0 && gx <= d.nx - 1 && gy <= d.ny - 1)) return false;
@@ -594,30 +598,48 @@ function windAt(lon, lat, out) {
   return true;
 }
 
+// Au zoom de détail, une grille fine prend la main cellule par cellule. Tant
+// qu'elle n'est pas arrivée, le champ national grossier reste un filet sûr.
+function windAt(lon, lat, out) {
+  if (Z.manifest && map.getZoom() >= Z.manifest.detail_zoom) {
+    const tile = W.tiles.get(zoneId(Math.floor(lon), Math.floor(lat)));
+    if (tile && windAtGrid(tile, tile._cur, lon, lat, out)) return true;
+  }
+  return windAtGrid(W.data, W.cur, lon, lat, out);
+}
+
+function windGridTime(d, ts) {
+  if (!d) return null;
+  if (d._cur && Math.abs(ts - d._ts) < 120) return d._cur;
+  d._ts = ts;
+  d._cur = null;
+  const x = (ts - d.t0) / d.dt;
+  if (!(x >= 0 && x <= d.nt - 1)) return null;
+  const k = Math.min(x | 0, d.nt - 2), f = x - k;
+  const mix = A => {
+    const a = A[k], b = A[k + 1], o = new Float32Array(a.length);
+    for (let n = 0; n < a.length; n++) o[n] = a[n] + (b[n] - a[n]) * f;
+    return o;
+  };
+  d._cur = { u: mix(d.u), v: mix(d.v), gust: mix(d.gust) };
+  return d._cur;
+}
+
 /* Le champ n'est connu qu'à l'heure ronde : on fabrique une fois par cran la
  * grille interpolée entre les deux heures encadrantes, et l'animation n'a plus
  * qu'à y piocher. Hors de la fenêtre couverte — fichier périmé, cran trop
  * ancien — `cur` reste nul et la couche s'efface d'elle-même. */
-function windTime(ts) {
+function windTime(ts, force = false) {
   const d = W.data;
   if (!d) return;
   // `show()` est maintenant appelé à chaque frame de lecture. Le champ, lui, ne
   // bouge qu'à l'échelle de l'heure : refabriquer la grille pour deux minutes
   // de modèle brûlerait des allocations pour un résultat identique à l'œil.
-  if (W.cur && Math.abs(ts - W.ts) < 120) return;
+  if (!force && W.cur && Math.abs(ts - W.ts) < 120) return;
   W.ts = ts;
 
-  W.cur = null;
-  const x = (ts - d.t0) / d.dt;
-  if (x >= 0 && x <= d.nt - 1) {
-    const k = Math.min(x | 0, d.nt - 2), f = x - k;
-    const mix = A => {
-      const a = A[k], b = A[k + 1], o = new Float32Array(a.length);
-      for (let n = 0; n < a.length; n++) o[n] = a[n] + (b[n] - a[n]) * f;
-      return o;
-    };
-    W.cur = { u: mix(d.u), v: mix(d.v), gust: mix(d.gust) };
-  }
+  W.cur = windGridTime(d, ts);
+  for (const tile of W.tiles.values()) windGridTime(tile, ts);
   windBadge();
   windLoop();
 }
@@ -636,7 +658,7 @@ function windBadge() {
   const from = CARD[Math.round(((to + 180) % 360) / 22.5) % 16];
 
   windKey.style.setProperty('--dir', to.toFixed(0) + 'deg');
-  // les rafales sont déjà en km/h dans `wind.json` (`fetch_fires.py` les
+  // les rafales sont déjà en km/h dans les exports (`fetch_fires.py` les
   // convertit), contrairement à u/v qui sont en m/s
   windVal.textContent = `${Math.round(kmh)} km/h (raf. ${Math.round(o.g)} km/h)`;
   windKey.title = `Vent de ${from}, ${Math.round(kmh)} km/h au centre de la carte,`
@@ -761,7 +783,7 @@ function buildSteps(hs, dated) {
  * la frise peut continuer heure par heure après le dernier passage satellite,
  * le feu figé dans son dernier état observé et la seule nappe qui bouge.
  *
- * Désactivé pour l'instant : `data/wind.json` porte bien les 24 h à venir, il
+ * Désactivé pour l'instant : le vent porte bien les 24 h à venir, il
  * suffit de remonter cette constante pour les rouvrir. */
 const FORECAST_H = 0;
 
@@ -891,11 +913,12 @@ function show(ts) {
   // Il n'y a délibérément plus de `setFilter` : ce sont les bornes de la rampe
   // d'opacité qui masquent le futur et l'au-delà de MAX_AGE — `interpolate`
   // plafonne aux extrémités, donc tout ce qui sort de la fenêtre est à zéro.
-  // Un filtre refait invalider les tuiles et repasser les 9 000 foyers au
+  // Un filtre refait invalider les tuiles et repasser les foyers visibles au
   // parseur à chaque frame ; sur cette boucle, il doublait le coût.
   const age = ['-', now, ['get', 'ts']];
-  map.setPaintProperty('hotspots', 'circle-color',
-    ['interpolate', ['linear'], age, ...AGE_COLOR.flat()]);
+  const color = ['interpolate', ['linear'], age, ...AGE_COLOR.flat()];
+  for (const id of ['hotspots-overview', 'hotspots'])
+    if (map.getLayer(id)) map.setPaintProperty(id, 'circle-color', color);
   // MapLibre n'accepte 'zoom' qu'en entrée de l'expression la plus externe :
   // c'est donc l'interpolation de zoom qui enveloppe la rampe d'âge, et non
   // l'inverse — un facteur multiplicatif appliqué par-dessus serait refusé.
@@ -911,15 +934,23 @@ function show(ts) {
     APPEAR * .45, 1.18 * land * k,
     APPEAR, land * k,
     ...rampAfter(AGE_SIZE, APPEAR, k)];
-  map.setPaintProperty('hotspots', 'circle-radius',
-    ['interpolate', ['linear'], ['zoom'],
-      ...ZOOM_SCALE.flatMap(([z, k]) => [z, radiiAt(k)])]);
+  const detailRadius = ['interpolate', ['linear'], ['zoom'],
+    ...ZOOM_SCALE.flatMap(([z, k]) => [z, radiiAt(k)])];
+  if (map.getLayer('hotspots')) map.setPaintProperty('hotspots', 'circle-radius', detailRadius);
+  if (map.getLayer('hotspots-overview')) {
+    const countScale = ['interpolate', ['linear'], ['get', 'n'],
+      1, 1, 10, 1.7, 100, 3.1, 1000, 5.2];
+    map.setPaintProperty('hotspots-overview', 'circle-radius',
+      ['interpolate', ['linear'], ['zoom'],
+        ...ZOOM_SCALE.flatMap(([z, k]) => [z, ['*', radiiAt(k), countScale]])]);
+  }
   // et la mort : plutôt que de disparaître net à MAX_AGE, le point s'efface sur
   // les dernières heures — la coupure ne tombe plus que sur du vide
-  map.setPaintProperty('hotspots', 'circle-opacity',
-    ['interpolate', ['linear'], age,
-      0, 0, APPEAR, rampAt(AGE_OPACITY, APPEAR),
-      ...rampAfter(AGE_OPACITY, APPEAR)]);
+  const opacity = ['interpolate', ['linear'], age,
+    0, 0, APPEAR, rampAt(AGE_OPACITY, APPEAR),
+    ...rampAfter(AGE_OPACITY, APPEAR)];
+  for (const id of ['hotspots-overview', 'hotspots'])
+    if (map.getLayer(id)) map.setPaintProperty(id, 'circle-opacity', opacity);
 
   const was = atLatest;
   atLatest = ts >= steps[lastObs].ts;
@@ -941,7 +972,7 @@ function show(ts) {
   // qui dépassent l'instant présent sont vraiment une prévision
   const sub = s.kind === 'wind'
     ? `${s.ts > Date.now() / 1000 ? 'prévision vent' : 'vent'} · <b>+${s.h} h</b>`
-    : `${s.label} · <b>${liveAt(now)}</b> foyers`;
+    : `${s.label} · <b>${liveAt(now)}</b> foyers en France`;
   if (sub !== subEl.innerHTML) subEl.innerHTML = sub;
   windTime(ts);
 }
@@ -981,7 +1012,7 @@ function lockWidths() {
   const maxLive = Math.max(...steps.map(s => liveAt(s.ts)));
   const label = steps.reduce((a, s) => s.label.length > a.length ? s.label : a, '');
   const w = Math.max(
-    widest(`${label} · <b>${maxLive}</b> foyers`, subEl),
+    widest(`${label} · <b>${maxLive}</b> foyers en France`, subEl),
     // sans crans de prévision, réserver leur place élargirait la lecture pour rien
     FORECAST_H ? widest(`prévision vent · <b>+${FORECAST_H} h</b>`, subEl) : 0,
     widest(fmt(steps[0].ts), clockEl),
@@ -1001,15 +1032,136 @@ function lockWidths() {
   px.setProperty('--wind-w', Math.ceil(wind) + 2 + 'px');
 }
 
-// Les données partent tout de suite, sans attendre la carte.
+const EMPTY = { type: 'FeatureCollection', features: [] };
+const json = async url => {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`${response.status} ${url}`);
+  return response.json();
+};
+
+/* Cellules detaillees. Le cache applicatif reste borne ; le cache HTTP garde
+ * les octets des cellules visitees sans laisser leurs gros objets JS en vie. */
+const Z = {
+  manifest: null, available: new Set(), cache: new Map(), visible: new Set(),
+  token: 0, disabled: false,
+};
+const signed = value => `${value >= 0 ? '+' : '-'}${String(Math.abs(value)).padStart(2, '0')}`;
+const zoneId = (x, y) => `x${signed(x)}_y${signed(y)}`;
+
+function visibleZoneIds() {
+  if (!Z.manifest || map.getZoom() < Z.manifest.detail_zoom) return [];
+  const bounds = map.getBounds(), box = Z.manifest.bbox;
+  const west = Math.max(bounds.getWest(), box[0]);
+  const east = Math.min(bounds.getEast(), box[2]);
+  const south = Math.max(bounds.getSouth(), box[1]);
+  const north = Math.min(bounds.getNorth(), box[3]);
+  if (east <= west || north <= south) return [];
+  const ids = [];
+  for (let y = Math.floor(south); y <= Math.floor(north - 1e-9); y++)
+    for (let x = Math.floor(west); x <= Math.floor(east - 1e-9); x++) {
+      const id = zoneId(x, y);
+      if (Z.available.has(id)) ids.push(id);
+    }
+  return ids;
+}
+
+function loadZone(id) {
+  if (Z.cache.has(id)) {
+    const hit = Z.cache.get(id);
+    Z.cache.delete(id); Z.cache.set(id, hit);
+    return hit;
+  }
+  const url = Z.manifest.zone_template.replace('{id}', id);
+  const promise = json(url).catch(error => {
+    Z.cache.delete(id);
+    throw error;
+  });
+  Z.cache.set(id, promise);
+  return promise;
+}
+
+function mergedZones(zones, key, dedupe) {
+  const features = [], seen = new Set();
+  for (const zone of zones) for (const feature of zone[key].features) {
+    const id = feature.properties && feature.properties._id;
+    if (dedupe && id) {
+      if (seen.has(id)) continue;
+      seen.add(id);
+    }
+    features.push(feature);
+  }
+  return { type: 'FeatureCollection', features };
+}
+
+async function loadVisibleZones() {
+  if (Z.disabled || !map.getSource('hs')) return;
+  const ids = visibleZoneIds(), token = ++Z.token;
+  Z.visible = new Set(ids);
+  if (!ids.length) {
+    document.body.classList.remove('loading-detail');
+    map.getSource('hs').setData(EMPTY);
+    map.getSource('dated').setData(EMPTY);
+    map.getSource('nrt').setData(EMPTY);
+    W.tiles = new Map();
+    windTime(W.ts, true);
+    return;
+  }
+
+  document.body.classList.add('loading-detail');
+  try {
+    const zones = await Promise.all(ids.map(loadZone));
+    if (token !== Z.token) return;
+    map.getSource('hs').setData(mergedZones(zones, 'hotspots', false));
+    map.getSource('dated').setData(mergedZones(zones, 'burnt_dated', true));
+    map.getSource('nrt').setData(mergedZones(zones, 'burnt_nrt', true));
+    W.tiles = new Map(zones.map(zone => [zone.id, zone.wind]));
+    windTime(W.ts, true);
+    wctx.clearRect(0, 0, W.w, W.h);
+  } catch (error) {
+    console.warn('Détail indisponible', error);
+    if (token === Z.token) {
+      map.getSource('hs').setData(EMPTY);
+      map.getSource('dated').setData(EMPTY);
+      map.getSource('nrt').setData(EMPTY);
+      W.tiles = new Map();
+    }
+  } finally {
+    if (token === Z.token) document.body.classList.remove('loading-detail');
+  }
+
+  while (Z.cache.size > 20) {
+    const oldest = [...Z.cache.keys()].find(id => !Z.visible.has(id));
+    if (!oldest) break;
+    Z.cache.delete(oldest);
+  }
+}
+
+// Les donnees nationales partent tout de suite, sans attendre MapLibre.
 const dataP = Promise.all([
-  fetch('data/burnt_nrt.geojson').then(r => r.json()),
-  fetch('data/burnt_dated.geojson').then(r => r.json()),
-  fetch('data/hotspots.geojson').then(r => r.json()),
-  fetch('data/meta.json').then(r => r.json()).catch(() => null),
-  // le vent n'est qu'un habillage : absent, la carte doit rester entière
-  fetch('data/wind.json').then(r => r.json()).catch(() => null),
-]);
+  json('data/manifest.json'),
+  json('data/overview_hotspots.geojson'),
+  json('data/burnt_recent.geojson'),
+  json('data/timeline.json'),
+  json('data/wind_coarse.json'),
+]).then(([manifest, overview, recent, timeline, wind]) => ({
+  manifest, overview, recent, timeline, wind, detail: null,
+})).catch(async () => {
+  // Le clone conserve les anciens exemples Gironde : il reste affichable avant
+  // le premier `python3 fetch_fires.py`, sans simuler le chargement national.
+  const [nrt, dated, hotspots, meta, wind] = await Promise.all([
+    json('data/burnt_nrt.geojson'), json('data/burnt_dated.geojson'),
+    json('data/hotspots.geojson'), json('data/meta.json'),
+    json('data/wind.json').catch(() => null),
+  ]);
+  return {
+    manifest: {
+      bbox: meta.bbox, generated_at: meta.generated_at, detail_zoom: 99,
+      zones: [], zone_template: '', legacy: true,
+    },
+    overview: EMPTY, recent: EMPTY, timeline: buildSteps(hotspots, dated),
+    wind, detail: { nrt, dated, hotspots },
+  };
+});
 
 /*
  * On ne s'accroche pas au seul événement 'load' : il n'est émis qu'après la
@@ -1029,23 +1181,39 @@ map.on('load', start);
 poll = setInterval(start, 80);
 
 async function init() {
-  const [nrt, dated, hs, meta, windData] = await dataP;
+  const data = await dataP;
+  const { manifest, overview, recent, timeline, wind: windData, detail } = data;
+  Z.manifest = manifest;
+  Z.available = new Set(manifest.zones);
+  Z.disabled = !!manifest.legacy;
 
-  map.addSource('nrt', { type: 'geojson', data: nrt });
-  map.addSource('dated', { type: 'geojson', data: dated });
-  map.addSource('hs', { type: 'geojson', data: hs });
+  map.addSource('recent', { type: 'geojson', data: recent });
+  map.addSource('overview-hs', { type: 'geojson', data: overview });
+  map.addSource('nrt', { type: 'geojson', data: detail ? detail.nrt : EMPTY });
+  map.addSource('dated', { type: 'geojson', data: detail ? detail.dated : EMPTY });
+  map.addSource('hs', { type: 'geojson', data: detail ? detail.hotspots : EMPTY });
 
   // surfaces brûlées datées : la « terre brûlée » de référence
   const FADE = { duration: 450, delay: 0 };
+  map.addLayer({ id: 'recent-fill', type: 'fill', source: 'recent',
+    maxzoom: manifest.detail_zoom,
+    paint: { 'fill-color': V('--burnt'), 'fill-opacity': .70, 'fill-opacity-transition': FADE } });
+  map.addLayer({ id: 'recent-line', type: 'line', source: 'recent',
+    maxzoom: manifest.detail_zoom,
+    paint: { 'line-color': V('--burnt-edge'), 'line-width': 1.2,
+             'line-opacity': .95, 'line-opacity-transition': FADE } });
   map.addLayer({ id: 'burnt-fill', type: 'fill', source: 'dated',
+    minzoom: manifest.legacy ? 0 : manifest.detail_zoom,
     paint: { 'fill-color': V('--burnt'), 'fill-opacity': .70, 'fill-opacity-transition': FADE } });
   map.addLayer({ id: 'burnt-line', type: 'line', source: 'dated',
+    minzoom: manifest.legacy ? 0 : manifest.detail_zoom,
     paint: { 'line-color': V('--burnt-edge'), 'line-width': 1.2,
              'line-opacity': .95, 'line-opacity-transition': FADE } });
 
   // produit NRT : contour plus frais, mais sans date ni surface, et qui contient
   // aussi d'anciennes cicatrices -> simple trait de référence, non animé
   map.addLayer({ id: 'nrt-line', type: 'line', source: 'nrt',
+    minzoom: manifest.legacy ? 0 : manifest.detail_zoom,
     paint: { 'line-color': '#8d7a6b', 'line-width': 1,
              'line-opacity': .55, 'line-opacity-transition': FADE } });
 
@@ -1054,7 +1222,14 @@ async function init() {
   // l'expression d'âge, que `show()` réécrit à chaque frame — une transition
   // par-dessus ne ferait que traîner d'un tiers de seconde sur la précédente.
   const NOW = { duration: 0, delay: 0 };
+  map.addLayer({ id: 'hotspots-overview', type: 'circle', source: 'overview-hs',
+    maxzoom: manifest.detail_zoom,
+    layout: { 'circle-sort-key': ['get', 'ts'] },
+    paint: { 'circle-color': V('--front'), 'circle-radius': 4, 'circle-stroke-width': 0,
+             'circle-color-transition': NOW, 'circle-radius-transition': NOW,
+             'circle-opacity-transition': NOW } });
   map.addLayer({ id: 'hotspots', type: 'circle', source: 'hs',
+    minzoom: manifest.legacy ? 0 : manifest.detail_zoom,
     layout: { 'circle-sort-key': ['get', 'ts'] },
     paint: { 'circle-color': V('--front'), 'circle-radius': 4, 'circle-stroke-width': 0,
              'circle-color-transition': NOW, 'circle-radius-transition': NOW,
@@ -1071,8 +1246,9 @@ async function init() {
     document.getElementById('ck-wind').closest('label').hidden = true;
     windKey.remove();
   }
+  if (!manifest.legacy) map.on('moveend', loadVisibleZones);
 
-  steps = buildSteps(hs, dated);
+  steps = timeline;
   addForecast(W.data);
   // le curseur porte des secondes epoch ; un pas d'une minute suffit à un
   // déplacement fluide à la souris et évite d'appeler `show` pour rien
@@ -1085,23 +1261,13 @@ async function init() {
   // on ouvre sur le dernier état observé, pas sur le bout de la prévision
   setTime(steps[lastObs].ts);
 
-  if (meta && meta.generated_at) {
+  if (manifest.generated_at) {
     document.getElementById('updated').textContent =
-      '— données extraites le ' + fmt(Date.parse(meta.generated_at) / 1000) + ' (heure de Paris).';
+      '— données extraites le ' + fmt(Date.parse(manifest.generated_at) / 1000) + ' (heure de Paris).';
   }
 
-  // Cadrage sur les incendies significatifs de la période affichée. Sans ce
-  // tri, un feu d'un hectare à l'autre bout du département — ou une cicatrice
-  // de février encore présente dans la couche saison — élargit la bbox et
-  // écrase la zone qui nous intéresse.
-  const t0 = steps[0].ts;
-  const big = dated.features.filter(f =>
-    +f.properties.AREA_HA >= 100 && f.properties.lu >= t0);
-  const b = new maplibregl.LngLatBounds();
-  for (const f of (big.length ? big : dated.features)) {
-    const walk = c => Array.isArray(c[0]) ? c.forEach(walk) : b.extend(c);
-    walk(f.geometry.coordinates);
-  }
+  const b = new maplibregl.LngLatBounds(
+    [manifest.bbox[0], manifest.bbox[1]], [manifest.bbox[2], manifest.bbox[3]]);
   const dockH = document.getElementById('dock').offsetHeight;
   map.fitBounds(b, {
     padding: {
@@ -1112,8 +1278,8 @@ async function init() {
     duration: 0,
   });
 
-  // détail d'un polygone au clic
-  map.on('click', 'burnt-fill', e => {
+  // détail d'un polygone au clic, aussi bien dans l'aperçu que dans une cellule
+  const popup = e => {
     const p = e.features[0].properties;
     new maplibregl.Popup({ closeButton: true })
       .setLngLat(e.lngLat)
@@ -1121,12 +1287,16 @@ async function init() {
              + `<br>départ ${String(p.FIREDATE).slice(0, 10)}`
              + `<br><span style="opacity:.6">publié ${String(p.LASTUPDATE).slice(0, 16)}</span>`)
       .addTo(map);
-  });
-  map.on('mouseenter', 'burnt-fill', () => map.getCanvas().style.cursor = 'pointer');
-  map.on('mouseleave', 'burnt-fill', () => map.getCanvas().style.cursor = '');
+  };
+  for (const id of ['recent-fill', 'burnt-fill']) {
+    map.on('click', id, popup);
+    map.on('mouseenter', id, () => map.getCanvas().style.cursor = 'pointer');
+    map.on('mouseleave', id, () => map.getCanvas().style.cursor = '');
+  }
 
   // le conteneur peut avoir été mesuré à zéro avant la mise en page
   map.resize();
+  loadVisibleZones();
 }
 
 // onglet ouvert en arrière-plan puis affiché : on relance le rendu

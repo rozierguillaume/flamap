@@ -6,5 +6,13 @@ AGENTS.md
 __pycache__/
 *.pyc
 
+# donnees nationales generees par fetch_fires.py
+data/manifest.json
+data/overview_hotspots.geojson
+data/burnt_recent.geojson
+data/timeline.json
+data/wind_coarse.json
+data/zones/
+
 # macOS
 .DS_Store
