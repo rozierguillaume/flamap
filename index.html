@@ -56,13 +56,16 @@
                font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
                -webkit-text-size-adjust: 100%; }
   #map { position: absolute; inset: 0; background: var(--bg); }
-  /* La nappe de vent est peinte a la main, au-dessus de la carte mais sous les
-     panneaux, et ne doit jamais intercepter un geste. `width`/`height` sont
+  /* Les nappes atmospheriques sont peintes a la main, au-dessus de la carte
+     mais sous les panneaux, et ne doivent jamais intercepter un geste.
+     `width`/`height` sont
      explicites : un canvas est un element remplace, `inset: 0` ne l'etire pas —
      il garderait sa taille intrinseque, et le code qui recopie clientWidth dans
      l'attribut width l'agrandirait d'un facteur dpr a chaque appel. */
-  #wind { position: absolute; inset: 0; width: 100%; height: 100%;
-          z-index: 400; pointer-events: none; }
+  #smoke, #wind { position: absolute; inset: 0; width: 100%; height: 100%;
+                  pointer-events: none; }
+  #smoke { z-index: 399; }
+  #wind  { z-index: 400; }
   .maplibregl-ctrl-attrib { display: none; }   /* credits en clair dans #credits */
 
   .glass {
@@ -405,6 +408,7 @@
 <body>
 <div id="map" role="img"
      aria-label="Carte satellite des surfaces brûlées et des foyers d'incendie détectés"></div>
+<canvas id="smoke" aria-hidden="true"></canvas>
 <canvas id="wind" aria-hidden="true"></canvas>
 
 <div id="head" class="glass">
@@ -456,6 +460,9 @@
   </fieldset>
   <label class="ba"><input type="checkbox" id="ck-dated" checked> surfaces brûlées (datées)</label>
   <label class="ba"><input type="checkbox" id="ck-nrt" checked> surfaces brûlées (NRT)</label>
+  <label title="Dispersion indicative calculée à partir des foyers FIRMS et du vent AROME">
+    <input type="checkbox" id="ck-smoke" checked> panaches de fumée (simulés)
+  </label>
   <label><input type="checkbox" id="ck-wind" checked> vent à 10 m</label>
   <div class="hint">Masquées : EFFIS ne publie que le contour le plus récent,
   pas son évolution. Ramenez le curseur à droite pour les revoir.</div>
@@ -513,6 +520,8 @@
     Surfaces brûlées : <a href="https://forest-fire.emergency.copernicus.eu/" target="_blank" rel="noopener">Copernicus EFFIS</a>.
     Vent à 10 m : modèle <a href="https://meteofrance.com/" target="_blank" rel="noopener">AROME HD</a>
     de Météo-France, servi par <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a> (CC BY 4.0).
+    Fumée : simulation indicative à partir de la puissance radiative FIRMS et du vent AROME,
+    et non mesure de qualité de l'air.
     Fond : ortho-photo <a href="https://geoservices.ign.fr/" target="_blank" rel="noopener">IGN-F/Géoplateforme</a>,
     hors France <a href="https://s2maps.eu" target="_blank" rel="noopener">Sentinel-2 cloudless</a> par EOX
     (données Copernicus Sentinel modifiées 2020) ;
@@ -929,6 +938,7 @@ function applyHotspots() {
   // faut leur appliquer la même sélection de sources que celle des points.
   MAJOR.bucket = null;
   if (steps.length) updateMajorFires(curTs);
+  smokeTime(curTs, true, true);
   drawActivity();
 }
 
@@ -976,6 +986,278 @@ const W = {
   data: null, cur: null, tiles: new Map(), ts: 0, on: true,
   parts: [], raf: null, last: 0, w: 0, h: 0,
 };
+
+/* =====================================================================
+ * FUMEE — bouffées émises par les foyers puis advectées dans le champ de vent
+ *
+ * Contrairement aux traits du vent, une bouffée vit en longitude/latitude.
+ * Elle réinterroge `windAt()` après chaque déplacement : si elle rencontre plus
+ * loin un vent d'une autre direction, sa trajectoire se courbe réellement.
+ *
+ * Ce rendu reste une indication visuelle, pas un modèle de qualité de l'air :
+ * ni relief, ni stabilité atmosphérique, ni hauteur d'injection ne sont connus.
+ * La FRP (énergie radiative) et le nombre de pixels déterminent toutefois la
+ * fréquence d'émission, puis chaque bouffée s'élargit et s'efface avec l'âge.
+ * ===================================================================== */
+
+const smokeCv  = document.getElementById('smoke');
+const sctx     = smokeCv.getContext('2d');
+// La lecture accélérée condense plusieurs heures d'émission en quelques
+// secondes murales : le plafond doit laisser cette masse supplémentaire se
+// former, tout en restant plus bas sur mobile.
+const SMOKE_N  = MOBILE ? 900 : 2200;
+const SMOKE_H  = 6 * H;                   // disparition physique du panache
+const SMOKE_WINDOW = 6 * H;               // la zone jaune de la rampe d'anciennete
+const SMOKE_LIVE_K = 180;                 // dernier instant : 3 min physiques/s
+const SMOKE_LIVE_DENSITY = 2.2;           // compense le peu de passages récents
+const S = {
+  on: true, overview: [], sources: [], emitters: [], total: 0,
+  parts: [], target: 0, pick: 0, raf: null, last: 0, ts: 0,
+  bucket: null, ready: false, pending: 0, emitCarry: 0,
+  w: 0, h: 0, sprite: null,
+};
+
+function smokeSprite() {
+  const cv = document.createElement('canvas'), n = 96;
+  cv.width = cv.height = n;
+  const c = cv.getContext('2d');
+  const g = c.createRadialGradient(n * .47, n * .47, 0, n / 2, n / 2, n / 2);
+  g.addColorStop(0,   'rgba(226,222,214,.34)');
+  g.addColorStop(.24, 'rgba(218,214,206,.25)');
+  g.addColorStop(.58, 'rgba(202,200,195,.12)');
+  g.addColorStop(1,   'rgba(194,194,192,0)');
+  c.fillStyle = g;
+  c.fillRect(0, 0, n, n);
+  return cv;
+}
+
+function smokeResize() {
+  const dpr = Math.min(devicePixelRatio || 1, MOBILE ? 1.25 : 1.5);
+  S.w = smokeCv.clientWidth; S.h = smokeCv.clientHeight;
+  smokeCv.width = Math.round(S.w * dpr);
+  smokeCv.height = Math.round(S.h * dpr);
+  sctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  S.sprite ||= smokeSprite();
+}
+
+function smokePick() {
+  // Une part de tirage uniforme garantit que toute la lisiere jaune émet. Le
+  // reste est pondéré par FRP/nombre : les secteurs puissants sont plus denses,
+  // sans aspirer toute la fumée vers un unique maximum.
+  if (Math.random() < .58)
+    return S.emitters[S.pick++ % S.emitters.length];
+  let r = Math.random() * S.total;
+  for (const emitter of S.emitters) {
+    r -= emitter.weight;
+    if (r <= 0) return emitter;
+  }
+  return S.emitters[S.emitters.length - 1];
+}
+
+function smokeAdvect(p, seconds) {
+  const o = {};
+  if (!windAt(p.lon, p.lat, o)) return false;
+  // Diffusion turbulente lente. Deux particules parties du même front ne
+  // parcourent ainsi jamais exactement la même ligne de courant : la nappe
+  // s'ouvre latéralement et ne dessine plus de rails parallèles.
+  const keep = Math.exp(-seconds / (28 * 60));
+  const kick = Math.sqrt(1 - keep * keep) * (1.15 + Math.min(o.g / 80, .85));
+  p.tu = p.tu * keep + (Math.random() * 2 - 1) * kick;
+  p.tv = p.tv * keep + (Math.random() * 2 - 1) * kick;
+  // u/v sont en m/s. La conversion locale suffit sur les quelques heures de
+  // vie d'une bouffée et évite une projection complète à chaque sous-pas.
+  p.lat += (o.v + p.tv) * seconds / 110570;
+  p.lon += (o.u + p.tu) * seconds
+         / (111320 * Math.max(Math.cos(p.lat * Math.PI / 180), .2));
+  return true;
+}
+
+function smokeSpawn(seed = false, emitter = null) {
+  emitter ||= smokePick();
+  if (!emitter) return null;
+  // Les agrégats nationaux représentent une cellule de 0,25°, pas un point :
+  // leur naissance est étalée sur cette emprise. Au zoom détaillé, la largeur
+  // scan/track du pixel satellite donne une dispersion initiale plus resserrée.
+  const jitterKm = emitter.spread * (Math.random() + Math.random() - 1);
+  const angle = Math.random() * Math.PI * 2;
+  const p = {
+    lon: emitter.lon + Math.cos(angle) * jitterKm
+       / (111.32 * Math.max(Math.cos(emitter.lat * Math.PI / 180), .2)),
+    lat: emitter.lat + Math.sin(angle) * jitterKm / 110.57,
+    age: 0, tu: (Math.random() * 2 - 1) * .7,
+    tv: (Math.random() * 2 - 1) * .7,
+    life: SMOKE_H * (.72 + Math.random() * .56),
+    size: .72 + Math.random() * .58,
+    alpha: .62 + Math.random() * .38,
+  };
+  // Au premier affichage, amorcer des âges différents donne immédiatement un
+  // panache constitué. Les petits pas suivent déjà les courbures du champ.
+  if (seed) {
+    const age = Math.random() * p.life * .82, dt = age / 12;
+    for (let i = 0; i < 12; i++) {
+      if (!smokeAdvect(p, dt)) return null;
+      p.age += dt;
+    }
+  }
+  return p;
+}
+
+function smokeTime(ts, force = false, reseed = false) {
+  const previousTs = S.ts;
+  S.ts = ts;
+  // En lecture, l'horloge physique est exactement celle du curseur. Le delta
+  // est mis en attente puis consommé par la prochaine frame de fumée. Un saut
+  // manuel, lui, réamorce explicitement l'état demandé.
+  if (playing && ts > previousTs && !reseed) S.pending += ts - previousTs;
+  const bucket = Math.floor(ts / (15 * 60));
+  if (!force && bucket === S.bucket) return;
+  S.bucket = bucket;
+  const now = steps.length ? Math.min(ts, steps[lastObs].ts) : ts;
+  S.emitters = S.sources
+    .filter(feature => {
+      const p = feature.properties || {};
+      return p.ts <= now && p.ts > now - SMOKE_WINDOW
+          && shown.hotspots[p.source] !== false;
+    })
+    .map(feature => {
+      const p = feature.properties || {}, n = Math.max(+p.n || 1, 1);
+      const frp = Math.max(+p.frp || 0, 0);
+      // La racine évite qu'un pixel extrême écrase tout le pays ; les deux
+      // facteurs restent indépendants, donc un front étendu mais modéré émet
+      // lui aussi davantage qu'un foyer isolé.
+      const weight = Math.sqrt(n) * (.7 + Math.log1p(frp));
+      return {
+        lon: feature.geometry.coordinates[0],
+        lat: feature.geometry.coordinates[1],
+        weight,
+        spread: p.overview ? 9
+          : Math.max(.18, Math.min(1.2, Math.max(+p.scan || 0, +p.track || 0) * .65)),
+      };
+    });
+  S.total = S.emitters.reduce((sum, emitter) => sum + emitter.weight, 0);
+  const density = atLatest ? SMOKE_LIVE_DENSITY : 1;
+  S.target = S.total ? Math.min(SMOKE_N, Math.max(S.emitters.length,
+    Math.round((S.emitters.length * 4.2 + S.total * .18) * density))) : 0;
+
+  // Au premier rendu, lors d'une sélection explicite de sources ou si la frise
+  // repart en arrière, les panaches sont réamorcés dans l'état demandé. Un
+  // simple changement de niveau de détail conserve au contraire les bouffées
+  // existantes : leur géographie et leur courbure restent continues.
+  if (reseed || !S.ready || ts < previousTs) {
+    S.parts.length = 0;
+    S.pending = 0;
+    S.emitCarry = 0;
+    S.ready = true;
+    // Un passage uniforme donne d'abord une bouffée à chaque foyer récent ;
+    // les suivantes repassent par le mélange uniforme/pondéré de `smokePick`.
+    for (const emitter of S.emitters) {
+      const p = smokeSpawn(true, emitter);
+      if (p) S.parts.push(p);
+      if (S.parts.length >= S.target) break;
+    }
+    for (let i = 0; i < S.target; i++) {
+      if (S.parts.length >= S.target) break;
+      const p = smokeSpawn(true);
+      if (p) S.parts.push(p);
+    }
+  }
+  smokeLoop();
+}
+
+/* Intègre un intervalle physique. En lecture, un appel représente souvent
+ * plusieurs minutes de frise : les sous-pas évitent qu'une bouffée traverse une
+ * maille de vent d'un seul bond et permettent d'émettre tout au long du trajet.
+ * Le nombre de sous-pas est borné pour garder le coût stable dans les longs
+ * creux entre deux passages satellite. */
+function smokeAdvance(seconds) {
+  if (!(seconds > 0) || !W.cur) return;
+  const count = Math.min(12, Math.max(1, Math.ceil(seconds / (5 * 60))));
+  const dt = seconds / count;
+  for (let step = 0; step < count; step++) {
+    for (let i = S.parts.length - 1; i >= 0; i--) {
+      const p = S.parts[i];
+      p.age += dt;
+      if (p.age >= p.life || !smokeAdvect(p, dt)) S.parts.splice(i, 1);
+    }
+
+    // Le débit est défini en temps physique : à l'équilibre, six heures
+    // d'émission donnent `target` bouffées. Accélérer la frise accélère donc à
+    // la fois le vent, le vieillissement et les nouvelles émissions.
+    if (S.emitters.length && S.target) {
+      S.emitCarry += S.target / SMOKE_H * dt;
+      let births = Math.floor(S.emitCarry);
+      S.emitCarry -= births;
+      births = Math.min(births, SMOKE_N - S.parts.length);
+      for (let i = 0; i < births; i++) {
+        const p = smokeSpawn(false);
+        if (p) S.parts.push(p);
+      }
+    }
+  }
+}
+
+function smokeFrame(now) {
+  S.raf = requestAnimationFrame(smokeFrame);
+  // Une petite saccade ne doit pas ralentir l'horloge physique. L'onglet caché
+  // arrête déjà proprement la boucle ; la borne d'une seconde ne sert qu'à
+  // absorber un blocage exceptionnel du thread principal.
+  const wallDt = Math.min((now - S.last) / 1000, 1);
+  S.last = now;
+
+  // `pending` vient de la frise. Une pause historique continue au rythme réel.
+  // Au dernier instant seulement, la carte reste « vivante » : trois minutes
+  // physique par seconde murale rend le déplacement perceptible sans retrouver
+  // l'emballement de l'ancien multiplicateur fixe, et accélère ensemble vent,
+  // émission, diffusion et extinction.
+  const idleK = atLatest ? SMOKE_LIVE_K : 1;
+  const seconds = S.pending + (playing ? 0 : wallDt * idleK);
+  S.pending = 0;
+  smokeAdvance(seconds);
+
+  sctx.clearRect(0, 0, S.w, S.h);
+  if (!W.cur || !S.parts.length) return;
+
+  const merc = lat => Math.log(Math.tan(Math.PI / 4 + lat * Math.PI / 360));
+  for (let i = S.parts.length - 1; i >= 0; i--) {
+    const p = S.parts[i];
+    const x = (p.lon - W.lon0) / W.dLon;
+    const y = (merc(p.lat) - W.y0) / W.dY;
+    if (x < -80 || y < -80 || x > S.w + 80 || y > S.h + 80) continue;
+    const q = p.age / p.life;
+    const fade = Math.pow(1 - q, 1.45) * Math.min(p.age / (12 * 60), 1);
+    // Taille en kilomètres, convertie à l'échelle courante. Une bouffée garde
+    // donc la même emprise au sol pendant un zoom ; seuls un plancher de trois
+    // pixels et une borne de sécurité évitent disparition et voile plein écran.
+    const kmPerPx = Math.abs(W.dLon) * 111.32
+                  * Math.max(Math.cos(p.lat * Math.PI / 180), .2);
+    const live = atLatest && !playing;
+    const radiusKm = (.30 + 2.35 * Math.sqrt(q)) * p.size * (live ? 1.18 : 1);
+    const radius = Math.min(Math.max(radiusKm / Math.max(kmPerPx, .001), 3),
+                            MOBILE ? 78 : 105);
+    sctx.globalAlpha = (live ? .48 : .20) * fade * p.alpha;
+    sctx.drawImage(S.sprite, x - radius, y - radius, radius * 2, radius * 2);
+  }
+  sctx.globalAlpha = 1;
+}
+
+function smokeLoop() {
+  // Une source peut s'éteindre alors que son panache est encore en vol.
+  // Pendant play, la boucle reste aussi active dans les intervalles sans feu :
+  // elle consomme leur temps virtuel au lieu de le reporter sur la prochaine
+  // source qui apparaîtrait.
+  const run = S.on && !!W.cur
+           && !!(playing || S.pending || S.emitters.length || S.parts.length)
+           && !document.hidden;
+  smokeCv.hidden = !S.on;
+  if (run && !S.raf) {
+    S.last = performance.now();
+    S.raf = requestAnimationFrame(smokeFrame);
+  }
+  if (!run && S.raf) {
+    cancelAnimationFrame(S.raf); S.raf = null;
+    sctx.clearRect(0, 0, S.w, S.h);
+  }
+}
 
 function windAtGrid(d, g, lon, lat, out) {
   if (!d || !g) return false;
@@ -1061,6 +1343,7 @@ function windTime(ts, force = false) {
   for (const tile of W.tiles.values()) windGridTime(tile, ts);
   windBadge();
   windLoop();
+  smokeLoop();
 }
 
 // lecture chiffrée au centre de la carte
@@ -1603,6 +1886,7 @@ function show(ts) {
   const clock = fmtClock(ts);
   if (clock !== clockEl.textContent) clockEl.textContent = clock;
   windTime(ts);
+  smokeTime(ts);
 }
 
 /*
@@ -1843,6 +2127,38 @@ function mergedZones(zones, key, dedupe) {
   return { type: 'FeatureCollection', features };
 }
 
+/* Le niveau national emploie les cellules agrégées ; dès que les paquets
+ * détaillés sont disponibles, chaque pixel FIRMS récent devient un émetteur.
+ * Le changement de jeu de sources ne vide jamais les particules existantes :
+ * elles gardent leur position géographique pendant et après le zoom. */
+function smokeUseVisibleSources() {
+  const detailed = Z.manifest && map.getZoom() >= Z.manifest.detail_zoom
+                && Z.hotspots.length;
+  S.sources = detailed ? Z.hotspots : S.overview;
+  if (detailed) {
+    // En panoramique, les panaches déjà loin hors champ ne doivent pas occuper
+    // tout le budget et empêcher la nouvelle zone visible d'émettre. Une marge
+    // généreuse préserve ceux qui peuvent revenir au prochain petit mouvement.
+    const b = map.getBounds();
+    const mx = (b.getEast() - b.getWest()) * .45;
+    const my = (b.getNorth() - b.getSouth()) * .45;
+    S.parts = S.parts.filter(p =>
+      p.lon >= b.getWest() - mx && p.lon <= b.getEast() + mx
+      && p.lat >= b.getSouth() - my && p.lat <= b.getNorth() + my);
+  }
+  smokeTime(curTs, true, false);
+  // Compléter le budget avec une première bouffée par pixel détaillé, sans
+  // retirer celles déjà en vol. Le zoom comme le panoramique changent ainsi de
+  // résolution en continu, puis les émissions pondérées prennent le relais.
+  if (detailed && S.parts.length < S.target) {
+    for (const emitter of S.emitters) {
+      if (S.parts.length >= S.target || S.parts.length >= SMOKE_N) break;
+      const p = smokeSpawn(true, emitter);
+      if (p) S.parts.push(p);
+    }
+  }
+}
+
 async function loadVisibleZones() {
   if (Z.disabled || !map.getSource('hs')) return;
   const ids = visibleZoneIds(), token = ++Z.token;
@@ -1854,6 +2170,7 @@ async function loadVisibleZones() {
     map.getSource('dated').setData(EMPTY);
     map.getSource('nrt').setData(EMPTY);
     W.tiles = new Map();
+    smokeUseVisibleSources();
     windTime(W.ts, true);
     drawActivity();
     return;
@@ -1865,10 +2182,12 @@ async function loadVisibleZones() {
     if (token !== Z.token) return;
     const hotspots = mergedZones(zones, 'hotspots', false);
     Z.hotspots = hotspots.features;
+    W.tiles = new Map(zones.map(zone => [zone.id, zone.wind]));
+    for (const tile of W.tiles.values()) windGridTime(tile, W.ts);
+    smokeUseVisibleSources();
     map.getSource('hs').setData(hotspots);
     map.getSource('dated').setData(mergedZones(zones, 'burnt_dated', true));
     map.getSource('nrt').setData(mergedZones(zones, 'burnt_nrt', true));
-    W.tiles = new Map(zones.map(zone => [zone.id, zone.wind]));
     windTime(W.ts, true);
     wctx.clearRect(0, 0, W.w, W.h);
     drawActivity();
@@ -1880,6 +2199,7 @@ async function loadVisibleZones() {
       map.getSource('dated').setData(EMPTY);
       map.getSource('nrt').setData(EMPTY);
       W.tiles = new Map();
+      smokeUseVisibleSources();
       drawActivity();
     }
   } finally {
@@ -2009,13 +2329,20 @@ async function init() {
   if (windData && windData.nt > 1) {
     W.data = windData;
     windResize();
-    map.on('move', () => { windSync(); wctx.clearRect(0, 0, W.w, W.h); windBadge(); });
-    map.on('resize', windResize);
+    smokeResize();
+    map.on('move', () => {
+      windSync();
+      wctx.clearRect(0, 0, W.w, W.h);
+      windBadge();
+    });
+    map.on('resize', () => { windResize(); smokeResize(); });
   } else {
     // fichier absent ou vide : pas de case à cocher sans rien derrière, et pas
     // de ligne réservée dans la légende pour une lecture qui ne viendra jamais
     document.getElementById('ck-wind').closest('label').hidden = true;
+    document.getElementById('ck-smoke').closest('label').hidden = true;
     windKey.remove();
+    smokeCv.remove();
   }
   if (!manifest.legacy) {
     map.on('moveend', loadVisibleZones);
@@ -2036,6 +2363,9 @@ async function init() {
     activityMetricInputs.find(input => input.value === 'count').checked = true;
   }
   MAJOR.overview = overview.features;
+  S.overview = overview.features.length ? overview.features
+    : (detail ? detail.hotspots.features : []);
+  S.sources = S.overview;
   MAJOR.places = recent.features.map(feature => ({
     center: geometryCenter(feature.geometry),
     name: feature.properties.PROVINCE || feature.properties.COMMUNE || '',
@@ -2101,6 +2431,7 @@ document.addEventListener('visibilitychange', () => {
   // bond de plusieurs secondes au retour — autant rendre la main proprement.
   else stopPlay();
   windLoop();   // rien à animer tant que l'onglet est caché
+  smokeLoop();
 });
 
 /* Le curseur porte maintenant un instant, pas un numéro de cran : il se déplace
@@ -2117,6 +2448,7 @@ slider.addEventListener('input', () => {
   if (!steps.length) return;
   stopPlay();                     // prendre la main sur la frise met en pause
   setTime(+slider.value, true);
+  smokeTime(curTs, true, true);
 });
 
 document.getElementById('ck-dated').addEventListener('change', e => {
@@ -2151,6 +2483,9 @@ for (const input of activityMetricInputs) input.addEventListener('change', event
 document.getElementById('ck-wind').addEventListener('change', e => {
   W.on = e.target.checked; windLoop(); windBadge();
 });
+document.getElementById('ck-smoke').addEventListener('change', e => {
+  S.on = e.target.checked; smokeLoop();
+});
 
 const playBtn = document.getElementById('play');
 
@@ -2160,6 +2495,7 @@ function stopPlay() {
   playing = null;
   playBtn.textContent = '▶';
   playBtn.setAttribute('aria-label', "Lancer l'animation");
+  smokeLoop();
 }
 
 /* Chaque frame réécrit trois expressions de peinture, que MapLibre réévalue sur
@@ -2194,6 +2530,7 @@ playBtn.addEventListener('click', () => {
   setTime(warpTime(ease(p)));
   playing = { start: performance.now() - p * PLAY_MS, paint: 0, raf: 0 };
   playing.raf = requestAnimationFrame(playFrame);
+  smokeLoop();
 });
 </script>
 </body>
