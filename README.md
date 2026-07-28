@@ -84,6 +84,30 @@ ne fait que réécrire un filtre et trois expressions de peinture : le GeoJSON
 n'est jamais renvoyé au moteur. Le `circle-sort-key` sur la date fait passer
 les détections récentes au-dessus des anciennes sans tri manuel.
 
+## Déploiement
+
+Le site est publié par GitHub Pages, via le workflow
+[`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) : toutes les
+2 heures, un runner exécute `fetch_fires.py`, assemble `index.html` + `data/`
+dans `_site`, et livre le tout à Pages sous forme d'artefact.
+
+Les données rafraîchies ne sont **jamais commitées**. À 3 Mo par version et
+12 exécutions par jour, l'historique git gonflerait de plusieurs gigaoctets par
+an pour un dépôt qui contient 30 Ko de code utile. Le `data/` versionné reste
+figé : il sert uniquement à ce que la carte s'affiche dès le clonage.
+
+Si une source est indisponible, le job échoue et le site déjà en ligne reste
+intact — mieux vaut une carte un peu datée qu'une carte vide. Un garde-fou
+annule aussi le déploiement si aucun foyer n'a été récupéré.
+
+Deux points de vigilance propres aux workflows planifiés :
+
+- ils partent avec du retard aux heures de pointe, d'où le décalage de 17 min
+  dans le cron ;
+- GitHub **désactive un workflow planifié après 60 jours sans activité** sur le
+  dépôt. Sans commit pendant deux mois, le rafraîchissement s'arrête en
+  silence ; il faut le réactiver à la main dans l'onglet Actions.
+
 ## Sources de données
 
 Le repérage complet — ce qui existe, à quelle fréquence, avec quels pièges —
@@ -102,6 +126,7 @@ brûlées (polygones datés, mis à jour 1 à 2 fois par jour).
 | `fetch_fires.py` | récupération des deux sources → GeoJSON |
 | `index.html` | la carte : MapLibre GL, fond satellite, curseur cranté |
 | `SOURCES.md` | note de repérage sur les sources de données |
+| `.github/workflows/deploy.yml` | rafraîchissement toutes les 2 h + publication Pages |
 | `data/` | sorties du script, regénérables |
 
 ## Limites connues
@@ -132,7 +157,9 @@ mais demandent d'être citées.
 
 - Foyers actifs : **NASA FIRMS** (VIIRS 375 m et MODIS, LANCE/EOSDIS)
 - Surfaces brûlées : **Copernicus EFFIS**
-- Fond : **Esri** World Imagery ; toponymes **CARTO** / **OpenStreetMap**
+- Fond : ortho-photo **IGN-F/Géoplateforme** (France), **Sentinel-2 cloudless**
+  par EOX ailleurs (données Copernicus Sentinel modifiées 2020) ; toponymes
+  **CARTO** / **OpenStreetMap**
 - Rendu : **MapLibre GL JS**
 
 Aucune licence n'est déclarée pour l'instant : le code est donc, par défaut,

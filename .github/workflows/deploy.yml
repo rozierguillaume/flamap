@@ -1,0 +1,66 @@
+name: deploy
+
+on:
+  # Toutes les 2 h. Décalé de 17 min : les tâches planifiées à l'heure ronde
+  # partent dans une file d'attente saturée et démarrent avec du retard.
+  schedule:
+    - cron: "17 */2 * * *"
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Un déploiement à la fois, sans annuler celui qui est en cours de publication.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # ~5 min : les flux FIRMS répondent vite, le WFS d'EFFIS met 40 à 250 s
+      # par requête. Si une source est indisponible, le script lève et le job
+      # échoue — le site déjà en ligne reste intact, ce qui vaut mieux que
+      # publier une carte vide.
+      - name: Récupérer les données
+        run: python3 fetch_fires.py
+        timeout-minutes: 25
+
+      # Garde-fou : sans foyers, la page planterait au premier cran.
+      - name: Vérifier les données
+        run: |
+          python3 - <<'PY'
+          import json, sys
+          hs = json.load(open('data/hotspots.geojson'))['features']
+          ba = json.load(open('data/burnt_dated.geojson'))['features']
+          print(f"{len(hs)} foyers, {len(ba)} polygones datés")
+          if not hs:
+              sys.exit("aucun foyer récupéré, déploiement annulé")
+          PY
+
+      - name: Assembler le site
+        run: |
+          mkdir -p _site
+          cp index.html _site/
+          cp -r data _site/
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

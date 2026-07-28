@@ -180,7 +180,9 @@
     Foyers actifs : <a href="https://firms.modaps.eosdis.nasa.gov/" target="_blank" rel="noopener">NASA FIRMS</a>
     (VIIRS 375 m &amp; MODIS, LANCE/EOSDIS).
     Surfaces brûlées : <a href="https://forest-fire.emergency.copernicus.eu/" target="_blank" rel="noopener">Copernicus EFFIS</a>.
-    Fond : <a href="https://www.esri.com/" target="_blank" rel="noopener">Esri</a> World Imagery ;
+    Fond : ortho-photo <a href="https://geoservices.ign.fr/" target="_blank" rel="noopener">IGN-F/Géoplateforme</a>,
+    hors France <a href="https://s2maps.eu" target="_blank" rel="noopener">Sentinel-2 cloudless</a> par EOX
+    (données Copernicus Sentinel modifiées 2020) ;
     toponymes <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a> /
     <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>.
     Rendu <a href="https://maplibre.org/" target="_blank" rel="noopener">MapLibre GL</a>.
@@ -209,9 +211,19 @@ const map = new maplibregl.Map({
   style: {
     version: 8,
     sources: {
+      // Base mondiale : mosaïque Sentinel-2 sans nuages (10 m), libre et sans clé.
       sat: {
-        type: 'raster', tileSize: 256, maxzoom: 18,
-        tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
+        type: 'raster', tileSize: 256, maxzoom: 15,
+        tiles: ['https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2020_3857/default/g/{z}/{y}/{x}.jpg'],
+      },
+      // Par-dessus, l'ortho-photo IGN : jusqu'à 20 cm, bien plus nette, mais
+      // couverture France seulement — ailleurs le service répond 404 et
+      // MapLibre laisse simplement voir la couche Sentinel-2 en dessous.
+      ortho: {
+        type: 'raster', tileSize: 256, maxzoom: 19,
+        tiles: ['https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0'
+              + '&LAYER=ORTHOIMAGERY.ORTHOPHOTOS&STYLE=normal&TILEMATRIXSET=PM'
+              + '&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&FORMAT=image/jpeg'],
       },
       labels: {
         type: 'raster', tileSize: 256, maxzoom: 19,
@@ -221,6 +233,7 @@ const map = new maplibregl.Map({
     },
     layers: [
       { id: 'sat', type: 'raster', source: 'sat' },
+      { id: 'ortho', type: 'raster', source: 'ortho' },
       { id: 'labels', type: 'raster', source: 'labels', paint: { 'raster-opacity': .85 } },
     ],
   },
