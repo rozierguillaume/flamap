@@ -97,8 +97,9 @@
   }
 
   /* ---- calques ---- */
-  #layers { position: absolute; z-index: 500; top: 14px; right: 14px;
+  #layers { position: absolute; z-index: 500; top: 54px; right: 58px;
             padding: 11px 14px; font-size: 12.5px; }
+  #layers:not(.open) { display: none; }
   #layers label { display: flex; align-items: center; gap: 8px; margin: 3px 0;
                   cursor: pointer; white-space: nowrap; }
   #layers label[hidden] { display: none; }   /* `display:flex` gagnerait sinon */
@@ -113,7 +114,15 @@
      le vent, lui, est connu a chaque instant de la frise */
   body.past #layers label.ba { opacity: .45; }
   body.past #legend .burnt-key { opacity: .32; }
-  #layers-btn { display: none; }   /* mobile uniquement, voir plus bas */
+  #layers-btn {
+    display: block; position: absolute; z-index: 501; top: 14px; right: 58px;
+    padding: 8px 12px; color: var(--ink-dim); font: inherit; font-size: 10.5px;
+    line-height: 1.45; cursor: pointer;
+  }
+  #layers-btn:hover { color: var(--ink); }
+  #layers-btn::after { content: " ›"; }
+  #layers-btn[aria-expanded="true"]::after { content: " ⌄"; }
+  #layers-btn .compact { display: none; }
 
   /* ---- barre du bas ---- */
   #legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12.5px; }
@@ -163,12 +172,16 @@
   #ticks b.wind { height: 4px; background: var(--wind); opacity: .5; }
   #slider { width: 100%; margin: 0; accent-color: var(--hot); height: 24px; display: block; }
 
-  #read { text-align: right; line-height: 1.25; white-space: nowrap; }
   #probe { position: absolute; visibility: hidden; white-space: nowrap;
            top: -9999px; left: -9999px; }
-  #clock { font-variant-numeric: tabular-nums; font-size: 12.5px; }
-  #sub { font-size: 10.5px; color: var(--ink-dim); }
-  #sub b { color: var(--front); font-variant-numeric: tabular-nums; }
+  #clock {
+    position: absolute; z-index: 499; pointer-events: none;
+    transform: translateX(-50%); max-width: calc(100vw - 28px);
+    color: #fff; font-size: clamp(22px, 2vw, 30px); font-weight: 700;
+    line-height: 1.1; letter-spacing: -.02em; white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+    text-shadow: 0 2px 5px rgba(0,0,0,.95), 0 0 18px rgba(0,0,0,.75);
+  }
 
   /* Les credits prenaient six lignes de mentions qu'on lit une fois : sur
      telephone un bon tiers de l'ecran, sur ordinateur 280 px pris en largeur au
@@ -196,14 +209,14 @@
 
   /* =======================  DESKTOP  ======================= */
   @media (min-width: 721px) {
-    #dock { position: absolute; z-index: 500; left: 14px; right: 14px; bottom: 14px;
+    /* Les trois blocs ancres a gauche gardent une respiration genereuse sans
+       ajouter de bande ou de decor par-dessus l'imagerie. */
+    #head, #incidents { left: 26px; }
+    #dock { position: absolute; z-index: 500; left: 26px; right: 14px; bottom: 14px;
             display: flex; align-items: flex-end; gap: 14px; pointer-events: none; }
     #dock > * { pointer-events: auto; }
     #legend { flex-direction: column; gap: 7px; padding: 13px 16px; }
     #timebar { flex: 1; max-width: 620px; margin: 0 auto; padding: 13px 16px; }
-    /* largeur figée sur le libellé le plus large : sinon « EFFIS · 0 foyers »
-       et « VIIRS/NOAA-20 · 1103 foyers » font varier la course du curseur */
-    #read { flex: none; width: var(--read-w, 168px); }
     /* Le bouton reste dans la ligne du dock, le panneau vient se poser au-dessus
        de lui plutôt qu'à côté : hors du flux, il ne rétrécit pas la réglette en
        s'ouvrant. C'est aussi ce qui rendait la barre du bas inutilisable entre
@@ -215,7 +228,6 @@
        viendrait mordre dessus. */
     #credits { position: absolute; right: 0; bottom: calc(100% + 10px);
                width: 280px; padding: 11px 14px; text-align: right; }
-    #layers { top: 60px; }   /* sous les boutons de zoom */
   }
 
   /* =======================  MOBILE  ======================== */
@@ -229,41 +241,62 @@
                  overflow-x: auto; scrollbar-width: none; }
     #incidents::-webkit-scrollbar { display: none; }
     #incidents button { flex: none; max-width: 220px; font-size: 11px; }
-    #incidents.layers-open { display: none; }
+    #incidents.layers-open, #incidents.credits-open { display: none; }
 
     /* les calques repliés derrière un bouton : sur 375 px de large, le panneau
        ouvert en permanence mangeait le quart supérieur de l'écran */
-    #layers-btn { display: block; position: absolute; z-index: 501;
-                  top: 10px; right: 10px; width: 42px; height: 42px;
-                  color: var(--ink); font-size: 17px; line-height: 1; cursor: pointer; }
+    #layers-btn { top: 10px; right: 10px; width: 42px; height: 42px; padding: 0;
+                  color: var(--ink); font-size: 17px; line-height: 1; }
+    #layers-btn::after { content: none; }
+    #layers-btn .wide { display: none; }
+    #layers-btn .compact { display: inline; }
     #layers { top: 60px; right: 10px; padding: 10px 13px; font-size: 12px; }
-    #layers:not(.open) { display: none; }
 
-    /* tout le bas dans une seule feuille : plus aucun chevauchement */
+    /* Le bas est compose de cartes flottantes distinctes : la legende explique
+       la carte, la frise la pilote. Les fondre dans une seule feuille donnait
+       l'impression d'un gros formulaire et mangeait inutilement l'imagerie. */
     #dock {
-      position: absolute; z-index: 500; left: 0; right: 0; bottom: 0;
-      background: rgba(13,15,18,.94); backdrop-filter: blur(14px);
-      -webkit-backdrop-filter: blur(14px);
-      border-top: 1px solid rgba(255,255,255,.10); border-radius: 14px 14px 0 0;
-      padding: 12px 14px calc(12px + var(--safe-b));
-      display: flex; flex-direction: column; gap: 11px;
+      position: absolute; z-index: 500; left: 10px; right: 10px;
+      bottom: calc(10px + var(--safe-b));
+      display: grid; grid-template-columns: 1fr;
+      grid-template-areas: "timeline" "legend";
+      align-items: end; gap: 8px; pointer-events: none;
     }
-    #dock > .glass { background: none; border: none; border-radius: 0; padding: 0;
-                     backdrop-filter: none; -webkit-backdrop-filter: none; }
-    #legend { font-size: 11.5px; gap: 5px 14px; }
+    #dock > * { pointer-events: auto; }
+    #legend {
+      grid-area: legend; display: grid;
+      grid-template-columns: auto minmax(110px, 1fr);
+      gap: 7px 12px; padding: 10px 12px; font-size: 11.5px;
+    }
+    #legend .burnt-key { grid-column: 1; }
+    #agekey { grid-column: 2; min-width: 0; }
+    #ageramp { width: 100%; }
+    #windkey { grid-column: 1 / -1; }
     #legend i { width: 10px; height: 10px; }
     #play { width: 42px; height: 38px; }   /* cible tactile */
     #slider { height: 32px; }
+    #timebar { grid-area: timeline; width: 100%; padding: 9px 12px; }
+    #clock { font-size: clamp(19px, 5.5vw, 24px); }
 
-    /* la lecture sur sa propre ligne : à côté du curseur elle lui volait
-       120 px des 350 disponibles */
-    #timerow { flex-wrap: wrap; row-gap: 3px; }
-    #read { order: -1; width: 100%; text-align: left;
-            display: flex; justify-content: space-between; align-items: baseline; }
-    #clock { font-size: 13px; }
+    #cr-btn {
+      position: fixed; z-index: 501; top: 10px; right: 60px;
+      height: 42px; padding: 0 11px;
+      color: #a39d97; white-space: nowrap;
+    }
+    #cr-btn .wide { display: none; }
+    /* Le panneau s'ouvre sous son bouton dans l'en-tête, sans modifier la
+       hauteur des commandes temporelles en bas. */
+    #credits {
+      position: fixed; z-index: 501; top: 60px; right: 10px; bottom: auto;
+      width: min(330px, calc(100vw - 20px)); padding: 12px 14px; text-align: left;
+    }
+  }
 
-    #cr-btn { align-self: flex-start; color: #7d7873; }
-    #credits { text-align: left; }
+  @media (max-width: 360px) {
+    /* A 320 px, la legende repasse sur trois lignes plutôt que de comprimer le
+       degrade. */
+    #legend { grid-template-columns: 1fr; }
+    #legend .burnt-key, #agekey, #windkey { grid-column: 1; }
   }
 </style>
 
@@ -280,6 +313,7 @@
   "author": { "@type": "Person", "name": "Guillaume Rozier" }
 }
 </script>
+  <script defer src="https://cloud.umami.is/script.js" data-website-id="83fda260-ce79-41a6-b239-8782057befcd"></script>
 </head>
 <body>
 <div id="map" role="img"
@@ -315,7 +349,8 @@
   </p>
 </noscript>
 
-<button id="layers-btn" class="glass" aria-label="Calques" aria-expanded="false">≡</button>
+<button id="layers-btn" class="glass" aria-label="Calques" aria-expanded="false"
+        aria-controls="layers"><span class="wide">Calques</span><span class="compact" aria-hidden="true">≡</span></button>
 <div id="layers" class="glass">
   <label class="ba"><input type="checkbox" id="ck-dated" checked> surfaces brûlées (datées)</label>
   <label class="ba"><input type="checkbox" id="ck-nrt" checked> surfaces brûlées (NRT)</label>
@@ -323,6 +358,8 @@
   <div class="hint">Masquées : EFFIS ne publie que le contour le plus récent,
   pas son évolution. Ramenez le curseur à droite pour les revoir.</div>
 </div>
+
+<div id="clock" aria-live="off">—</div>
 
 <div id="dock">
   <div id="legend" class="glass">
@@ -350,17 +387,14 @@
         <input id="slider" type="range" min="0" max="0" step="1" value="0"
                aria-label="Mise à jour affichée">
       </div>
-      <div id="read">
-        <div id="clock">—</div>
-        <div id="sub"></div>
-      </div>
     </div>
   </div>
 
   <!-- `glass` pour le fond sur ordinateur, où le bouton flotte seul au-dessus de
        l'imagerie ; sur téléphone la règle `#dock > .glass` le remet à plat, il
        est alors une ligne parmi d'autres dans la feuille du bas -->
-  <button id="cr-btn" class="glass" aria-expanded="false" aria-controls="credits">Sources &amp; crédits</button>
+  <button id="cr-btn" class="glass" aria-expanded="false"
+          aria-controls="credits"><span class="wide">Sources &amp; </span>crédits</button>
 
   <div id="credits" class="glass">
     Foyers actifs : <a href="https://firms.modaps.eosdis.nasa.gov/" target="_blank" rel="noopener">NASA FIRMS</a>
@@ -517,21 +551,53 @@ map.touchZoomRotate.disableRotation();
 document.getElementById('cr-btn').addEventListener('click', e => {
   const open = document.getElementById('credits').classList.toggle('open');
   e.currentTarget.setAttribute('aria-expanded', open);
+  document.getElementById('incidents').classList.toggle('credits-open', open);
+  if (open) {
+    document.getElementById('layers').classList.remove('open');
+    document.getElementById('layers-btn').setAttribute('aria-expanded', 'false');
+    document.getElementById('incidents').classList.remove('layers-open');
+  }
 });
 
 document.getElementById('layers-btn').addEventListener('click', e => {
   const open = document.getElementById('layers').classList.toggle('open');
   e.currentTarget.setAttribute('aria-expanded', open);
   document.getElementById('incidents').classList.toggle('layers-open', open);
+  if (open) {
+    document.getElementById('credits').classList.remove('open');
+    document.getElementById('cr-btn').setAttribute('aria-expanded', 'false');
+    document.getElementById('incidents').classList.remove('credits-open');
+  }
 });
 
 const slider  = document.getElementById('slider');
 const ticksEl = document.getElementById('ticks');
 const clockEl = document.getElementById('clock');
-const subEl   = document.getElementById('sub');
 
 const fmt = ts => new Date(ts * 1000).toLocaleString('fr-FR',
   { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Paris' });
+const fmtClock = ts => {
+  const date = new Date(ts * 1000);
+  const day = date.toLocaleDateString('fr-FR',
+    { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'Europe/Paris' });
+  const time = date.toLocaleTimeString('fr-FR',
+    { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Paris' });
+  return `${day} · ${time}`;
+};
+
+/* Sur ordinateur l'heure suit le centre exact de la frise. Sur téléphone la
+ * frise ouvre la feuille du bas : l'heure se pose juste au-dessus, sur la carte.
+ * Les hauteurs changent avec le vent et l'ouverture des crédits, d'où la mesure
+ * plutôt qu'une valeur figée en CSS. */
+function placeClock() {
+  const anchor = MOBILE ? document.getElementById('dock') : document.getElementById('timebar');
+  const r = anchor.getBoundingClientRect();
+  clockEl.style.left = `${r.left + r.width / 2}px`;
+  clockEl.style.bottom = `${innerHeight - r.top + (MOBILE ? 10 : 9)}px`;
+}
+addEventListener('resize', placeClock);
+new ResizeObserver(placeClock).observe(document.getElementById('dock'));
+new ResizeObserver(placeClock).observe(document.getElementById('timebar'));
 
 let steps = [], playing = null;
 // instant affiché, en secondes epoch : la frise est parcourue en continu, ce
@@ -1018,40 +1084,15 @@ function show(ts) {
     applyBurnt();
   }
 
-  // dernière source à avoir parlé à cet instant
-  let s = steps[0];
-  for (const x of steps) { if (x.ts > ts) break; s = x; }
-
-  const clock = fmt(ts);
+  const clock = fmtClock(ts);
   if (clock !== clockEl.textContent) clockEl.textContent = clock;
-  // le dernier passage satellite date souvent de plusieurs heures : les
-  // premiers crans « à venir » sont déjà du passé pour le modèle, seuls ceux
-  // qui dépassent l'instant présent sont vraiment une prévision
-  const sub = s.kind === 'wind'
-    ? `${s.ts > Date.now() / 1000 ? 'prévision vent' : 'vent'} · <b>+${s.h} h</b>`
-    : `${s.label} · <b>${liveAt(now)}</b> foyers en France`;
-  if (sub !== subEl.innerHTML) subEl.innerHTML = sub;
   windTime(ts);
 }
 
-// détections des 6 dernières heures à l'instant donné
-function liveAt(now) {
-  return steps.filter(x => x.kind === 'sat' && x.ts > now - 6 * H && x.ts <= now)
-              .reduce((a, x) => a + x.n, 0);
-}
-
 /*
- * Deux lectures chiffrées changent de largeur au fil de l'animation, et les
- * deux faisaient bouger la mise en page sous l'œil :
- *
- *  - à droite de la réglette, « EFFIS · 0 foyers » contre « VIIRS/NOAA-20 ·
- *    1103 foyers », ce qui rallongeait ou raccourcissait la course du curseur ;
- *  - dans la légende, « 6 km/h (raf. 12 km/h) » contre « 127 km/h (raf. 216
- *    km/h) », ce qui faisait respirer tout le panneau.
- *
- * On réserve une bonne fois la place du pire cas. Pour la frise il est connu —
- * les données sont chargées ; pour le vent on prend trois chiffres partout, ce
- * qui couvre tout ce qui se mesure au sol.
+ * La lecture du vent change de largeur au fil de l'animation. On réserve une
+ * bonne fois la place de trois chiffres, ce qui couvre ce qui se mesure au sol
+ * et empêche le panneau de légende de respirer au rythme des rafales.
  */
 function lockWidths() {
   const probe = document.createElement('div');
@@ -1066,26 +1107,13 @@ function lockWidths() {
     return probe.offsetWidth;
   };
 
-  const maxLive = Math.max(...steps.map(s => liveAt(s.ts)));
-  const label = steps.reduce((a, s) => s.label.length > a.length ? s.label : a, '');
-  const w = Math.max(
-    widest(`${label} · <b>${maxLive}</b> foyers en France`, subEl),
-    // sans crans de prévision, réserver leur place élargirait la lecture pour rien
-    FORECAST_H ? widest(`prévision vent · <b>+${FORECAST_H} h</b>`, subEl) : 0,
-    widest(fmt(steps[0].ts), clockEl),
-  );
-
   // les chiffres sont tabulaires : trois zéros mesurent comme n'importe quel
   // nombre à trois chiffres. Sans fichier de vent la ligne a été retirée du
   // document, et mesurer un élément détaché ne donnerait rien de bon.
   const wind = windVal.isConnected ? widest('000 km/h (raf. 000 km/h)', windVal) : 0;
 
   probe.remove();
-  // +4 px : la sonde sous-estime de 1-2 px (arrondis sous-pixel, chiffres
-  // tabulaires du <b>), et le texte est aligné à droite — un dépassement
-  // viendrait mordre sur la réglette
   const px = document.documentElement.style;
-  px.setProperty('--read-w', Math.ceil(w) + 4 + 'px');
   px.setProperty('--wind-w', Math.ceil(wind) + 2 + 'px');
 }
 

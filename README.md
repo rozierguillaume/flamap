@@ -68,9 +68,9 @@ qu'une à deux fois par jour. Entre deux passages, il ne se passe littéralement
 rien dans les données. La frise nationale regroupe les détections par satellite
 et par passage : traits gris pour FIRMS, traits ocres plus hauts pour EFFIS.
 
-Ces mises à jour restent visibles comme telles — les traits de la frise, et
-l'étiquette sous l'horloge qui nomme la source ayant parlé en dernier. Mais le
-curseur, lui, **balaie le temps en continu**. La version précédente sautait d'un
+Ces mises à jour restent visibles comme telles dans les traits de la frise.
+L'horodatage complet flotte au-dessus pour préserver toute la largeur utile du
+curseur, qui **balaie le temps en continu**. La version précédente sautait d'un
 cran au suivant : chaque saut avançait l'horloge de deux à trois heures d'un
 coup, et toute une rafale de foyers apparaissait d'un bloc. Désormais un foyer
 naît — il monte en opacité et en taille — puis vieillit le long d'une échelle de
@@ -269,7 +269,8 @@ pour le vent (AROME HD de Météo-France, maille 1,5 km, pas horaire).
 
 ## Crédits
 
-Repliés derrière le lien « Sources & crédits » en bas de page, et à conserver :
+Repliés derrière le bouton « Sources & crédits » en bas de page sur ordinateur,
+et derrière « crédits » dans l'en-tête sur mobile. Ces crédits sont à conserver :
 les sources sont libres d'usage mais demandent d'être citées.
 
 - Foyers actifs : **NASA FIRMS** (VIIRS 375 m et MODIS, LANCE/EOSDIS)
