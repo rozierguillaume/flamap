@@ -7,6 +7,12 @@ on:
     - cron: "17 */2 * * *"
   push:
     branches: [main]
+    # Une modification du front est livree par deploy-front.yml, qui reutilise
+    # les donnees deja publiees. On ne refait la collecte longue que lorsque le
+    # collecteur ou ce workflow change.
+    paths:
+      - fetch_fires.py
+      - .github/workflows/deploy.yml
   workflow_dispatch:
 
 permissions:

@@ -1,0 +1,165 @@
+name: deploy-front
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - index.html
+      - og.png
+      - robots.txt
+      - .github/workflows/deploy-front.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Le meme verrou que le rafraichissement complet : un artefact Pages remplace
+# toujours le precedent, donc les deux publications ne doivent pas se croiser.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      deploy: ${{ steps.scope.outputs.deploy }}
+    env:
+      LIVE_SITE: https://flamap.fr
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # Le commit de base d'un push peut etre plus ancien que le parent
+          # immediat : il faut l'historique pour reperer un commit mixte.
+          fetch-depth: 0
+
+      # Si le collecteur change dans le meme push, deploy.yml prendra seul la
+      # main. Sans cela, deux artefacts pourraient se succeder dans un ordre
+      # indetermine et le plus rapide remettre les anciennes donnees en ligne.
+      - name: Vérifier que le push ne concerne que le front
+        id: scope
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          before="${{ github.event.before }}"
+          head="${{ github.sha }}"
+          if [[ "$before" = 0000000000000000000000000000000000000000 ]]; then
+            changed="$(git show --format= --name-only "$head")"
+          else
+            changed="$(git diff --name-only "$before" "$head")"
+          fi
+          other="$(printf '%s\n' "$changed" | grep -Ev \
+            '^(index\.html|og\.png|robots\.txt|\.github/workflows/deploy-front\.yml)$' || true)"
+          if [ -n "$other" ]; then
+            echo "Push mixte : le déploiement complet publiera aussi le front."
+            printf '%s\n' "$other"
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Les donnees ne vivent pas dans git. Pour une modification de front, on
+      # repart donc exactement du jeu actuellement publie au lieu de relancer
+      # les flux FIRMS, EFFIS et Open-Meteo.
+      - name: Reprendre les données publiées
+        if: steps.scope.outputs.deploy == 'true'
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import pathlib
+          import sys
+          import urllib.parse
+          import urllib.request
+          from concurrent.futures import ThreadPoolExecutor
+
+          base = os.environ['LIVE_SITE'].rstrip('/')
+          root = pathlib.Path('_site')
+
+          def download(item):
+              relative, local = item
+              url = f"{base}/{relative}"
+              target = root / local
+              target.parent.mkdir(parents=True, exist_ok=True)
+              try:
+                  with urllib.request.urlopen(url, timeout=60) as response:
+                      payload = response.read()
+              except Exception as error:
+                  sys.exit(f"impossible de reprendre {url}: {error}")
+              if not payload:
+                  sys.exit(f"fichier vide recu: {url}")
+              target.write_bytes(payload)
+              return payload
+
+          manifest = json.loads(download(('data/manifest.json',
+                                          'data/manifest.json')))
+          files = []
+          for name in ('overview_hotspots.geojson', 'burnt_recent.geojson',
+                       'timeline.json', 'wind_coarse.json'):
+              files.append((f'data/{name}', f'data/{name}'))
+          for zone_id in manifest['zones']:
+              name = f'{zone_id}.json'
+              encoded = urllib.parse.quote(str(zone_id), safe='')
+              files.append((f'data/zones/{encoded}.json', f'data/zones/{name}'))
+          # Les petits paquets de zones sont independants : les reprendre en
+          # parallele evite qu'environ 176 aller-retours reseau se suivent.
+          with ThreadPoolExecutor(max_workers=12) as pool:
+              for _ in pool.map(download, files):
+                  pass
+          PY
+
+      - name: Remplacer le front
+        if: steps.scope.outputs.deploy == 'true'
+        run: cp index.html og.png robots.txt _site/
+
+      # Meme garde-fou que le workflow complet : une relecture du site publie
+      # ne doit jamais transformer une panne reseau en carte vide.
+      - name: Vérifier l’artefact
+        if: steps.scope.outputs.deploy == 'true'
+        run: |
+          python3 - <<'PY'
+          import json, pathlib, sys
+          root = pathlib.Path('_site')
+          manifest = json.load(open(root / 'data/manifest.json'))
+          timeline = json.load(open(root / 'data/timeline.json'))
+          zone_paths = list((root / 'data/zones').glob('*.json'))
+          expected = {f"{zone_id}.json" for zone_id in manifest['zones']}
+          actual = {path.name for path in zone_paths}
+          print(f"{manifest['hotspot_count']} foyers, {manifest['dated_count']} "
+                f"polygones datés, {len(zone_paths)} zones reprises")
+          if not manifest['hotspot_count'] or not timeline or actual != expected:
+              sys.exit('artefact publie incomplet, déploiement annulé')
+          fine = set(manifest['fine_wind_zones'])
+          for path in zone_paths:
+              zone = json.load(open(path))
+              if zone.get('id') != path.stem:
+                  sys.exit(f"identifiant de zone incohérent : {path}")
+              if path.stem in fine and not zone.get('wind'):
+                  sys.exit(f"vent fin absent : {path}")
+          files = [path for path in root.rglob('*') if path.is_file()]
+          size = sum(path.stat().st_size for path in files)
+          if size > 100 * 1024 * 1024:
+              sys.exit('site supérieur à 100 Mio, déploiement annulé')
+          print(f"{len(files)} fichiers, {size / 1024 / 1024:.1f} Mio")
+          PY
+
+      - uses: actions/upload-pages-artifact@v3
+        if: steps.scope.outputs.deploy == 'true'
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    if: needs.build.outputs.deploy == 'true'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

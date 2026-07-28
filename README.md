@@ -168,10 +168,21 @@ soit une nappe parfaitement immobile.
 
 ## Déploiement
 
-Le site est publié par GitHub Pages, via le workflow
-[`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) : toutes les
-2 heures, un runner exécute `fetch_fires.py`, assemble les seuls exports
-nationaux dans `_site`, et livre le tout à Pages sous forme d'artefact.
+Le site est publié par GitHub Pages avec deux workflows :
+
+- [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) exécute
+  `fetch_fires.py` toutes les 2 heures (et lors d'une modification du
+  collecteur), assemble les exports nationaux dans `_site`, puis les livre à
+  Pages ;
+- [`.github/workflows/deploy-front.yml`](.github/workflows/deploy-front.yml)
+  est déclenché par une modification de `index.html`, `og.png` ou `robots.txt`.
+  Il reprend les données de la version déjà publiée sur `flamap.fr`, y superpose
+  le front, vérifie l'artefact complet, puis le déploie sans interroger les
+  sources satellites ni météorologiques. Si un même push modifie aussi le
+  collecteur, ce workflow rapide s'efface au profit du déploiement complet.
+
+Un premier déploiement complet doit naturellement avoir réussi avant un
+déploiement front seul.
 
 Les données rafraîchies ne sont **jamais commitées**. À plusieurs Mo par version et
 12 exécutions par jour, l'historique git gonflerait de plusieurs gigaoctets par
@@ -244,6 +255,7 @@ pour le vent (AROME HD de Météo-France, maille 1,5 km, pas horaire).
 | `og.png` | image de partage, 1200 × 630, versionnée |
 | `SOURCES.md` | note de repérage sur les sources de données |
 | `.github/workflows/deploy.yml` | rafraîchissement toutes les 2 h + publication Pages |
+| `.github/workflows/deploy-front.yml` | publication rapide des seuls changements de front |
 | `data/manifest.json` | emprise, génération, liste et format des zones |
 | `data/zones/` | paquets détaillés générés, non versionnés |
 
