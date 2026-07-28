@@ -26,6 +26,7 @@ import shutil
 import sys
 import time
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -60,6 +61,8 @@ WIND_MARGIN_KM = 60
 WIND_DETAIL_STRIDE = 3
 WIND_COARSE_N = 15
 FIRMS_FINE_MIN = 50
+FIRMS_TIMEOUT = 60
+FIRMS_ATTEMPTS = 2
 WIND_REQUEST_PAUSE = 6
 
 EMPTY_FC = {"type": "FeatureCollection", "features": []}
@@ -90,14 +93,33 @@ def fc(features):
 # FIRMS
 # ---------------------------------------------------------------------------
 
+def download_firms_feed(label, url):
+    for attempt in range(FIRMS_ATTEMPTS):
+        try:
+            return get(url, timeout=FIRMS_TIMEOUT).decode("utf-8"), None
+        except Exception as error:
+            if attempt == FIRMS_ATTEMPTS - 1:
+                return None, error
+            print(f"  ! {label} indisponible, nouvel essai dans 5 s",
+                  file=sys.stderr)
+            time.sleep(5)
+
+
 def fetch_hotspots(bbox):
     west, south, east, north = bbox
     features = []
 
-    for label, url in FIRMS_FEEDS:
-        try:
-            raw = get(url, timeout=120).decode("utf-8")
-        except Exception as error:
+    # Les quatre fichiers sont indépendants. Les télécharger ensemble réduit
+    # surtout le coût d'un incident réseau du runner : les timeouts ne
+    # s'additionnent plus pendant huit minutes avant d'annuler l'export.
+    with ThreadPoolExecutor(max_workers=len(FIRMS_FEEDS)) as executor:
+        downloads = list(executor.map(
+            lambda feed: download_firms_feed(*feed),
+            FIRMS_FEEDS,
+        ))
+
+    for (label, _), (raw, error) in zip(FIRMS_FEEDS, downloads):
+        if raw is None:
             print(f"  ! {label} : {error}", file=sys.stderr)
             continue
 

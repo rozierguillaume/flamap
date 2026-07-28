@@ -122,8 +122,9 @@ affiché : la nappe ne présente ni trou ni bord carré.
 **Récupération** (`fetch_fires.py`) — trois sources, trois protocoles :
 
 - NASA FIRMS expose des flux CSV régionaux publics (24 h / 48 h / 7 j) qui ne
-  demandent pas de clé. Le script en agrège quatre : VIIRS NOAA-20, NOAA-21,
-  Suomi-NPP et MODIS, filtre sur la bbox et convertit en GeoJSON.
+  demandent pas de clé. Le script en télécharge quatre en parallèle, avec une
+  reprise courte : VIIRS NOAA-20, NOAA-21, Suomi-NPP et MODIS. Il filtre ensuite
+  sur la bbox et convertit en GeoJSON.
 - Copernicus EFFIS expose un WFS MapServer. Le script y prend les polygones
   datés de la saison (`modis.ba.poly.season`) et le produit NRT
   (`effis.nrt.ba.poly`), et ajoute deux epochs (`ts`, `lu`) exploitables
@@ -183,7 +184,9 @@ l'artefact dispose donc d'une marge très large. La génération Python elle-mê
 n'utilise que la bibliothèque standard et dispose de 25 minutes dans le
 workflow. Les reprises bornées sur HTTP 429 protègent les requêtes Open-Meteo
 sans pouvoir bloquer le runner indéfiniment ; l'échec d'une seule grille fine
-ne bloque pas le rafraîchissement des incendies.
+ne bloque pas le rafraîchissement des incendies. Les quatre timeouts FIRMS
+s'exécutent en parallèle pour qu'une panne réseau globale échoue rapidement au
+lieu de monopoliser le runner pendant huit minutes.
 
 Deux points de vigilance propres aux workflows planifiés :
 

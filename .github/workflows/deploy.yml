@@ -23,16 +23,16 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      # La génération nationale prend quelques minutes : quatre flux FIRMS,
-      # trois requêtes EFFIS et les grilles Open-Meteo séquentielles. Les 25 min
-      # laissent une large marge aux reprises HTTP 429 et au WFS parfois lent.
+      # La génération nationale prend quelques minutes : quatre flux FIRMS
+      # parallèles, deux requêtes EFFIS et les grilles Open-Meteo séquentielles.
+      # Les 25 min laissent une large marge aux reprises HTTP 429 et au WFS lent.
       # Si une source indispensable reste indisponible, le script lève et le
       # job échoue ; une grille fine seule se dégrade vers le vent national.
       # Le site déjà en ligne reste intact plutôt que publier une carte vide.
       - name: Récupérer les données
-        run: python3 fetch_fires.py
+        run: python3 -u fetch_fires.py
         timeout-minutes: 25
 
       # Garde-fou : sans foyers, la page planterait au premier cran.
