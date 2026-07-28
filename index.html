@@ -111,6 +111,8 @@
                      border: 0; border-left: 1px solid #3a3f47; }
   #layers legend { padding: 0; color: var(--ink-dim); font-size: 11px; }
   #layers fieldset label { font-size: 11.5px; }
+  #layers label:has(input:disabled) { opacity: .45; cursor: default; }
+  #layers input:disabled { cursor: default; }
   /* EFFIS ne publie qu'un etat de chaque polygone : hors du cran le plus
      recent les surfaces sont masquees, et l'interface doit le dire */
   #layers .hint { display: none; margin-top: 7px; max-width: 186px;
@@ -168,15 +170,49 @@
           cursor: pointer; font-size: 13px; }
   #play:hover { background: #2c313a; }
 
-  /* la reglette et ses crans : un cran = une mise a jour d'une source */
+  /* La reglette et l'intensite des passages satellite. Chaque barre est placee
+     a la date du passage et sa hauteur suit le nombre de foyers detectes. */
   #track { flex: 1; min-width: 0; }
-  /* les crans au-dessus de la reglette, sinon le remplissage de celle-ci les masque */
-  #ticks { position: relative; height: 10px; margin: 0 9px 1px; pointer-events: none; }
-  #ticks b { position: absolute; bottom: 0; width: 1.5px; height: 6px;
-             margin-left: -.75px; background: #6f747d; border-radius: 1px; }
-  #ticks b.effis { height: 10px; width: 2px; margin-left: -1px; background: #c98b5e; }
-  /* les crans a venir : plus rien n'y est observe, seul le vent est prevu */
-  #ticks b.wind { height: 4px; background: var(--wind); opacity: .5; }
+  #activity { position: relative; height: 22px; margin: 0 9px 1px;
+              border-bottom: 1px solid #454a52; cursor: pointer; }
+  #activity:focus-visible { outline: 2px solid var(--front); outline-offset: 3px; }
+  #activity b { position: absolute; bottom: 0; width: 3px; min-height: 2px;
+                margin-left: -1.5px; background: var(--hot);
+                border-radius: 2px 2px 0 0; opacity: .82; }
+  #activity-tip { position: fixed; z-index: 510; display: none; pointer-events: none;
+                  min-width: 155px; padding: 8px 10px; border: 1px solid #3b4048;
+                  border-radius: 8px; background: rgba(18,21,25,.97); color: var(--ink);
+                  box-shadow: 0 5px 18px rgba(0,0,0,.28); font-size: 11px; line-height: 1.4; }
+  #activity-tip.open { display: block; }
+  #activity-tip strong, #activity-tip span { display: block; }
+  #activity-tip span { color: var(--ink-dim); }
+
+  #activity-panel { display: none; }
+  #activity-panel.open { display: flex; flex-direction: column; }
+  #activity-panel header { display: flex; align-items: center; justify-content: space-between;
+                           gap: 12px; padding-bottom: 11px;
+                           border-bottom: 1px solid #343941; }
+  #activity-panel h2 { margin: 0; font-size: 16px; }
+  #activity-panel-close { background: #21252b; color: var(--ink); border: 1px solid #363b43;
+                          border-radius: 8px; flex: none; width: 34px; height: 34px;
+                          cursor: pointer; padding: 0; font: 400 23px/1 system-ui, sans-serif; }
+  #activity-panel-close:hover { background: #2c313a; }
+  #activity-scope { margin: 12px 0 8px; color: var(--ink-dim); font-size: 12px; }
+  #activity-large { position: relative; flex: none; height: 250px;
+                    border-bottom: 1px solid #454a52; cursor: crosshair; }
+  #activity-large b { position: absolute; bottom: 0; width: 4px; min-height: 3px;
+                      margin-left: -2px; background: var(--hot);
+                      border-radius: 3px 3px 0 0; opacity: .82; }
+  #activity-large b:hover, #activity-large b.selected {
+    background: var(--front); opacity: 1 !important;
+  }
+  #activity-empty { position: absolute; inset: 0; display: grid; place-items: center;
+                    color: var(--ink-dim); font-size: 12px; }
+  #activity-detail { min-height: 52px; margin-top: 13px; padding: 11px 13px;
+                     border-radius: 9px; background: rgba(255,255,255,.045);
+                     font-size: 13px; line-height: 1.45; }
+  #activity-detail strong, #activity-detail span { display: block; }
+  #activity-detail span { color: var(--ink-dim); font-size: 12px; }
   #slider { width: 100%; margin: 0; accent-color: var(--hot); height: 24px; display: block; }
   #updates-btn { background: #21252b; color: var(--ink); border: 1px solid #363b43;
                  border-radius: 8px; flex: none; width: 34px; height: 34px;
@@ -259,6 +295,8 @@
                      width: 350px; max-height: min(570px, calc(100vh - 120px));
                      padding: 15px 17px; }
     #updates-list { max-height: min(470px, calc(100vh - 220px)); }
+    #activity-panel { position: fixed; z-index: 503; top: 88px; right: 14px;
+                      width: min(450px, calc(100vw - 28px)); padding: 17px 19px; }
   }
 
   /* =======================  MOBILE  ======================== */
@@ -272,7 +310,7 @@
                  overflow-x: auto; scrollbar-width: none; }
     #incidents::-webkit-scrollbar { display: none; }
     #incidents button { flex: none; max-width: 220px; font-size: 11px; }
-    #incidents.layers-open, #incidents.credits-open { display: none; }
+    #incidents.layers-open, #incidents.credits-open, #incidents.activity-open { display: none; }
 
     /* les calques repliés derrière un bouton : sur 375 px de large, le panneau
        ouvert en permanence mangeait le quart supérieur de l'écran */
@@ -333,6 +371,12 @@
     #updates-list time { font-size: 12px; }
     #updates-list strong { font-size: 13px; }
     #updates-list span { font-size: 12px; }
+    #activity-panel { position: fixed; z-index: 504; top: 60px; right: 10px;
+                      bottom: 10px; left: 10px; padding: 18px; }
+    #activity-panel h2 { font-size: 17px; }
+    #activity-panel-close { width: 38px; height: 38px; font-size: 25px; }
+    #activity-large { flex: 1; min-height: 220px; height: auto; }
+    #activity-large b { width: 5px; margin-left: -2.5px; }
   }
 
   @media (max-width: 360px) {
@@ -403,6 +447,13 @@
     <label><input type="checkbox" class="ck-source" value="VIIRS/S-NPP" checked> VIIRS/S-NPP</label>
     <label><input type="checkbox" class="ck-source" value="MODIS" checked> MODIS</label>
   </fieldset>
+  <fieldset id="activity-metric">
+    <legend>Métrique des graphiques</legend>
+    <label><input type="radio" name="activity-metric" value="count"> nombre de foyers</label>
+    <label title="Somme de la puissance radiative instantanée des pixels détectés">
+      <input type="radio" name="activity-metric" value="frp" checked> puissance radiative (MW)
+    </label>
+  </fieldset>
   <label class="ba"><input type="checkbox" id="ck-dated" checked> surfaces brûlées (datées)</label>
   <label class="ba"><input type="checkbox" id="ck-nrt" checked> surfaces brûlées (NRT)</label>
   <label><input type="checkbox" id="ck-wind" checked> vent à 10 m</label>
@@ -434,7 +485,9 @@
     <div id="timerow">
       <button id="play" aria-label="Lancer l'animation">▶</button>
       <div id="track">
-        <div id="ticks"></div>
+        <div id="activity" role="button" tabindex="0" aria-haspopup="dialog"
+             aria-controls="activity-panel"
+             aria-label="Ouvrir le graphique d'intensité des foyers détectés"></div>
         <input id="slider" type="range" min="0" max="0" step="1" value="0"
                aria-label="Mise à jour affichée">
       </div>
@@ -463,12 +516,25 @@
     Fond : ortho-photo <a href="https://geoservices.ign.fr/" target="_blank" rel="noopener">IGN-F/Géoplateforme</a>,
     hors France <a href="https://s2maps.eu" target="_blank" rel="noopener">Sentinel-2 cloudless</a> par EOX
     (données Copernicus Sentinel modifiées 2020) ;
-    toponymes <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a> /
+    toponymes <a href="https://openfreemap.org/" target="_blank" rel="noopener">OpenFreeMap</a> /
+    <a href="https://openmaptiles.org/" target="_blank" rel="noopener">OpenMapTiles</a> /
     <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>.
     Rendu <a href="https://maplibre.org/" target="_blank" rel="noopener">MapLibre GL</a>.
     <span id="updated"></span>
   </div>
 </div>
+
+<div id="activity-tip" role="tooltip"></div>
+<aside id="activity-panel" class="glass" role="dialog" aria-labelledby="activity-title">
+  <header>
+    <h2 id="activity-title">Intensité des détections</h2>
+    <button id="activity-panel-close" aria-label="Fermer">×</button>
+  </header>
+  <p id="activity-scope"></p>
+  <div id="activity-large" role="img"
+       aria-label="Nombre de foyers détectés à chaque passage satellite"></div>
+  <div id="activity-detail" aria-live="polite"></div>
+</aside>
 
 <script>
 const MOBILE = matchMedia('(max-width: 720px)').matches;
@@ -510,6 +576,20 @@ const AGE_SIZE = [
   [24 * H, MOBILE ? 3.0 : 3.3], [72 * H, MOBILE ? 2.5 : 2.7],
   [MAX_AGE, MOBILE ? 2.1 : 2.2],
 ];
+// La FRP ne remplace pas l'ancienneté : elle module seulement le rayon. La
+// médiane observée tourne autour de 7 MW ; même les 1 % de pixels les plus
+// puissants restent bornés à environ 1,5 fois le rayon normal.
+const FRP_DETAIL_SIZE = ['case', ['has', 'frp'],
+  ['interpolate', ['linear'], ['get', 'frp'],
+    0, .84, 2, .91, 7, 1, 20, 1.08, 60, 1.18,
+    150, 1.29, 400, 1.40, 1200, 1.50],
+  1];
+// L'aperçu porte déjà un facteur de taille lié au nombre de détections de la
+// cellule. Sa FRP totale reçoit donc une modulation encore plus contenue.
+const FRP_OVERVIEW_SIZE = ['case', ['has', 'frp'],
+  ['interpolate', ['linear'], ['get', 'frp'],
+    0, .90, 100, 1, 500, 1.08, 2000, 1.17, 10000, 1.28, 25000, 1.36],
+  1];
 const AGE_OPACITY = [
   [0, 1], [6 * H, .95], [24 * H, .82], [72 * H, .6],
   [MAX_AGE - 12 * H, .45], [MAX_AGE, 0],   // le dernier cran est l'extinction
@@ -568,6 +648,15 @@ const ZOOM_SCALE = MOBILE ? [[5, .28], [8, .50], [11, .85], [14, 1.35]]
 // Le test sert plus bas à ne pas recadrer sur la France par-dessus un lien
 // partagé qui porte déjà une caméra.
 const HAS_MAP_HASH = /^#map=/.test(location.hash);
+// OpenMapTiles expose les traductions sous la forme `name_fr`. Le nom local
+// reste le meilleur repli lorsqu'une traduction française n'existe pas.
+const LABEL_FR = ['coalesce', ['get', 'name_fr'], ['get', 'name'], ['get', 'name_en']];
+const LABEL_PAINT = {
+  'text-color': '#dce1e5',
+  'text-halo-color': 'rgba(10,12,15,.88)',
+  'text-halo-width': 1.5,
+  'text-halo-blur': .4,
+};
 const map = new maplibregl.Map({
   container: 'map',
   attributionControl: false,
@@ -575,6 +664,7 @@ const map = new maplibregl.Map({
   center: [2.2, 46.5], zoom: 5,
   style: {
     version: 8,
+    glyphs: 'https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf',
     sources: {
       // Base mondiale : mosaïque Sentinel-2 sans nuages (10 m), libre et sans clé.
       sat: {
@@ -590,16 +680,89 @@ const map = new maplibregl.Map({
               + '&LAYER=ORTHOIMAGERY.ORTHOPHOTOS&STYLE=normal&TILEMATRIXSET=PM'
               + '&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&FORMAT=image/jpeg'],
       },
-      labels: {
-        type: 'raster', tileSize: 256, maxzoom: 19,
-        tiles: ['a', 'b', 'c', 'd'].map(s =>
-          `https://${s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}${devicePixelRatio > 1 ? '@2x' : ''}.png`),
-      },
+      // Libellés vectoriels : contrairement aux anciennes tuiles raster CARTO,
+      // leur langue peut être choisie côté client.
+      toponyms: { type: 'vector', url: 'https://tiles.openfreemap.org/planet' },
     },
     layers: [
       { id: 'sat', type: 'raster', source: 'sat' },
       { id: 'ortho', type: 'raster', source: 'ortho' },
-      { id: 'labels', type: 'raster', source: 'labels', paint: { 'raster-opacity': .85 } },
+      { id: 'label-water-point', type: 'symbol', source: 'toponyms', 'source-layer': 'water_name',
+        filter: ['match', ['geometry-type'], ['Point', 'MultiPoint'], true, false],
+        layout: {
+          'text-field': LABEL_FR, 'text-font': ['Noto Sans Italic'],
+          'text-size': ['interpolate', ['linear'], ['zoom'], 4, 10, 10, 14],
+          'text-letter-spacing': .12, 'text-max-width': 7,
+        },
+        paint: { ...LABEL_PAINT, 'text-color': '#b9d8ef' } },
+      { id: 'label-water-line', type: 'symbol', source: 'toponyms', 'source-layer': 'water_name',
+        filter: ['match', ['geometry-type'], ['LineString', 'MultiLineString'], true, false],
+        layout: {
+          'symbol-placement': 'line', 'symbol-spacing': 350,
+          'text-field': LABEL_FR, 'text-font': ['Noto Sans Italic'],
+          'text-size': 13, 'text-letter-spacing': .12,
+        },
+        paint: { ...LABEL_PAINT, 'text-color': '#b9d8ef' } },
+      { id: 'label-country', type: 'symbol', source: 'toponyms', 'source-layer': 'place',
+        minzoom: 2, maxzoom: 8, filter: ['==', ['get', 'class'], 'country'],
+        layout: {
+          'text-field': LABEL_FR, 'text-font': ['Noto Sans Bold'],
+          'text-size': ['interpolate', ['linear'], ['zoom'], 2, 10, 6, 17],
+          'text-letter-spacing': .12, 'text-transform': 'uppercase', 'text-max-width': 7,
+        },
+        paint: LABEL_PAINT },
+      { id: 'label-state', type: 'symbol', source: 'toponyms', 'source-layer': 'place',
+        minzoom: 4, maxzoom: 9, filter: ['==', ['get', 'class'], 'state'],
+        layout: {
+          'text-field': LABEL_FR, 'text-font': ['Noto Sans Italic'],
+          'text-size': ['interpolate', ['linear'], ['zoom'], 4, 9, 8, 14],
+          'text-letter-spacing': .16, 'text-transform': 'uppercase', 'text-max-width': 9,
+        },
+        paint: { ...LABEL_PAINT, 'text-color': '#b9c0c6' } },
+      { id: 'label-city', type: 'symbol', source: 'toponyms', 'source-layer': 'place',
+        minzoom: 3, filter: ['==', ['get', 'class'], 'city'],
+        layout: {
+          'text-field': LABEL_FR, 'text-font': ['Noto Sans Bold'],
+          'text-size': ['interpolate', ['exponential', 1.2], ['zoom'], 4, 11, 8, 16, 12, 20],
+          'text-max-width': 8,
+        },
+        paint: LABEL_PAINT },
+      { id: 'label-town', type: 'symbol', source: 'toponyms', 'source-layer': 'place',
+        minzoom: 6, filter: ['==', ['get', 'class'], 'town'],
+        layout: {
+          'text-field': LABEL_FR, 'text-font': ['Noto Sans Regular'],
+          'text-size': ['interpolate', ['linear'], ['zoom'], 6, 10, 11, 14],
+          'text-max-width': 8,
+        },
+        paint: LABEL_PAINT },
+      { id: 'label-village', type: 'symbol', source: 'toponyms', 'source-layer': 'place',
+        minzoom: 9, filter: ['==', ['get', 'class'], 'village'],
+        layout: {
+          'text-field': LABEL_FR, 'text-font': ['Noto Sans Regular'],
+          'text-size': ['interpolate', ['linear'], ['zoom'], 9, 10, 13, 13],
+          'text-max-width': 8,
+        },
+        paint: LABEL_PAINT },
+      { id: 'label-local', type: 'symbol', source: 'toponyms', 'source-layer': 'place',
+        minzoom: 10,
+        filter: ['match', ['get', 'class'],
+          ['suburb', 'quarter', 'neighbourhood', 'hamlet', 'isolated_dwelling'], true, false],
+        layout: {
+          'text-field': LABEL_FR, 'text-font': ['Noto Sans Regular'],
+          'text-size': ['interpolate', ['linear'], ['zoom'], 10, 9, 15, 12],
+          'text-max-width': 8,
+        },
+        paint: { ...LABEL_PAINT, 'text-color': '#c3c9ce' } },
+      { id: 'label-road', type: 'symbol', source: 'toponyms',
+        'source-layer': 'transportation_name', minzoom: 12,
+        filter: ['match', ['geometry-type'], ['LineString', 'MultiLineString'], true, false],
+        layout: {
+          'symbol-placement': 'line', 'symbol-spacing': 300,
+          'text-field': LABEL_FR, 'text-font': ['Noto Sans Regular'],
+          'text-size': ['interpolate', ['linear'], ['zoom'], 12, 10, 16, 13],
+          'text-rotation-alignment': 'map',
+        },
+        paint: { ...LABEL_PAINT, 'text-color': '#c9ced2', 'text-halo-width': 1.2 } },
     ],
   },
 });
@@ -612,6 +775,7 @@ document.getElementById('cr-btn').addEventListener('click', e => {
   document.getElementById('incidents').classList.toggle('credits-open', open);
   if (open) {
     setUpdatesOpen(false);
+    setActivityOpen(false);
     document.getElementById('layers').classList.remove('open');
     document.getElementById('layers-btn').setAttribute('aria-expanded', 'false');
     document.getElementById('incidents').classList.remove('layers-open');
@@ -624,6 +788,7 @@ document.getElementById('layers-btn').addEventListener('click', e => {
   document.getElementById('incidents').classList.toggle('layers-open', open);
   if (open) {
     setUpdatesOpen(false);
+    setActivityOpen(false);
     document.getElementById('credits').classList.remove('open');
     document.getElementById('cr-btn').setAttribute('aria-expanded', 'false');
     document.getElementById('incidents').classList.remove('credits-open');
@@ -631,7 +796,13 @@ document.getElementById('layers-btn').addEventListener('click', e => {
 });
 
 const slider  = document.getElementById('slider');
-const ticksEl = document.getElementById('ticks');
+const activityEl = document.getElementById('activity');
+const activityTip = document.getElementById('activity-tip');
+const activityPanel = document.getElementById('activity-panel');
+const activityLarge = document.getElementById('activity-large');
+const activityDetail = document.getElementById('activity-detail');
+const activityMetricInputs = [...document.querySelectorAll('input[name="activity-metric"]')];
+const powerMetricInput = activityMetricInputs.find(input => input.value === 'frp');
 const clockEl = document.getElementById('clock');
 const updatesPanel = document.getElementById('updates-panel');
 const updatesBtn = document.getElementById('updates-btn');
@@ -640,6 +811,8 @@ function setUpdatesOpen(open) {
   updatesPanel.classList.toggle('open', open);
   updatesBtn.setAttribute('aria-expanded', open);
   if (open) {
+    activityPanel.classList.remove('open');
+    document.getElementById('incidents').classList.remove('activity-open');
     document.getElementById('credits').classList.remove('open');
     document.getElementById('cr-btn').setAttribute('aria-expanded', 'false');
     document.getElementById('layers').classList.remove('open');
@@ -649,7 +822,33 @@ function setUpdatesOpen(open) {
 }
 updatesBtn.addEventListener('click', () => setUpdatesOpen(!updatesPanel.classList.contains('open')));
 document.getElementById('updates-close').addEventListener('click', () => setUpdatesOpen(false));
-addEventListener('keydown', event => { if (event.key === 'Escape') setUpdatesOpen(false); });
+
+function setActivityOpen(open, selected = null) {
+  const wasOpen = activityPanel.classList.contains('open');
+  activityPanel.classList.toggle('open', open);
+  document.getElementById('incidents').classList.toggle('activity-open', open);
+  activityTip.classList.remove('open');
+  if (open) {
+    updatesPanel.classList.remove('open');
+    updatesBtn.setAttribute('aria-expanded', 'false');
+    document.getElementById('credits').classList.remove('open');
+    document.getElementById('cr-btn').setAttribute('aria-expanded', 'false');
+    document.getElementById('layers').classList.remove('open');
+    document.getElementById('layers-btn').setAttribute('aria-expanded', 'false');
+    document.getElementById('incidents').classList.remove('credits-open', 'layers-open');
+    drawLargeActivity(selected);
+    document.getElementById('activity-panel-close').focus();
+  } else if (wasOpen) {
+    activityEl.focus({ preventScroll: true });
+  }
+}
+document.getElementById('activity-panel-close').addEventListener('click', () => setActivityOpen(false));
+addEventListener('keydown', event => {
+  if (event.key === 'Escape') {
+    setUpdatesOpen(false);
+    if (activityPanel.classList.contains('open')) setActivityOpen(false);
+  }
+});
 
 const fmt = ts => new Date(ts * 1000).toLocaleString('fr-FR',
   { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Paris' });
@@ -730,6 +929,7 @@ function applyHotspots() {
   // faut leur appliquer la même sélection de sources que celle des points.
   MAJOR.bucket = null;
   if (steps.length) updateMajorFires(curTs);
+  drawActivity();
 }
 
 /* =====================================================================
@@ -977,12 +1177,26 @@ function buildSteps(hs, dated) {
 
   // un passage satellite = une rafale de détections en quelques minutes
   const GAP = 25 * 60;
-  let cur = null;
+  const currentBySource = new Map();
   for (const f of hs.features) {          // deja trie par date
     const p = f.properties;
-    if (cur && p.ts - cur.ts <= GAP) { cur.n++; continue; }
-    cur = { ts: p.ts, kind: 'sat', label: p.source, n: 1 };
+    let cur = currentBySource.get(p.source);
+    if (cur && p.ts - cur.last <= GAP) {
+      cur.n++;
+      cur.frp += +p.frp || 0;
+      cur.last = p.ts;
+      continue;
+    }
+    cur = {
+      ts: p.ts, last: p.ts, kind: 'sat', label: p.source,
+      n: 1, frp: +p.frp || 0,
+    };
+    currentBySource.set(p.source, cur);
     out.push(cur);
+  }
+  for (const step of out) {
+    delete step.last;
+    step.frp = Math.round(step.frp * 100) / 100;
   }
 
   // Chaque publication EFFIS d'un polygone, mais seulement dans la fenêtre
@@ -1088,11 +1302,198 @@ function unease(y) {
   return (lo + hi) / 2;
 }
 
-function drawTicks() {
-  const t0 = steps[0].ts, span = steps[steps.length - 1].ts - t0 || 1;
-  ticksEl.innerHTML = steps.map(s =>
-    `<b class="${s.kind}" style="left:${((s.ts - t0) / span * 100).toFixed(3)}%"></b>`).join('');
+/* La frise n'est nationale que lorsque l'emprise de la carte contient
+ * réellement toute la bbox France. Un seuil de zoom ne suffit pas : à zoom
+ * égal, un téléphone montre beaucoup moins de territoire qu'un ordinateur.
+ * Dès qu'une partie du pays sort de l'écran, la frise suit donc l'emprise
+ * visible et les sources cochées.
+ *
+ * Les passages locaux sont reconstruits séparément pour chaque satellite :
+ * deux détections distantes de moins de 25 minutes appartiennent à la même
+ * orbite. C'est la même définition que celle de la timeline nationale. */
+function activityIsNational(bounds = map.getBounds()) {
+  if (Z.disabled || !Z.manifest) return true;
+  const box = Z.manifest.bbox;
+  return bounds.getWest() <= box[0] && bounds.getEast() >= box[2]
+    && bounds.getSouth() <= box[1] && bounds.getNorth() >= box[3];
 }
+
+function activityPassages() {
+  const enabled = source => shown.hotspots[source];
+  const bounds = map.getBounds();
+  if (activityIsNational(bounds))
+    return steps.filter(step => step.kind === 'sat' && enabled(step.label));
+
+  const inside = ([lon, lat]) =>
+    lon >= bounds.getWest() && lon <= bounds.getEast()
+    && lat >= bounds.getSouth() && lat <= bounds.getNorth();
+
+  // Sous le seuil de chargement des cellules détaillées, l'aperçu national
+  // contient déjà une somme par cellule de 0,25°, heure et satellite. On peut
+  // donc le découper spatialement sans télécharger toute la France.
+  if (map.getZoom() < Z.manifest.detail_zoom) {
+    const grouped = new Map();
+    for (const feature of MAJOR.overview) {
+      const p = feature.properties;
+      if (!enabled(p.source) || !inside(feature.geometry.coordinates)) continue;
+      const key = `${p.source}/${p.ts}`;
+      if (!grouped.has(key))
+        grouped.set(key, { ts: p.ts, kind: 'sat', label: p.source, n: 0, frp: 0 });
+      grouped.get(key).n += +p.n || 1;
+      grouped.get(key).frp += +p.frp || 0;
+    }
+    return [...grouped.values()].sort((a, b) => a.ts - b.ts);
+  }
+
+  const bySource = new Map(FIRMS_SOURCES.map(source => [source, []]));
+  for (const feature of Z.hotspots) {
+    const p = feature.properties, source = p.source;
+    if (enabled(source) && inside(feature.geometry.coordinates))
+      bySource.get(source)?.push({ ts: p.ts, frp: +p.frp || 0 });
+  }
+
+  const passages = [], gap = 25 * 60;
+  for (const [label, detections] of bySource) {
+    detections.sort((a, b) => a.ts - b.ts);
+    let current = null;
+    for (const detection of detections) {
+      if (current && detection.ts - current.last <= gap) {
+        current.n++;
+        current.frp += detection.frp;
+        current.last = detection.ts;
+      } else {
+        current = {
+          ts: detection.ts, last: detection.ts, kind: 'sat', label,
+          n: 1, frp: detection.frp,
+        };
+        passages.push(current);
+      }
+    }
+  }
+  return passages.sort((a, b) => a.ts - b.ts);
+}
+
+let activityMetric =
+  document.querySelector('input[name="activity-metric"]:checked')?.value || 'count';
+let renderedActivity = [], activityPeak = 1, activityT0 = 0, activitySpan = 1;
+
+const activityValue = step => activityMetric === 'frp' ? (+step.frp || 0) : step.n;
+const countLabel = n => `${n.toLocaleString('fr-FR')} foyer${n > 1 ? 's' : ''}`;
+const powerLabel = frp => `${frp.toLocaleString('fr-FR', {
+  maximumFractionDigits: frp < 100 ? 1 : 0,
+})} MW`;
+const primaryActivityLabel = step =>
+  activityMetric === 'frp' ? powerLabel(+step.frp || 0) : countLabel(step.n);
+const secondaryActivityLabel = step =>
+  activityMetric === 'frp' ? countLabel(step.n) : powerLabel(+step.frp || 0);
+const activityLabel = step =>
+  `${fmt(step.ts)} · ${primaryActivityLabel(step)} · ${secondaryActivityLabel(step)} · ${step.label}`;
+
+function showActivityDetail(index) {
+  const step = renderedActivity[index];
+  if (!step) return;
+  for (const bar of activityLarge.querySelectorAll('b.selected'))
+    bar.classList.remove('selected');
+  activityLarge.querySelector(`b[data-i="${index}"]`)?.classList.add('selected');
+  const strong = document.createElement('strong');
+  strong.textContent = primaryActivityLabel(step);
+  const meta = document.createElement('span');
+  meta.textContent = `${fmt(step.ts)} · ${step.label} · ${secondaryActivityLabel(step)}`;
+  activityDetail.replaceChildren(strong, meta);
+}
+
+function drawLargeActivity(selected = null) {
+  if (!activityPanel.classList.contains('open')) return;
+  document.getElementById('activity-scope').textContent =
+    activityEl.dataset.scope === 'local'
+      ? 'Passages dans la zone visible · échelle adaptée au pic local.'
+      : "Passages sur l'ensemble de la France.";
+  document.getElementById('activity-title').textContent =
+    activityMetric === 'frp' ? 'Puissance radiative détectée' : 'Nombre de foyers détectés';
+  activityLarge.setAttribute('aria-label',
+    `${renderedActivity.length} passages satellite — ${activityEl.getAttribute('aria-label')}`);
+
+  if (!renderedActivity.length) {
+    activityLarge.innerHTML = '<span id="activity-empty">Aucun foyer détecté dans cette zone.</span>';
+    activityDetail.replaceChildren();
+    return;
+  }
+  const panelPeak = Math.max(...renderedActivity.map(activityValue), 1);
+  activityLarge.innerHTML = renderedActivity.map((step, index) => {
+    const left = ((step.ts - activityT0) / activitySpan * 100).toFixed(3);
+    const value = activityValue(step);
+    const height = (100 * value / panelPeak).toFixed(2);
+    const opacity = (.42 + .5 * value / panelPeak).toFixed(2);
+    return `<b data-i="${index}" title="${activityLabel(step)}" `
+      + `style="left:${left}%;height:${height}%;min-height:${value ? 3 : 0}px;opacity:${opacity}"></b>`;
+  }).join('');
+  const fallback = renderedActivity.reduce(
+    (best, step, index) =>
+      activityValue(step) > activityValue(renderedActivity[best]) ? index : best, 0);
+  showActivityDetail(Number.isInteger(selected) ? selected : fallback);
+}
+
+function drawActivity() {
+  if (!steps.length) return;
+  const t0 = steps[0].ts, span = steps[steps.length - 1].ts - t0 || 1;
+  const passages = activityPassages();
+  // Échelle nationale fixe : zoomer ne transforme pas artificiellement un
+  // petit passage local en pic maximal.
+  const peak = Math.max(...steps.filter(s => s.kind === 'sat').map(activityValue), 1);
+  const local = !activityIsNational();
+  const scope = local ? 'dans la zone visible' : "sur l'ensemble de la France";
+  const metric = activityMetric === 'frp' ? 'puissance radiative' : 'nombre de foyers';
+  renderedActivity = passages;
+  activityPeak = peak;
+  activityT0 = t0;
+  activitySpan = span;
+  activityEl.dataset.scope = local ? 'local' : 'national';
+  activityEl.setAttribute('aria-label',
+    `Ouvrir le graphique de ${metric} ${scope}`);
+  activityEl.innerHTML = passages.map((s, index) => {
+    const left = ((s.ts - t0) / span * 100).toFixed(3);
+    const value = activityValue(s);
+    const height = value ? (2 + 20 * value / peak).toFixed(1) : 0;
+    const opacity = (.42 + .5 * value / peak).toFixed(2);
+    return `<b data-i="${index}" `
+      + `style="left:${left}%;height:${height}px;min-height:${value ? 2 : 0}px;opacity:${opacity}"></b>`;
+  }).join('');
+  drawLargeActivity();
+}
+
+if (!MOBILE) {
+  activityEl.addEventListener('pointermove', event => {
+    const bar = event.target.closest('b[data-i]');
+    if (!bar) { activityTip.classList.remove('open'); return; }
+    const step = renderedActivity[+bar.dataset.i];
+    if (!step) return;
+    activityTip.innerHTML = `<strong>${primaryActivityLabel(step)}</strong>`
+      + `<span>${fmt(step.ts)} · ${step.label}<br>${secondaryActivityLabel(step)}</span>`;
+    activityTip.classList.add('open');
+    const r = activityTip.getBoundingClientRect();
+    activityTip.style.left = `${Math.min(event.clientX + 12, innerWidth - r.width - 8)}px`;
+    activityTip.style.top = `${Math.max(event.clientY - r.height - 10, 8)}px`;
+  });
+  activityEl.addEventListener('pointerleave', () => activityTip.classList.remove('open'));
+}
+activityEl.addEventListener('click', event => {
+  const bar = event.target.closest('b[data-i]');
+  setActivityOpen(true, bar ? +bar.dataset.i : null);
+});
+activityEl.addEventListener('keydown', event => {
+  if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault();
+    setActivityOpen(true);
+  }
+});
+activityLarge.addEventListener('pointermove', event => {
+  const bar = event.target.closest('b[data-i]');
+  if (bar && event.pointerType !== 'touch') showActivityDetail(+bar.dataset.i);
+});
+activityLarge.addEventListener('click', event => {
+  const bar = event.target.closest('b[data-i]');
+  if (bar) showActivityDetail(+bar.dataset.i);
+});
 
 function formatUpdate(step) {
   if (step.kind === 'sat') return `${step.n.toLocaleString('fr-FR')} foyers détectés`;
@@ -1171,14 +1572,15 @@ function show(ts) {
     APPEAR, land * k,
     ...rampAfter(AGE_SIZE, APPEAR, k)];
   const detailRadius = ['interpolate', ['linear'], ['zoom'],
-    ...ZOOM_SCALE.flatMap(([z, k]) => [z, radiiAt(k)])];
+    ...ZOOM_SCALE.flatMap(([z, k]) => [z, ['*', radiiAt(k), FRP_DETAIL_SIZE]])];
   if (map.getLayer('hotspots')) map.setPaintProperty('hotspots', 'circle-radius', detailRadius);
   if (map.getLayer('hotspots-overview')) {
     const countScale = ['interpolate', ['linear'], ['get', 'n'],
       1, 1, 10, 1.7, 100, 3.1, 1000, 5.2];
     map.setPaintProperty('hotspots-overview', 'circle-radius',
       ['interpolate', ['linear'], ['zoom'],
-        ...ZOOM_SCALE.flatMap(([z, k]) => [z, ['*', radiiAt(k), countScale]])]);
+        ...ZOOM_SCALE.flatMap(([z, k]) => [z,
+          ['*', ['*', radiiAt(k), countScale], FRP_OVERVIEW_SIZE]])]);
   }
   // et la mort : plutôt que de disparaître net à MAX_AGE, le point s'efface sur
   // les dernières heures — la coupure ne tombe plus que sur du vide
@@ -1391,7 +1793,7 @@ function updateMajorFires(now) {
  * les octets des cellules visitees sans laisser leurs gros objets JS en vie. */
 const Z = {
   manifest: null, available: new Set(), cache: new Map(), visible: new Set(),
-  token: 0, disabled: false,
+  hotspots: [], token: 0, disabled: false,
 };
 const signed = value => `${value >= 0 ? '+' : '-'}${String(Math.abs(value)).padStart(2, '0')}`;
 const zoneId = (x, y) => `x${signed(x)}_y${signed(y)}`;
@@ -1447,11 +1849,13 @@ async function loadVisibleZones() {
   Z.visible = new Set(ids);
   if (!ids.length) {
     document.body.classList.remove('loading-detail');
+    Z.hotspots = [];
     map.getSource('hs').setData(EMPTY);
     map.getSource('dated').setData(EMPTY);
     map.getSource('nrt').setData(EMPTY);
     W.tiles = new Map();
     windTime(W.ts, true);
+    drawActivity();
     return;
   }
 
@@ -1459,19 +1863,24 @@ async function loadVisibleZones() {
   try {
     const zones = await Promise.all(ids.map(loadZone));
     if (token !== Z.token) return;
-    map.getSource('hs').setData(mergedZones(zones, 'hotspots', false));
+    const hotspots = mergedZones(zones, 'hotspots', false);
+    Z.hotspots = hotspots.features;
+    map.getSource('hs').setData(hotspots);
     map.getSource('dated').setData(mergedZones(zones, 'burnt_dated', true));
     map.getSource('nrt').setData(mergedZones(zones, 'burnt_nrt', true));
     W.tiles = new Map(zones.map(zone => [zone.id, zone.wind]));
     windTime(W.ts, true);
     wctx.clearRect(0, 0, W.w, W.h);
+    drawActivity();
   } catch (error) {
     console.warn('Détail indisponible', error);
     if (token === Z.token) {
+      Z.hotspots = [];
       map.getSource('hs').setData(EMPTY);
       map.getSource('dated').setData(EMPTY);
       map.getSource('nrt').setData(EMPTY);
       W.tiles = new Map();
+      drawActivity();
     }
   } finally {
     if (token === Z.token) document.body.classList.remove('loading-detail');
@@ -1608,9 +2017,24 @@ async function init() {
     document.getElementById('ck-wind').closest('label').hidden = true;
     windKey.remove();
   }
-  if (!manifest.legacy) map.on('moveend', loadVisibleZones);
+  if (!manifest.legacy) {
+    map.on('moveend', loadVisibleZones);
+    // Une rotation ou un redimensionnement change l'emprise à zoom constant,
+    // particulièrement sur téléphone : la frise doit suivre la nouvelle vue.
+    map.on('resize', loadVisibleZones);
+  }
 
   steps = timeline;
+  const satelliteSteps = steps.filter(step => step.kind === 'sat');
+  const hasNationalFrp = satelliteSteps.length
+    && satelliteSteps.every(step => Number.isFinite(step.frp));
+  powerMetricInput.disabled = !hasNationalFrp;
+  if (!hasNationalFrp) {
+    powerMetricInput.closest('label').title =
+      'La puissance sera disponible après la prochaine actualisation des données.';
+    activityMetric = 'count';
+    activityMetricInputs.find(input => input.value === 'count').checked = true;
+  }
   MAJOR.overview = overview.features;
   MAJOR.places = recent.features.map(feature => ({
     center: geometryCenter(feature.geometry),
@@ -1624,7 +2048,7 @@ async function init() {
   slider.max = steps[steps.length - 1].ts;
   slider.step = 60;
   buildWarp();
-  drawTicks();
+  drawActivity();
   drawUpdates();
   lockWidths();
   // on ouvre sur le dernier état observé, pas sur le bout de la prévision
@@ -1718,6 +2142,11 @@ for (const check of sourceChecks) check.addEventListener('change', event => {
   shown.hotspots[event.target.value] = event.target.checked;
   syncHotspotsCheck();
   applyHotspots();
+});
+for (const input of activityMetricInputs) input.addEventListener('change', event => {
+  if (!event.target.checked) return;
+  activityMetric = event.target.value;
+  drawActivity();
 });
 document.getElementById('ck-wind').addEventListener('change', e => {
   W.on = e.target.checked; windLoop(); windBadge();

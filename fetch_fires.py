@@ -184,10 +184,14 @@ def aggregate_hotspots(hotspots):
                     "ts": key[2] * seconds,
                     "source": prop["source"],
                     "n": 0,
+                    "frp": 0,
                     "overview": 1,
                 },
             }
         groups[key]["properties"]["n"] += 1
+        groups[key]["properties"]["frp"] += prop["frp"]
+    for feature in groups.values():
+        feature["properties"]["frp"] = round(feature["properties"]["frp"], 2)
     features = sorted(groups.values(), key=lambda feature: feature["properties"]["ts"])
     return fc(features)
 
@@ -195,16 +199,17 @@ def aggregate_hotspots(hotspots):
 def build_timeline(hotspots, dated):
     """Passages nationaux exacts, independants des donnees detaillees chargees."""
     steps = []
-    current = None
+    current_by_source = {}
     gap = 25 * 60
     for feature in hotspots["features"]:
         prop = feature["properties"]
+        current = current_by_source.get(prop["source"])
         if (
             current
-            and prop["source"] == current["label"]
             and prop["ts"] - current["last"] <= gap
         ):
             current["n"] += 1
+            current["frp"] += prop["frp"]
             current["last"] = prop["ts"]
             continue
         current = {
@@ -213,7 +218,9 @@ def build_timeline(hotspots, dated):
             "kind": "sat",
             "label": prop["source"],
             "n": 1,
+            "frp": prop["frp"],
         }
+        current_by_source[prop["source"]] = current
         steps.append(current)
 
     first = steps[0]["ts"] if steps else 0
@@ -238,6 +245,8 @@ def build_timeline(hotspots, dated):
 
     for step in steps:
         step.pop("last", None)
+        if step["kind"] == "sat":
+            step["frp"] = round(step["frp"], 2)
     return sorted(steps, key=lambda step: step["ts"])
 
 

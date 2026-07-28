@@ -19,8 +19,12 @@ Un curseur temporel rejoue la progression du feu.
 
 Le menu **Calques** permet d'afficher ou masquer les foyers dans leur ensemble,
 ou séparément pour chacun des flux FIRMS (VIIRS/NOAA-20, VIIRS/NOAA-21,
-VIIRS/S-NPP et MODIS). Le bouton `i` à droite de la frise ouvre le journal des
-40 dernières mises à jour : heure, source et volume de données reçu.
+VIIRS/S-NPP et MODIS). Il permet aussi de choisir la métrique des graphiques :
+nombre de foyers ou, par défaut, somme de leur puissance radiative instantanée
+(FRP, en MW). Sur la carte, la FRP module légèrement la taille de chaque point ;
+l'ancienneté reste le facteur visuel principal.
+Le bouton `i` à droite de la frise ouvre le journal des 40 dernières mises à
+jour : heure, source et volume de données reçu.
 
 Sur la vue nationale, les détections des dernières 24 heures sont regroupées
 spatialement. Un groupe reçoit un halo et un raccourci lorsqu'il compte au
@@ -71,10 +75,12 @@ VIIRS et MODIS ne voient la zone que lors d'un passage orbital (environ 6 par
 jour pour VIIRS, à heures irrégulières), et EFFIS ne republie ses polygones
 qu'une à deux fois par jour. Entre deux passages, il ne se passe littéralement
 rien dans les données. La frise nationale regroupe les détections par satellite
-et par passage : traits gris pour FIRMS, traits ocres plus hauts pour EFFIS.
+et par passage. Une barre orange par passage représente, au choix, le nombre de
+foyers ou leur puissance radiative totale. Dès que toute la France ne tient plus
+à l'écran, ce graphique est recalculé sur la seule emprise visible.
 
-Ces mises à jour restent visibles comme telles dans les traits de la frise et
-dans le journal ouvert par le bouton `i`.
+Les mises à jour EFFIS restent consultables dans le journal ouvert par le bouton
+`i`, sans être mélangées à cette mesure d'intensité FIRMS.
 L'horodatage complet flotte au-dessus pour préserver toute la largeur utile du
 curseur, qui **balaie le temps en continu**. La version précédente sautait d'un
 cran au suivant : chaque saut avançait l'horloge de deux à trois heures d'un
@@ -106,7 +112,8 @@ l'écran alors qu'on n'en sait rien. Désactivé pour l'instant : la constante
 
 À l'ouverture, la page ne télécharge qu'environ 230 ko compressés :
 
-- foyers FIRMS regroupés par cellule de 0,25°, heure et satellite ;
+- foyers FIRMS regroupés par cellule de 0,25°, heure et satellite, avec leur
+  nombre et leur FRP totale ;
 - périmètres EFFIS français des sept derniers jours ;
 - vent national 15 × 15 ;
 - manifest et frise nationale.

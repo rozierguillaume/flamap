@@ -48,6 +48,7 @@ jobs:
           import json, pathlib, sys
           manifest = json.load(open('data/manifest.json'))
           timeline = json.load(open('data/timeline.json'))
+          overview = json.load(open('data/overview_hotspots.geojson'))
           zone_paths = list(pathlib.Path('data/zones').glob('*.json'))
           expected = {f"{zone_id}.json" for zone_id in manifest['zones']}
           actual = {path.name for path in zone_paths}
@@ -55,6 +56,12 @@ jobs:
                 f"polygones datés, {len(zone_paths)} zones")
           if not manifest['hotspot_count'] or not timeline or actual != expected:
               sys.exit("export national incomplet, déploiement annulé")
+          passages = [step for step in timeline if step['kind'] == 'sat']
+          if (not passages
+              or any(not isinstance(step.get('frp'), (int, float)) for step in passages)
+              or any(not isinstance(feature['properties'].get('frp'), (int, float))
+                     for feature in overview['features'])):
+              sys.exit("puissance radiative FIRMS absente des agrégats")
           fine = set(manifest['fine_wind_zones'])
           for path in zone_paths:
               zone = json.load(open(path))
