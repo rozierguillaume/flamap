@@ -7,12 +7,14 @@ navigateur charge progressivement selon le zoom.
 
 ## Ce que la carte montre
 
-Trois états du terrain plus le vent, superposés sur un fond satellite :
+Trois états du terrain, le vent et une simulation de fumée, superposés sur un
+fond satellite :
 
 | Couche | Source | Rendu |
 |---|---|---|
 | **Terre brûlée** | polygones Copernicus EFFIS | aplat sombre |
 | **Foyers** | détections FIRMS des 5 derniers jours | échelle continue, du jaune clair au brun |
+| **Fumée simulée** | foyers FIRMS récents + vent AROME HD | panaches diffus qui suivent le champ de vent |
 | **Vent à 10 m** | modèle AROME HD via Open-Meteo | nappe de particules blanches |
 
 Un curseur temporel rejoue la progression du feu.
@@ -23,6 +25,9 @@ VIIRS/S-NPP et MODIS). Il permet aussi de choisir la métrique des graphiques :
 nombre de foyers ou, par défaut, somme de leur puissance radiative instantanée
 (FRP, en MW). Sur la carte, la FRP module légèrement la taille de chaque point ;
 l'ancienneté reste le facteur visuel principal.
+La fumée peut elle aussi être masquée dans **Calques**. Elle est indicative :
+ce n'est ni une observation satellite de fumée ni une mesure de qualité de
+l'air.
 Le bouton `i` à droite de la frise ouvre le journal des 40 dernières mises à
 jour : heure, source et volume de données reçu.
 
@@ -172,6 +177,16 @@ particules (550 sur téléphone) advectées par le champ interpolé, et une tra�
 obtenue en retirant chaque frame un peu d'alpha à ce qui est déjà dessiné. La
 vitesse rendue est **relative** — à z8 un vent de 10 m/s vaut 0,02 px/s au sol,
 soit une nappe parfaitement immobile.
+
+La fumée occupe un second `<canvas>`. Les foyers jaunes des six dernières heures
+émettent des bouffées en fonction de leur FRP et du nombre de pixels détectés,
+sans concentrer tout le panache sur le seul maximum. Chaque bouffée conserve une
+position géographique, interroge le vent interpolé après chaque déplacement,
+s'élargit et disparaît progressivement en six heures environ. Elle peut donc
+changer de direction en traversant une autre zone de vent et reste continue
+pendant un zoom. En lecture, émission, déplacement et vieillissement suivent le
+temps accéléré de la frise ; au dernier instant, ils continuent à vitesse
+visuelle accélérée même lorsque la frise est en pause.
 
 ## Déploiement
 
