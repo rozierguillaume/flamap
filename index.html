@@ -1153,9 +1153,9 @@ function renderIncidentButtons(features) {
     const { center, n, name, area, maxArea } = feature.properties;
     const button = document.createElement('button');
     button.type = 'button';
-    const metric = n >= MAJOR_MIN
-      ? `${n} foyers`
-      : `${Math.round(maxArea).toLocaleString('fr-FR')} ha`;
+    const metric = maxArea > 0
+      ? `${Math.round(maxArea).toLocaleString('fr-FR')} ha`
+      : `${n} foyers`;
     button.textContent = `${name ? name + ' · ' : ''}${metric}`;
     button.title = `${n} foyers détectés en 24 h`
       + `${area ? `, ${Math.round(area).toLocaleString('fr-FR')} ha EFFIS à proximité` : ''}`
@@ -1471,7 +1471,7 @@ async function init() {
   MAJOR.overview = overview.features;
   MAJOR.places = recent.features.map(feature => ({
     center: geometryCenter(feature.geometry),
-    name: feature.properties.COMMUNE || feature.properties.PROVINCE || '',
+    name: feature.properties.PROVINCE || feature.properties.COMMUNE || '',
     area: +feature.properties.AREA_HA || 0,
   })).filter(place => place.center && place.name);
   addForecast(W.data);

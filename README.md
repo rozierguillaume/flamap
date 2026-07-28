@@ -24,9 +24,11 @@ confirment encore une surface brûlée d'au moins 200 ha. Le voisinage EFFIS
 écarte notamment les anomalies thermiques industrielles et les groupes
 étrangers inclus dans le rectangle de collecte FIRMS. Il s'agit de seuils
 fixes, pas d'un classement limité à trois incendies. Cliquer sur un raccourci
-charge directement sa zone détaillée. La position et le zoom sont conservés
-dans le fragment `#map=` de l'URL, qui peut donc être copié pour partager
-exactement la vue courante.
+charge directement sa zone détaillée. Son libellé donne le département et, en
+priorité, la superficie du plus grand périmètre EFFIS voisin ; le nombre de
+foyers sert de repli si cette superficie manque. La position et le zoom sont
+conservés dans le fragment `#map=` de l'URL, qui peut donc être copié pour
+partager exactement la vue courante.
 
 ## Démarrage
 
