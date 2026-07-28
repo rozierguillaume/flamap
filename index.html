@@ -40,6 +40,7 @@
     --recent:     #b1341f;   /* brule il y a 24-72 h         */
     --hot:        #ff6b1a;   /* brule il y a 6-24 h          */
     --front:      #ffd84d;   /* front actif (< 6 h)          */
+    --wind:       #bfe3ff;   /* nappe de vent, seul bleu de la carte */
     --bg:         #0d0f12;
     --ink:        #e8e6e3;
     --ink-dim:    #a8a29c;
@@ -55,6 +56,13 @@
                font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
                -webkit-text-size-adjust: 100%; }
   #map { position: absolute; inset: 0; background: var(--bg); }
+  /* La nappe de vent est peinte a la main, au-dessus de la carte mais sous les
+     panneaux, et ne doit jamais intercepter un geste. `width`/`height` sont
+     explicites : un canvas est un element remplace, `inset: 0` ne l'etire pas —
+     il garderait sa taille intrinseque, et le code qui recopie clientWidth dans
+     l'attribut width l'agrandirait d'un facteur dpr a chaque appel. */
+  #wind { position: absolute; inset: 0; width: 100%; height: 100%;
+          z-index: 400; pointer-events: none; }
   .maplibregl-ctrl-attrib { display: none; }   /* credits en clair dans #credits */
 
   .glass {
@@ -75,6 +83,7 @@
             padding: 11px 14px; font-size: 12.5px; }
   #layers label { display: flex; align-items: center; gap: 8px; margin: 3px 0;
                   cursor: pointer; white-space: nowrap; }
+  #layers label[hidden] { display: none; }   /* `display:flex` gagnerait sinon */
   #layers input { accent-color: var(--hot); margin: 0; }
   /* EFFIS ne publie qu'un etat de chaque polygone : hors du cran le plus
      recent les surfaces sont masquees, et l'interface doit le dire */
@@ -82,7 +91,9 @@
                   white-space: normal; font-size: 11px; line-height: 1.35;
                   color: var(--ink-dim); }
   body.past #layers .hint { display: block; }
-  body.past #layers label { opacity: .45; }
+  /* seules les surfaces brulees s'effacent hors du cran le plus recent ;
+     le vent, lui, est connu a chaque instant de la frise */
+  body.past #layers label.ba { opacity: .45; }
   body.past #legend .burnt-key { opacity: .32; }
   #layers-btn { display: none; }   /* mobile uniquement, voir plus bas */
 
@@ -91,6 +102,12 @@
   #legend span { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
   #legend i { width: 12px; height: 12px; border-radius: 50%; flex: none; }
   #legend i.poly { border-radius: 3px; }
+
+  /* lecture du vent : la fleche pointe la ou le vent pousse */
+  #windkey { color: var(--wind); font-variant-numeric: tabular-nums; }
+  #windkey svg { width: 13px; height: 13px; flex: none;
+                 transform: rotate(var(--dir, 0deg)); transition: transform .35s ease; }
+  #windkey[hidden] { display: none; }
 
   #timerow { display: flex; align-items: center; gap: 12px; }
   #play { background: #21252b; color: var(--ink); border: 1px solid #363b43;
@@ -105,6 +122,8 @@
   #ticks b { position: absolute; bottom: 0; width: 1.5px; height: 6px;
              margin-left: -.75px; background: #6f747d; border-radius: 1px; }
   #ticks b.effis { height: 10px; width: 2px; margin-left: -1px; background: #c98b5e; }
+  /* les crans a venir : plus rien n'y est observe, seul le vent est prevu */
+  #ticks b.wind { height: 4px; background: var(--wind); opacity: .5; }
   #slider { width: 100%; margin: 0; accent-color: var(--hot); height: 24px; display: block; }
 
   #read { text-align: right; line-height: 1.25; white-space: nowrap; }
@@ -212,6 +231,7 @@
 <body>
 <div id="map" role="img"
      aria-label="Carte satellite des surfaces brûlées et des foyers d'incendie détectés"></div>
+<canvas id="wind" aria-hidden="true"></canvas>
 
 <div id="head" class="glass">
   <div class="brand">
@@ -227,7 +247,8 @@
   <p class="sr-only">Carte des incendies en quasi temps réel. Les foyers détectés
   par les satellites NASA FIRMS et les surfaces brûlées publiées par Copernicus
   EFFIS sont rafraîchis toutes les deux heures ; le curseur temporel rejoue la
-  progression du feu, d'une mise à jour satellite à la suivante.</p>
+  progression du feu, d'une mise à jour satellite à la suivante, avec le vent à
+  10 mètres donné par le modèle AROME de Météo-France.</p>
 </div>
 
 <noscript>
@@ -242,8 +263,9 @@
 
 <button id="layers-btn" class="glass" aria-label="Calques" aria-expanded="false">≡</button>
 <div id="layers" class="glass">
-  <label><input type="checkbox" id="ck-dated" checked> surfaces brûlées (datées)</label>
-  <label><input type="checkbox" id="ck-nrt" checked> surfaces brûlées (NRT)</label>
+  <label class="ba"><input type="checkbox" id="ck-dated" checked> surfaces brûlées (datées)</label>
+  <label class="ba"><input type="checkbox" id="ck-nrt" checked> surfaces brûlées (NRT)</label>
+  <label><input type="checkbox" id="ck-wind" checked> vent à 10 m</label>
   <div class="hint">Masquées : EFFIS ne publie que le contour le plus récent,
   pas son évolution. Ramenez le curseur à droite pour les revoir.</div>
 </div>
@@ -254,6 +276,12 @@
     <span><i style="background:var(--recent)"></i>brûlé il y a 24–72 h</span>
     <span><i style="background:var(--hot)"></i>brûlé il y a 6–24 h</span>
     <span><i style="background:var(--front)"></i>front actif (&lt; 6 h)</span>
+    <span id="windkey" hidden>
+      <svg viewBox="0 0 12 12" aria-hidden="true" focusable="false">
+        <path d="M6 .8 9.5 11.2 6 8.9 2.5 11.2Z" fill="currentColor"></path>
+      </svg>
+      <span id="windval">—</span>
+    </span>
   </div>
 
   <div id="timebar" class="glass">
@@ -277,6 +305,8 @@
     Foyers actifs : <a href="https://firms.modaps.eosdis.nasa.gov/" target="_blank" rel="noopener">NASA FIRMS</a>
     (VIIRS 375 m &amp; MODIS, LANCE/EOSDIS).
     Surfaces brûlées : <a href="https://forest-fire.emergency.copernicus.eu/" target="_blank" rel="noopener">Copernicus EFFIS</a>.
+    Vent à 10 m : modèle <a href="https://meteofrance.com/" target="_blank" rel="noopener">AROME HD</a>
+    de Météo-France, servi par <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a> (CC BY 4.0).
     Fond : ortho-photo <a href="https://geoservices.ign.fr/" target="_blank" rel="noopener">IGN-F/Géoplateforme</a>,
     hors France <a href="https://s2maps.eu" target="_blank" rel="noopener">Sentinel-2 cloudless</a> par EOX
     (données Copernicus Sentinel modifiées 2020) ;
@@ -366,6 +396,9 @@ const fmt = ts => new Date(ts * 1000).toLocaleString('fr-FR',
   { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Paris' });
 
 let steps = [], playing = null;
+// dernier cran réellement observé : au-delà, la frise n'est plus qu'une
+// prévision de vent et le feu reste figé dans cet état
+let lastObs = 0;
 
 /*
  * Surfaces brulees : EFFIS n'archive rien, le WFS ne renvoie que l'etat courant
@@ -383,6 +416,184 @@ function applyBurnt() {
   map.setLayoutProperty('burnt-fill', 'visibility', vis('dated'));
   map.setLayoutProperty('burnt-line', 'visibility', vis('dated'));
   map.setLayoutProperty('nrt-line', 'visibility', vis('nrt'));
+}
+
+/* =====================================================================
+ * VENT — nappe de particules advectées par le champ AROME HD
+ *
+ * `data/wind.json` porte une grille régulière (nx × ny points sur une bbox plus
+ * large que celle du feu, pour que la nappe ne s'arrête pas net sur les bords) et,
+ * pour chaque heure, les composantes est/nord du vent à 10 m en m/s. On tire
+ * quelques milliers de particules au hasard sur l'écran, on les déplace le long
+ * du champ interpolé, et on laisse derrière elles une traînée qui s'estompe.
+ *
+ * Deux détails valent d'être notés :
+ *  - les composantes u/v plutôt que vitesse + azimut : interpoler des angles
+ *    qui bouclent à 360° donnerait des girouettes folles entre deux mailles ;
+ *  - l'écran, pas le sol : à z8 un vent de 10 m/s vaut 0,02 px/s, invisible. La
+ *    vitesse rendue est donc relative — comparable d'un point à l'autre, mais
+ *    ce n'est pas une distance parcourue au sol.
+ * ===================================================================== */
+
+const windCv  = document.getElementById('wind');
+const wctx    = windCv.getContext('2d');
+const windKey = document.getElementById('windkey');
+const windVal = document.getElementById('windval');
+
+const WIND_K    = 5;                    // px/s pour 1 m/s de vent
+const WIND_N    = MOBILE ? 550 : 1700;  // particules
+const WIND_LIFE = 3.2;                  // s avant de renaître ailleurs
+const WIND_FADE = .90;                  // alpha retiré à la traînée par frame
+/* Trois classes de vitesse : la nappe bleuit dans les calmes, blanchit dans le
+ * fort. Le seuil bas ne descend pas plus : sous 5 m/s les segments tracés par
+ * frame sont déjà courts, un alpha plus faible les rendrait illisibles sur
+ * l'imagerie claire — et un vent faible autour d'un feu, ça se lit aussi. */
+const WIND_LANE = [
+  [5,        'rgba(191,227,255,.55)', MOBILE ? .9 : 1.0],
+  [10,       'rgba(224,241,255,.70)', MOBILE ? 1.1 : 1.2],
+  [Infinity, 'rgba(255,255,255,.88)', MOBILE ? 1.3 : 1.5],
+];
+const CARD = ['nord', 'nord-nord-est', 'nord-est', 'est-nord-est', 'est',
+              'est-sud-est', 'sud-est', 'sud-sud-est', 'sud', 'sud-sud-ouest',
+              'sud-ouest', 'ouest-sud-ouest', 'ouest', 'ouest-nord-ouest',
+              'nord-ouest', 'nord-nord-ouest'];
+
+const W = { data: null, cur: null, on: true, parts: [], raf: null, last: 0, w: 0, h: 0 };
+
+// interpolation bilinéaire du champ courant, en degrés
+function windAt(lon, lat, out) {
+  const d = W.data, g = W.cur;
+  const gx = (lon - d.bbox[0]) / (d.bbox[2] - d.bbox[0]) * (d.nx - 1);
+  const gy = (lat - d.bbox[1]) / (d.bbox[3] - d.bbox[1]) * (d.ny - 1);
+  if (!(gx >= 0 && gy >= 0 && gx <= d.nx - 1 && gy <= d.ny - 1)) return false;
+
+  const i = Math.min(gx | 0, d.nx - 2), j = Math.min(gy | 0, d.ny - 2);
+  const fx = gx - i, fy = gy - j, k = j * d.nx + i;
+  const bil = a => (a[k] * (1 - fx) + a[k + 1] * fx) * (1 - fy)
+                 + (a[k + d.nx] * (1 - fx) + a[k + d.nx + 1] * fx) * fy;
+
+  out.u = bil(g.u); out.v = bil(g.v); out.g = bil(g.gust);
+  return true;
+}
+
+/* Le champ n'est connu qu'à l'heure ronde : on fabrique une fois par cran la
+ * grille interpolée entre les deux heures encadrantes, et l'animation n'a plus
+ * qu'à y piocher. Hors de la fenêtre couverte — fichier périmé, cran trop
+ * ancien — `cur` reste nul et la couche s'efface d'elle-même. */
+function windTime(ts) {
+  const d = W.data;
+  if (!d) return;
+
+  W.cur = null;
+  const x = (ts - d.t0) / d.dt;
+  if (x >= 0 && x <= d.nt - 1) {
+    const k = Math.min(x | 0, d.nt - 2), f = x - k;
+    const mix = A => {
+      const a = A[k], b = A[k + 1], o = new Float32Array(a.length);
+      for (let n = 0; n < a.length; n++) o[n] = a[n] + (b[n] - a[n]) * f;
+      return o;
+    };
+    W.cur = { u: mix(d.u), v: mix(d.v), gust: mix(d.gust) };
+  }
+  windBadge();
+  windLoop();
+}
+
+// lecture chiffrée au centre de la carte
+function windBadge() {
+  const o = {}, c = map.getCenter();
+  if (!W.on || !W.cur || !windAt(c.lng, c.lat, o)) { windKey.hidden = true; return; }
+
+  const kmh = Math.hypot(o.u, o.v) * 3.6;
+  const to = (Math.atan2(o.u, o.v) * 180 / Math.PI + 360) % 360;  // vers où il pousse
+  const from = CARD[Math.round(((to + 180) % 360) / 22.5) % 16];
+
+  windKey.hidden = false;
+  windKey.style.setProperty('--dir', to.toFixed(0) + 'deg');
+  windVal.textContent = `${Math.round(kmh)} km/h · rafales ${Math.round(o.g)}`;
+  windKey.title = `Vent de ${from}, ${Math.round(kmh)} km/h au centre de la carte`;
+}
+
+function windSpawn(p) {
+  p.x = Math.random() * W.w;
+  p.y = Math.random() * W.h;
+  p.age = Math.random() * WIND_LIFE;   // décalées, sinon toute la nappe clignote
+  return p;
+}
+
+function windResize() {
+  // au-delà de 2 le gain est invisible et le coût de remplissage double
+  const dpr = Math.min(devicePixelRatio || 1, MOBILE ? 1.5 : 2);
+  W.w = windCv.clientWidth; W.h = windCv.clientHeight;
+  windCv.width = Math.round(W.w * dpr);
+  windCv.height = Math.round(W.h * dpr);
+  wctx.setTransform(dpr, 0, 0, dpr, 0, 0);   // tout le dessin en px CSS
+  wctx.lineCap = 'round';
+  if (W.parts.length !== WIND_N) W.parts = Array.from({ length: WIND_N }, () => windSpawn({}));
+  else W.parts.forEach(windSpawn);
+  windSync();
+}
+
+/* Écran → coordonnées : la carte n'est ni pivotée ni inclinée, la longitude est
+ * donc affine en x et la latitude affine en y de Mercator. Deux multiplications
+ * par particule, contre un unproject matriciel. */
+function windSync() {
+  const b = map.getBounds();
+  const merc = lat => Math.log(Math.tan(Math.PI / 4 + lat * Math.PI / 360));
+  const yN = merc(b.getNorth());
+  W.lon0 = b.getWest(); W.dLon = (b.getEast() - b.getWest()) / (W.w || 1);
+  W.y0 = yN; W.dY = (merc(b.getSouth()) - yN) / (W.h || 1);
+}
+
+function windFrame(now) {
+  W.raf = requestAnimationFrame(windFrame);
+  const dt = Math.min((now - W.last) / 1000, .05);   // onglet ralenti : pas de bond
+  W.last = now;
+  if (!W.cur) return;
+
+  // on retire de l'alpha à ce qui est déjà peint : la traînée s'efface sans
+  // qu'un aplat vienne jamais assombrir la carte en dessous
+  wctx.globalCompositeOperation = 'destination-in';
+  wctx.fillStyle = `rgba(0,0,0,${WIND_FADE})`;
+  wctx.fillRect(0, 0, W.w, W.h);
+  wctx.globalCompositeOperation = 'source-over';
+
+  const o = {}, lanes = WIND_LANE.map(() => []);
+  for (const p of W.parts) {
+    p.age += dt;
+    const lon = W.lon0 + p.x * W.dLon;
+    const lat = (2 * Math.atan(Math.exp(W.y0 + p.y * W.dY)) - Math.PI / 2) * 57.29577951;
+    // hors grille ou en fin de vie : on renaît ailleurs, sans tracer le saut
+    if (p.age > WIND_LIFE || !windAt(lon, lat, o)) { windSpawn(p); continue; }
+
+    const nx = p.x + o.u * WIND_K * dt, ny = p.y - o.v * WIND_K * dt;
+    if (nx < -4 || ny < -4 || nx > W.w + 4 || ny > W.h + 4) { windSpawn(p); continue; }
+
+    const s = Math.hypot(o.u, o.v);
+    lanes[s < WIND_LANE[0][0] ? 0 : s < WIND_LANE[1][0] ? 1 : 2].push(p.x, p.y, nx, ny);
+    p.x = nx; p.y = ny;
+  }
+
+  for (let l = 0; l < lanes.length; l++) {
+    const a = lanes[l];
+    if (!a.length) continue;
+    wctx.strokeStyle = WIND_LANE[l][1];
+    wctx.lineWidth = WIND_LANE[l][2];
+    wctx.beginPath();
+    for (let i = 0; i < a.length; i += 4) {
+      wctx.moveTo(a[i], a[i + 1]); wctx.lineTo(a[i + 2], a[i + 3]);
+    }
+    wctx.stroke();
+  }
+}
+
+function windLoop() {
+  const run = W.on && !!W.cur && !document.hidden;
+  if (run && !W.raf) { W.last = performance.now(); W.raf = requestAnimationFrame(windFrame); }
+  if (!run && W.raf) {
+    cancelAnimationFrame(W.raf); W.raf = null;
+    wctx.clearRect(0, 0, W.w, W.h);
+  }
 }
 
 /**
@@ -417,6 +628,28 @@ function buildSteps(hs, dated) {
   return out.sort((a, b) => a.ts - b.ts);
 }
 
+/* Les crans à venir. Le vent est le seul paramètre dont on connaisse la suite :
+ * la frise peut continuer heure par heure après le dernier passage satellite,
+ * le feu figé dans son dernier état observé et la seule nappe qui bouge.
+ *
+ * Désactivé pour l'instant : `data/wind.json` porte bien les 24 h à venir, il
+ * suffit de remonter cette constante pour les rouvrir. */
+const FORECAST_H = 0;
+
+function addForecast(wind) {
+  lastObs = steps.length - 1;
+  if (!wind || lastObs < 0) return;
+
+  const end = steps[lastObs].ts;
+  for (let k = 0; k < wind.nt; k++) {
+    const ts = wind.t0 + k * wind.dt;
+    // arrondi au-dessus : le premier cran tombe souvent une demi-heure après le
+    // dernier passage, et « +0 h » ne veut rien dire
+    if (ts > end && ts <= end + FORECAST_H * H)
+      steps.push({ ts, kind: 'wind', label: 'prévision', n: 0, h: Math.ceil((ts - end) / H) });
+  }
+}
+
 function drawTicks() {
   const t0 = steps[0].ts, span = steps[steps.length - 1].ts - t0 || 1;
   ticksEl.innerHTML = steps.map(s =>
@@ -424,7 +657,11 @@ function drawTicks() {
 }
 
 function show(i) {
-  const s = steps[i], now = s.ts;
+  const s = steps[i];
+  // sur un cran de prévision, le feu reste celui du dernier passage satellite :
+  // le vieillir jusqu'à demain le ferait s'éteindre à l'écran alors qu'on n'en
+  // sait tout simplement rien
+  const now = s.kind === 'wind' ? steps[lastObs].ts : s.ts;
 
   // filtre + couleurs recalculés à partir de `now` : MapLibre garde les données
   // en mémoire GPU, on ne repousse jamais le GeoJSON
@@ -443,12 +680,18 @@ function show(i) {
   map.setPaintProperty('hotspots', 'circle-opacity',
     ['step', age, 1, 6 * H, .95, 24 * H, .8, 72 * H, .55]);
 
-  atLatest = i === steps.length - 1;
+  atLatest = i >= lastObs;
   document.body.classList.toggle('past', !atLatest);
   applyBurnt();
 
-  clockEl.textContent = fmt(now);
-  subEl.innerHTML = `${s.label} · <b>${liveAt(now)}</b> foyers`;
+  clockEl.textContent = fmt(s.ts);
+  // le dernier passage satellite date souvent de plusieurs heures : les
+  // premiers crans « à venir » sont déjà du passé pour le modèle, seuls ceux
+  // qui dépassent l'instant présent sont vraiment une prévision
+  subEl.innerHTML = s.kind === 'wind'
+    ? `${s.ts > Date.now() / 1000 ? 'prévision vent' : 'vent'} · <b>+${s.h} h</b>`
+    : `${s.label} · <b>${liveAt(now)}</b> foyers`;
+  windTime(s.ts);
 }
 
 // détections des 6 dernières heures à l'instant donné
@@ -480,6 +723,8 @@ function lockReadWidth() {
   const label = steps.reduce((a, s) => s.label.length > a.length ? s.label : a, '');
   const w = Math.max(
     widest(`${label} · <b>${maxLive}</b> foyers`, subEl),
+    // sans crans de prévision, réserver leur place élargirait la lecture pour rien
+    FORECAST_H ? widest(`prévision vent · <b>+${FORECAST_H} h</b>`, subEl) : 0,
     widest(fmt(steps[0].ts), clockEl),
   );
 
@@ -496,6 +741,8 @@ const dataP = Promise.all([
   fetch('data/burnt_dated.geojson').then(r => r.json()),
   fetch('data/hotspots.geojson').then(r => r.json()),
   fetch('data/meta.json').then(r => r.json()).catch(() => null),
+  // le vent n'est qu'un habillage : absent, la carte doit rester entière
+  fetch('data/wind.json').then(r => r.json()).catch(() => null),
 ]);
 
 /*
@@ -516,7 +763,7 @@ map.on('load', start);
 poll = setInterval(start, 80);
 
 async function init() {
-  const [nrt, dated, hs, meta] = await dataP;
+  const [nrt, dated, hs, meta, windData] = await dataP;
 
   map.addSource('nrt', { type: 'geojson', data: nrt });
   map.addSource('dated', { type: 'geojson', data: dated });
@@ -538,12 +785,24 @@ async function init() {
     layout: { 'circle-sort-key': ['get', 'ts'] },
     paint: { 'circle-color': V('--front'), 'circle-radius': 4, 'circle-stroke-width': 0 } });
 
+  if (windData && windData.nt > 1) {
+    W.data = windData;
+    windResize();
+    map.on('move', () => { windSync(); wctx.clearRect(0, 0, W.w, W.h); windBadge(); });
+    map.on('resize', windResize);
+  } else {
+    // fichier absent ou vide : pas de case à cocher sans rien derrière
+    document.getElementById('ck-wind').closest('label').hidden = true;
+  }
+
   steps = buildSteps(hs, dated);
+  addForecast(W.data);
   slider.max = steps.length - 1;
-  slider.value = steps.length - 1;
+  // on ouvre sur le dernier état observé, pas sur le bout de la prévision
+  slider.value = lastObs;
   drawTicks();
   lockReadWidth();
-  show(steps.length - 1);
+  show(lastObs);
 
   if (meta && meta.generated_at) {
     document.getElementById('updated').textContent =
@@ -592,6 +851,7 @@ async function init() {
 // onglet ouvert en arrière-plan puis affiché : on relance le rendu
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden) { map.resize(); map.triggerRepaint(); }
+  windLoop();   // rien à animer tant que l'onglet est caché
 });
 
 slider.addEventListener('input', () => { if (steps.length) show(+slider.value); });
@@ -602,12 +862,18 @@ document.getElementById('ck-dated').addEventListener('change', e => {
 document.getElementById('ck-nrt').addEventListener('change', e => {
   shown.nrt = e.target.checked; applyBurnt();
 });
+document.getElementById('ck-wind').addEventListener('change', e => {
+  W.on = e.target.checked; windLoop(); windBadge();
+});
 
 document.getElementById('play').addEventListener('click', e => {
   const btn = e.currentTarget;
   if (playing) { clearInterval(playing); playing = null; btn.textContent = '▶'; return; }
   btn.textContent = '❚❚';
-  if (+slider.value >= steps.length - 1) slider.value = 0;
+  // la lecture repart toujours du début, et le premier cran s'affiche tout de
+  // suite : sans ça le retour à gauche ne se voyait qu'au bout de 320 ms
+  slider.value = 0;
+  show(0);
   playing = setInterval(() => {
     slider.value = +slider.value + 1;   // un cran par frame
     show(+slider.value);

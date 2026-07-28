@@ -13,10 +13,12 @@ Notes de repérage + ce que j'ai testé pour de vrai le 28/07/2026 sur le feu du
 | **Intensité minute par minute** | LSA SAF / Meteosat FRP | **15 min** | 3 km (trop grossier pour cartographier) |
 | **Périmètre haute résolution** | Copernicus EMS Rapid Mapping | heures à jours, seulement si activation | ~10 m et mieux |
 | **Périmètre haute résolution, en autonomie** | Sentinel-2 dNBR | revisite 5 jours | 10–20 m |
+| **Vent (passé + 24 h à venir)** | Open-Meteo / AROME HD | horaire, 7 j en arrière | maille 1,5 km |
 
-Les deux premières lignes sont celles implémentées dans `fetch_fires.py`. Ce sont
-aussi celles qui font les deux images que tu m'as envoyées : la 1re, c'est FIRMS ;
-la 2e, c'est le *Current Situation Viewer* d'EFFIS.
+Les deux premières lignes et la dernière sont celles implémentées dans
+`fetch_fires.py`. Les deux premières font aussi les deux images que tu m'as
+envoyées : la 1re, c'est FIRMS ; la 2e, c'est le *Current Situation Viewer*
+d'EFFIS.
 
 ---
 
@@ -113,7 +115,57 @@ Il y a aussi un WMS (`.../gwis`) si tu préfères des tuiles au vecteur.
 
 ---
 
-## 3. Les autres pistes, par ordre d'intérêt
+## 3. Vent — Open-Meteo (modèle AROME HD de Météo-France)
+
+Testé le 28/07/2026. C'est la seule des sources de vent qui tienne dans les
+contraintes du dépôt : **JSON, pas de clé, pas de dépendance**.
+
+### La requête
+
+```
+https://api.open-meteo.com/v1/forecast
+  ?latitude=44.2,44.29,…&longitude=-1.6,-1.47,…
+  &hourly=wind_speed_10m,wind_direction_10m,wind_gusts_10m
+  &past_days=7&forecast_days=2
+  &models=meteofrance_arome_france_hd
+  &wind_speed_unit=ms&timezone=UTC
+```
+
+Le point clé : `latitude` et `longitude` acceptent des **listes** — une requête
+unique porte toute la grille et la réponse est un tableau, un objet par point,
+dans l'ordre demandé. Mesuré sur la bbox Gironde élargie de 60 km sur chaque
+bord : grille 16 × 16 = 256 points au pas de 15 km, 206 heures, **1,7 Mo en
+0,4 s**, aucune valeur manquante — y compris au large, AROME couvre les abords
+maritimes.
+
+`past_days` va jusqu'à 92, donc les 7 jours de la fenêtre FIRMS passent large.
+Au-delà, il faut basculer sur l'API archive (`archive-api.open-meteo.com`,
+réanalyse ERA5, 25 km, latence 5 jours).
+
+### Pièges
+
+1. **AROME ne couvre que la France et ses abords.** Hors domaine la réponse est
+   une grille de `null` — pas une erreur HTTP. D'où la bascule automatique sur
+   le modèle `best_match` quand plus de 20 % des valeurs manquent.
+2. **`wind_direction_10m` est l'azimut d'où vient le vent**, convention météo.
+   Les composantes sont donc à l'opposé : `u = -v·sin(θ)`, `v = -v·cos(θ)`.
+3. **Ne jamais interpoler la direction en degrés** : entre 350° et 10° la
+   moyenne naïve donne 180°, soit le vent exactement à l'envers. On stocke u/v.
+4. Licence CC BY 4.0, gratuit sans clé pour l'usage non commercial, ~10 000
+   requêtes/jour. La carte n'en fait aucune : tout passe par `data/wind.json`.
+
+### Les autres pistes de vent, écartées
+
+- **API Météo-France** (portail-api.meteofrance.fr) — AROME 1,3 km, la source
+  amont. Mais clé d'API obligatoire et diffusion en GRIB2, donc `eccodes` :
+  deux règles du dépôt cassées d'un coup.
+- **NOAA GFS / NOMADS** — libre et sans clé, mais 25 km et GRIB2 également.
+  Trop grossier pour un feu de 20 km de front.
+- **Windy** — tuiles et API payantes, licence incompatible avec un site public.
+
+---
+
+## 4. Les autres pistes, par ordre d'intérêt
 
 ### Copernicus EMS Rapid Mapping — le plus précis, mais seulement sur activation
 
@@ -165,7 +217,7 @@ Accès : <https://lsa-saf.eumetsat.int> ou l'EUMETSAT Data Store (compte gratuit
 
 ---
 
-## 4. Ce que disent les données sur le feu en cours (état 28/07/2026)
+## 5. Ce que disent les données sur le feu en cours (état 28/07/2026)
 
 Sortie réelle de `fetch_fires.py` sur la bbox `-1.6, 44.2, -0.2, 45.4` :
 
@@ -190,7 +242,7 @@ Répartition des détections par jour dans la zone (NOAA-20 seul) :
 
 ---
 
-## 5. Le modèle à 3 couches que tu décris
+## 6. Le modèle à 3 couches que tu décris
 
 Aucune source ne le fournit tel quel. La façon la plus propre de le construire avec
 ce qui existe :
@@ -232,3 +284,5 @@ de trois paliers.
 - Copernicus EMS Rapid Mapping : <https://rapidmapping.emergency.copernicus.eu/>
 - CDSE (Sentinel-2) : <https://dataspace.copernicus.eu/analyse/apis>
 - LSA SAF : <https://lsa-saf.eumetsat.int/en/a/natural-hazards/>
+- Open-Meteo, modèles Météo-France : <https://open-meteo.com/en/docs/meteofrance-api>
+- Open-Meteo, archive ERA5 : <https://open-meteo.com/en/docs/historical-weather-api>
