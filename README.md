@@ -17,12 +17,16 @@ Trois états du terrain plus le vent, superposés sur un fond satellite :
 
 Un curseur temporel rejoue la progression du feu.
 
-Sur la vue nationale, les détections des six dernières heures sont regroupées
-spatialement. Toute concentration d'au moins 25 foyers reçoit un halo et un
-raccourci sous le titre ; il s'agit d'un seuil fixe, pas d'un classement limité
-à trois incendies. Cliquer sur un raccourci charge directement sa zone
-détaillée. La position et le zoom sont conservés dans le fragment `#map=` de
-l'URL, qui peut donc être copié pour partager exactement la vue courante.
+Sur la vue nationale, les détections des dernières 24 heures sont regroupées
+spatialement. Un groupe reçoit un halo et un raccourci lorsqu'il compte au
+moins 25 foyers près d'un périmètre EFFIS, ou lorsque quelques détections
+confirment encore une surface brûlée d'au moins 200 ha. Le voisinage EFFIS
+écarte notamment les anomalies thermiques industrielles et les groupes
+étrangers inclus dans le rectangle de collecte FIRMS. Il s'agit de seuils
+fixes, pas d'un classement limité à trois incendies. Cliquer sur un raccourci
+charge directement sa zone détaillée. La position et le zoom sont conservés
+dans le fragment `#map=` de l'URL, qui peut donc être copié pour partager
+exactement la vue courante.
 
 ## Démarrage
 
@@ -106,9 +110,10 @@ frontière de cellule portent un identifiant stable et sont dédupliqués avant
 leur envoi à MapLibre. Le cache JS reste borné à 20 cellules ; le cache HTTP
 conserve les fichiers déjà visités.
 
-Le vent fin remplace le vent grossier cellule par cellule lorsqu'il arrive. En
-dehors des cellules d'incendie, ou pendant le téléchargement, le champ national
-reste affiché : la nappe ne présente jamais de trou.
+Le vent fin déborde chaque cellule active de 60 km et se fond progressivement
+dans le champ grossier sur les 35 derniers kilomètres de cette marge. En dehors
+des cellules d'incendie, ou pendant le téléchargement, le champ national reste
+affiché : la nappe ne présente ni trou ni bord carré.
 
 ## Comment ça marche
 

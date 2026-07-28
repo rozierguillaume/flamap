@@ -588,8 +588,12 @@ def main():
     fine_wind = {}
     print(f"  {len(fine_keys)} cellules avec vent fin")
     for ix, iy in sorted(fine_keys):
+        # La grille dépasse la cellule active de 60 km. Le navigateur fond
+        # ensuite cette marge dans le champ national : sans débord, la rupture
+        # de résolution dessinerait un carré net dans les particules.
+        fine_box = wind_box((ix, iy, ix + TILE_DEG, iy + TILE_DEG))
         raw = fetch_wind(
-            (ix, iy, ix + TILE_DEG, iy + TILE_DEG),
+            fine_box,
             WIND_SPACING_KM,
             f"    {tile_id(ix, iy)}",
         )
