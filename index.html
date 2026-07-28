@@ -3,7 +3,32 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Flamap — feu de Gironde</title>
+
+<title>Flamap — carte des incendies en quasi temps réel</title>
+<meta name="description" content="Foyers actifs et surfaces brûlées vus par satellite (NASA FIRMS, Copernicus EFFIS), rafraîchis toutes les 2 h. Un curseur rejoue la progression du feu de Gironde.">
+<link rel="canonical" href="https://flamap.fr/">
+<meta name="theme-color" content="#0d0f12">
+<!-- l'icone tient dans l'attribut : pas de fichier a copier dans _site -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230d0f12'/%3E%3Cpath d='M16 5c1.5 4.3-3.4 5.7-3.4 10.2 0 1.6.8 2.9 1.9 3.6-.4-2.4.9-4.3 2.4-5.6-.3 2.8 3.6 4 3.6 7.3A5.6 5.6 0 0 1 16 27a6.4 6.4 0 0 1-6.4-6.6C9.6 13.6 15.3 11.4 16 5z' fill='%23ff6b1a'/%3E%3C/svg%3E">
+
+<!-- apercu des liens : reseaux sociaux, messageries, moteurs de recherche -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Flamap">
+<meta property="og:locale" content="fr_FR">
+<meta property="og:url" content="https://flamap.fr/">
+<meta property="og:title" content="Flamap — carte des incendies en quasi temps réel">
+<meta property="og:description" content="Foyers actifs et surfaces brûlées vus par satellite (NASA FIRMS, Copernicus EFFIS), rafraîchis toutes les 2 h. Un curseur rejoue la progression du feu de Gironde.">
+<meta property="og:image" content="https://flamap.fr/og.png">
+<meta property="og:image:type" content="image/png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Carte satellite du feu de Gironde : surface brûlée sombre et front de flammes en orange.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Flamap — carte des incendies en quasi temps réel">
+<meta name="twitter:description" content="Foyers actifs et surfaces brûlées vus par satellite, rafraîchis toutes les 2 h.">
+<meta name="twitter:image" content="https://flamap.fr/og.png">
+<meta name="twitter:image:alt" content="Carte satellite du feu de Gironde : surface brûlée sombre et front de flammes en orange.">
+
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5/dist/maplibre-gl.css">
 <script src="https://unpkg.com/maplibre-gl@5/dist/maplibre-gl.js"></script>
 <style>
@@ -20,6 +45,10 @@
     --safe-b:     env(safe-area-inset-bottom, 0px);
   }
   * { box-sizing: border-box; }
+  /* la carte est un canvas WebGL : ce texte la decrit pour les lecteurs
+     d'ecran et les robots d'indexation, qui n'en voient rien */
+  .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px;
+             padding: 0; overflow: hidden; clip-path: inset(50%); border: 0; }
   html, body { margin: 0; height: 100%; overflow: hidden;
                background: var(--bg); color: var(--ink);
                font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -141,11 +170,42 @@
     #credits { text-align: left; }
   }
 </style>
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  "name": "Flamap",
+  "url": "https://flamap.fr/",
+  "applicationCategory": "https://schema.org/BrowserApplication",
+  "inLanguage": "fr-FR",
+  "isAccessibleForFree": true,
+  "description": "Carte des incendies en quasi temps réel : foyers actifs NASA FIRMS et surfaces brûlées Copernicus EFFIS, rafraîchis toutes les 2 heures.",
+  "author": { "@type": "Person", "name": "Guillaume Rozier" }
+}
+</script>
 </head>
 <body>
-<div id="map"></div>
+<div id="map" role="img"
+     aria-label="Carte satellite des surfaces brûlées et des foyers d'incendie détectés"></div>
 
-<div id="head" class="glass"><h1>Fla<span>map</span></h1></div>
+<div id="head" class="glass">
+  <h1>Fla<span>map</span></h1>
+  <p class="sr-only">Carte des incendies en quasi temps réel. Les foyers détectés
+  par les satellites NASA FIRMS et les surfaces brûlées publiées par Copernicus
+  EFFIS sont rafraîchis toutes les deux heures ; le curseur temporel rejoue la
+  progression du feu, d'une mise à jour satellite à la suivante.</p>
+</div>
+
+<noscript>
+  <p style="position:relative;z-index:600;margin:80px 14px;text-align:center">
+    Flamap affiche les incendies détectés par satellite sur un fond
+    cartographique interactif : <b>JavaScript est nécessaire</b> pour le rendu.
+    Les données brutes restent consultables en GeoJSON :
+    <a href="data/hotspots.geojson" style="color:#ff6b1a">foyers actifs</a> et
+    <a href="data/burnt_dated.geojson" style="color:#ff6b1a">surfaces brûlées</a>.
+  </p>
+</noscript>
 
 <button id="layers-btn" class="glass" aria-label="Calques" aria-expanded="false">≡</button>
 <div id="layers" class="glass">

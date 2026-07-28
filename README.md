@@ -112,6 +112,26 @@ Deux points de vigilance propres aux workflows planifiés :
   dépôt. Sans commit pendant deux mois, le rafraîchissement s'arrête en
   silence ; il faut le réactiver à la main dans l'onglet Actions.
 
+## Référencement et aperçu des liens
+
+La carte est un canvas WebGL : un robot d'indexation, comme l'aperçu d'un lien
+collé dans une messagerie, n'en voit strictement rien. D'où, dans `index.html` :
+titre et `description`, `canonical` sur `https://flamap.fr/`, balises OpenGraph
+et Twitter, JSON-LD `WebApplication`, favicon en `data:` URI, et un court texte
+décrivant la carte — masqué à l'écran, lu par les lecteurs d'écran et les
+robots. Un `<noscript>` renvoie vers les GeoJSON bruts.
+
+L'image d'aperçu `og.png` est produite par `make_og.py`, qui rejoue hors
+navigateur le rendu de la carte — mêmes tuiles IGN, mêmes polygones EFFIS,
+même rampe de couleurs sur les foyers — puis y pose le titre :
+
+```bash
+python3 make_og.py
+```
+
+Elle est versionnée et non regénérée par le workflow : elle vieillit donc avec
+le feu, à relancer si le cadrage n'a plus de sens.
+
 ## Sources de données
 
 Le repérage complet — ce qui existe, à quelle fréquence, avec quels pièges —
@@ -129,6 +149,8 @@ brûlées (polygones datés, mis à jour 1 à 2 fois par jour).
 |---|---|
 | `fetch_fires.py` | récupération des deux sources → GeoJSON |
 | `index.html` | la carte : MapLibre GL, fond satellite, curseur cranté |
+| `make_og.py` | fabrique `og.png`, l'aperçu des liens (Pillow requis) |
+| `og.png` | image de partage, 1200 × 630, versionnée |
 | `SOURCES.md` | note de repérage sur les sources de données |
 | `.github/workflows/deploy.yml` | rafraîchissement toutes les 2 h + publication Pages |
 | `data/` | sorties du script, regénérables |
