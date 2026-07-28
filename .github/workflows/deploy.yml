@@ -25,9 +25,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # ~6 s depuis un runner : le WFS d'EFFIS, très lent depuis une connexion
-      # résidentielle (40 à 250 s), répond quasi instantanément en datacenter.
-      # Si une source est indisponible, le script lève et le job échoue — le
+      # La génération nationale prend quelques minutes : quatre flux FIRMS,
+      # trois requêtes EFFIS et les grilles Open-Meteo séquentielles. Les 25 min
+      # laissent une large marge aux reprises HTTP 429 et au WFS parfois lent.
+      # Si une source reste indisponible, le script lève et le job échoue ; le
       # site déjà en ligne reste intact, ce qui vaut mieux qu'une carte vide.
       - name: Récupérer les données
         run: python3 fetch_fires.py
@@ -40,11 +41,20 @@ jobs:
           import json, pathlib, sys
           manifest = json.load(open('data/manifest.json'))
           timeline = json.load(open('data/timeline.json'))
-          zones = list(pathlib.Path('data/zones').glob('*.json'))
+          zone_paths = list(pathlib.Path('data/zones').glob('*.json'))
+          expected = {f"{zone_id}.json" for zone_id in manifest['zones']}
+          actual = {path.name for path in zone_paths}
           print(f"{manifest['hotspot_count']} foyers, {manifest['dated_count']} "
-                f"polygones datés, {len(zones)} zones")
-          if not manifest['hotspot_count'] or not timeline or len(zones) != len(manifest['zones']):
+                f"polygones datés, {len(zone_paths)} zones")
+          if not manifest['hotspot_count'] or not timeline or actual != expected:
               sys.exit("export national incomplet, déploiement annulé")
+          fine = set(manifest['fine_wind_zones'])
+          for path in zone_paths:
+              zone = json.load(open(path))
+              if zone.get('id') != path.stem:
+                  sys.exit(f"identifiant de zone incohérent : {path}")
+              if path.stem in fine and not zone.get('wind'):
+                  sys.exit(f"vent fin absent : {path}")
           PY
 
       - name: Assembler le site
@@ -55,6 +65,23 @@ jobs:
              data/burnt_recent.geojson data/timeline.json \
              data/wind_coarse.json _site/data/
           cp -r data/zones _site/data/
+
+      # Pages accepte jusqu'à 1 Go, mais Flamap doit rester très en dessous.
+      # Le seuil de 100 Mio laisse plus de cinq fois le volume actuel tout en
+      # bloquant une croissance accidentelle avant la création de l'artefact.
+      - name: Vérifier la taille du site
+        run: |
+          python3 - <<'PY'
+          import pathlib, sys
+          root = pathlib.Path('_site')
+          files = [path for path in root.rglob('*') if path.is_file()]
+          size = sum(path.stat().st_size for path in files)
+          largest = max(files, key=lambda path: path.stat().st_size)
+          print(f"{len(files)} fichiers, {size / 1024 / 1024:.1f} Mio "
+                f"(plus gros : {largest}, {largest.stat().st_size / 1024 / 1024:.1f} Mio)")
+          if size > 100 * 1024 * 1024:
+              sys.exit("site supérieur à 100 Mio, déploiement annulé")
+          PY
 
       - uses: actions/upload-pages-artifact@v3
         with:

@@ -170,7 +170,16 @@ figé : il sert uniquement à ce que la carte s'affiche dès le clonage.
 
 Si une source est indisponible, le job échoue et le site déjà en ligne reste
 intact — mieux vaut une carte un peu datée qu'une carte vide. Un garde-fou
-annule aussi le déploiement si aucun foyer n'a été récupéré.
+annule aussi le déploiement si aucun foyer n'a été récupéré, si une zone manque
+ou si le site assemblé dépasse 100 Mio.
+
+Mesure de référence au 28 juillet 2026 : 184 fichiers, environ 18 Mio non
+compressés et 5 Mio pour l'archive gzip transmise à Pages. La limite officielle
+de publication est de 1 Go et le déploiement doit finir en moins de 10 minutes ;
+l'artefact dispose donc d'une marge très large. La génération Python elle-même
+n'utilise que la bibliothèque standard et dispose de 25 minutes dans le
+workflow. Les reprises bornées sur HTTP 429 protègent les requêtes Open-Meteo
+sans pouvoir bloquer le runner indéfiniment.
 
 Deux points de vigilance propres aux workflows planifiés :
 
