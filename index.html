@@ -73,6 +73,14 @@
   #layers label { display: flex; align-items: center; gap: 8px; margin: 3px 0;
                   cursor: pointer; white-space: nowrap; }
   #layers input { accent-color: var(--hot); margin: 0; }
+  /* EFFIS ne publie qu'un etat de chaque polygone : hors du cran le plus
+     recent les surfaces sont masquees, et l'interface doit le dire */
+  #layers .hint { display: none; margin-top: 7px; max-width: 186px;
+                  white-space: normal; font-size: 11px; line-height: 1.35;
+                  color: var(--ink-dim); }
+  body.past #layers .hint { display: block; }
+  body.past #layers label { opacity: .45; }
+  body.past #legend .burnt-key { opacity: .32; }
   #layers-btn { display: none; }   /* mobile uniquement, voir plus bas */
 
   /* ---- barre du bas ---- */
@@ -105,6 +113,7 @@
 
   #credits { font-size: 10.5px; line-height: 1.5; color: #7d7873; }
   #credits a { color: #9a948e; text-decoration: none; border-bottom: 1px solid #3a3733; }
+  #cr-btn { display: none; }   /* mobile uniquement, voir plus bas */
 
   .maplibregl-ctrl-group { background: rgba(13,15,18,.9) !important;
     border: 1px solid rgba(255,255,255,.10) !important; border-radius: 12px !important;
@@ -167,7 +176,17 @@
     #read { order: -1; width: 100%; text-align: left;
             display: flex; justify-content: space-between; align-items: baseline; }
     #clock { font-size: 13px; }
+
+    /* les crédits prenaient six lignes sous la réglette, soit un bon tiers de
+       l'écran pour des mentions qu'on lit une fois : repliés derrière un lien */
+    #cr-btn { display: block; align-self: flex-start;
+              background: none; border: 0; padding: 0;
+              font: inherit; font-size: 10.5px; color: #7d7873;
+              text-align: left; cursor: pointer; }
+    #cr-btn::after { content: " ›"; }
+    #cr-btn[aria-expanded="true"]::after { content: " ⌄"; }
     #credits { text-align: left; }
+    #credits:not(.open) { display: none; }
   }
 </style>
 
@@ -211,11 +230,13 @@
 <div id="layers" class="glass">
   <label><input type="checkbox" id="ck-dated" checked> surfaces brûlées (datées)</label>
   <label><input type="checkbox" id="ck-nrt" checked> surfaces brûlées (NRT)</label>
+  <div class="hint">Masquées : EFFIS ne publie que le contour le plus récent,
+  pas son évolution. Ramenez le curseur à droite pour les revoir.</div>
 </div>
 
 <div id="dock">
   <div id="legend" class="glass">
-    <span><i class="poly" style="background:var(--burnt);border:1px solid var(--burnt-edge)"></i>terre brûlée</span>
+    <span class="burnt-key"><i class="poly" style="background:var(--burnt);border:1px solid var(--burnt-edge)"></i>terre brûlée</span>
     <span><i style="background:var(--recent)"></i>brûlé il y a 24–72 h</span>
     <span><i style="background:var(--hot)"></i>brûlé il y a 6–24 h</span>
     <span><i style="background:var(--front)"></i>front actif (&lt; 6 h)</span>
@@ -236,6 +257,8 @@
     </div>
   </div>
 
+  <button id="cr-btn" aria-expanded="false" aria-controls="credits">Sources &amp; crédits</button>
+
   <div id="credits" class="glass">
     Foyers actifs : <a href="https://firms.modaps.eosdis.nasa.gov/" target="_blank" rel="noopener">NASA FIRMS</a>
     (VIIRS 375 m &amp; MODIS, LANCE/EOSDIS).
@@ -255,13 +278,22 @@ const MOBILE = matchMedia('(max-width: 720px)').matches;
 const H = 3600, DAY = 86400;
 const V = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 
-// paliers d'anciennete : [seuil (s), couleur, rayon]
+// paliers d'anciennete : [seuil (s), couleur, rayon de reference a z12]
 const RAMP = [
-  [  6 * H, V('--front'),  MOBILE ? 5.0 : 4.4],
-  [ 24 * H, V('--hot'),    MOBILE ? 4.2 : 3.8],
-  [ 72 * H, V('--recent'), MOBILE ? 3.6 : 3.2],
-  [Infinity, V('--old'),   MOBILE ? 3.0 : 2.6],
+  [  6 * H, V('--front'),  MOBILE ? 4.0 : 4.4],
+  [ 24 * H, V('--hot'),    MOBILE ? 3.4 : 3.8],
+  [ 72 * H, V('--recent'), MOBILE ? 2.9 : 3.2],
+  [Infinity, V('--old'),   MOBILE ? 2.4 : 2.6],
 ];
+
+/*
+ * Un pixel VIIRS couvre 375 m au sol : a z9 il vaut 2 px d'ecran, a z14 il en
+ * vaut 60. Avec un rayon fixe, la carte dezoomee — le cadrage par defaut sur
+ * telephone — devient une flaque de points colles. On fait donc grossir les
+ * cercles avec le zoom, en gardant les paliers d'anciennete comme sorties.
+ */
+const ZOOM_SCALE = MOBILE ? [[8, .50], [11, .85], [14, 1.35]]
+                          : [[8, .60], [11, .95], [14, 1.40]];
 const MAX_AGE = 5 * DAY;   // au-dela, c'est le polygone qui parle
 
 const map = new maplibregl.Map({
@@ -301,6 +333,11 @@ const map = new maplibregl.Map({
 if (!MOBILE) map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
 map.touchZoomRotate.disableRotation();
 
+document.getElementById('cr-btn').addEventListener('click', e => {
+  const open = document.getElementById('credits').classList.toggle('open');
+  e.currentTarget.setAttribute('aria-expanded', open);
+});
+
 document.getElementById('layers-btn').addEventListener('click', e => {
   const open = document.getElementById('layers').classList.toggle('open');
   e.currentTarget.setAttribute('aria-expanded', open);
@@ -315,6 +352,24 @@ const fmt = ts => new Date(ts * 1000).toLocaleString('fr-FR',
   { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Paris' });
 
 let steps = [], playing = null;
+
+/*
+ * Surfaces brulees : EFFIS n'archive rien, le WFS ne renvoie que l'etat courant
+ * de chaque polygone — une seule geometrie, celle d'aujourd'hui, avec une seule
+ * date de publication. On ne peut donc pas rejouer leur croissance : les
+ * afficher sur un cran passe montrait l'emprise finale du feu, forcement plus
+ * large que les foyers de l'instant. Elles ne sont visibles qu'au cran le plus
+ * recent ; ailleurs, seuls les foyers datent la progression.
+ */
+const shown = { dated: true, nrt: true };
+let atLatest = true;
+
+function applyBurnt() {
+  const vis = k => atLatest && shown[k] ? 'visible' : 'none';
+  map.setLayoutProperty('burnt-fill', 'visibility', vis('dated'));
+  map.setLayoutProperty('burnt-line', 'visibility', vis('dated'));
+  map.setLayoutProperty('nrt-line', 'visibility', vis('nrt'));
+}
 
 /**
  * Les données ne sont pas continues : VIIRS/MODIS ne voient la zone que lors
@@ -363,15 +418,20 @@ function show(i) {
   map.setFilter('hotspots', ['all', ['<=', ['get', 'ts'], now], ['>=', ['get', 'ts'], now - MAX_AGE]]);
   map.setPaintProperty('hotspots', 'circle-color',
     ['step', age, RAMP[0][1], 6 * H, RAMP[1][1], 24 * H, RAMP[2][1], 72 * H, RAMP[3][1]]);
+  // MapLibre n'accepte 'zoom' qu'en entrée de l'expression la plus externe :
+  // c'est donc l'interpolation de zoom qui enveloppe les paliers d'âge, et non
+  // l'inverse — un facteur multiplicatif appliqué par-dessus serait refusé.
+  const radiiAt = k => ['step', age, RAMP[0][2] * k,
+    6 * H, RAMP[1][2] * k, 24 * H, RAMP[2][2] * k, 72 * H, RAMP[3][2] * k];
   map.setPaintProperty('hotspots', 'circle-radius',
-    ['step', age, RAMP[0][2], 6 * H, RAMP[1][2], 24 * H, RAMP[2][2], 72 * H, RAMP[3][2]]);
+    ['interpolate', ['linear'], ['zoom'],
+      ...ZOOM_SCALE.flatMap(([z, k]) => [z, radiiAt(k)])]);
   map.setPaintProperty('hotspots', 'circle-opacity',
     ['step', age, 1, 6 * H, .95, 24 * H, .8, 72 * H, .55]);
 
-  // les polygones EFFIS n'apparaissent qu'à partir du moment où ils ont été publiés
-  for (const id of ['burnt-fill', 'burnt-line']) {
-    map.setFilter(id, ['<=', ['get', 'lu'], now]);
-  }
+  atLatest = i === steps.length - 1;
+  document.body.classList.toggle('past', !atLatest);
+  applyBurnt();
 
   clockEl.textContent = fmt(now);
   subEl.innerHTML = `${s.label} · <b>${liveAt(now)}</b> foyers`;
@@ -523,12 +583,10 @@ document.addEventListener('visibilitychange', () => {
 slider.addEventListener('input', () => { if (steps.length) show(+slider.value); });
 
 document.getElementById('ck-dated').addEventListener('change', e => {
-  const v = e.target.checked ? 'visible' : 'none';
-  map.setLayoutProperty('burnt-fill', 'visibility', v);
-  map.setLayoutProperty('burnt-line', 'visibility', v);
+  shown.dated = e.target.checked; applyBurnt();
 });
 document.getElementById('ck-nrt').addEventListener('change', e => {
-  map.setLayoutProperty('nrt-line', 'visibility', e.target.checked ? 'visible' : 'none');
+  shown.nrt = e.target.checked; applyBurnt();
 });
 
 document.getElementById('play').addEventListener('click', e => {
