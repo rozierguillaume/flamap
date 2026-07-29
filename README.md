@@ -197,7 +197,8 @@ Le site est publié par GitHub Pages avec deux workflows :
   collecteur), assemble les exports nationaux dans `_site`, puis les livre à
   Pages ;
 - [`.github/workflows/deploy-front.yml`](.github/workflows/deploy-front.yml)
-  est déclenché par une modification de `index.html`, `og.png` ou `robots.txt`.
+  est déclenché par une modification du front, de l'aperçu social, des icônes
+  ou des fichiers destinés aux moteurs de recherche.
   Il reprend les données de la version déjà publiée sur `flamap.fr`, y superpose
   le front, vérifie l'artefact complet, puis le déploie sans interroger les
   sources satellites ni météorologiques. Si un même push modifie aussi le
@@ -274,6 +275,7 @@ pour le vent (AROME HD de Météo-France, maille 1,5 km, pas horaire).
 |---|---|
 | `fetch_fires.py` | récupération, agrégation nationale et paquets de 1° |
 | `index.html` | la carte : MapLibre GL, fond satellite, frise temporelle |
+| `social.html` | prépare le texte et le graphique PNG d'une publication |
 | `make_og.py` | fabrique `og.png`, l'aperçu des liens (Pillow requis) |
 | `og.png` | image de partage, 1200 × 630, versionnée |
 | `SOURCES.md` | note de repérage sur les sources de données |
