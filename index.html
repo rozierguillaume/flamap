@@ -138,6 +138,9 @@
   #layers fieldset label { font-size: 11.5px; }
   #layers label:has(input:disabled) { opacity: .45; cursor: default; }
   #layers input:disabled { cursor: default; }
+  #aircraft-status { margin: 4px 0 2px 24px; max-width: 190px;
+                     color: var(--ink-dim); font-size: 10.5px; line-height: 1.3; }
+  #aircraft-status[hidden] { display: none; }
   /* EFFIS ne publie qu'un etat de chaque polygone : hors du cran le plus
      recent les surfaces sont masquees, et l'interface doit le dire */
   #layers .hint { display: none; margin-top: 7px; max-width: 186px;
@@ -632,6 +635,11 @@
   </label>
   <label><input type="checkbox" id="ck-wind"
                 data-analytics-layer="wind" checked> vent à 10 m</label>
+  <label title="Positions ADS-B reçues en direct, animées avec un différé progressif jusqu’à 30 s ; les trajets se construisent dans le navigateur et le suivi peut être incomplet">
+    <input type="checkbox" id="ck-aircraft"
+           data-analytics-layer="aircraft"> moyens aériens
+  </label>
+  <div id="aircraft-status" hidden aria-live="polite"></div>
   <div class="hint">Masquées : EFFIS ne publie que le contour le plus récent,
   pas son évolution. Ramenez le curseur à droite pour les revoir.</div>
 </div>
@@ -727,6 +735,8 @@
     <a href="https://openmaptiles.org/" target="_blank" rel="noopener">OpenMapTiles</a> /
     <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>.
     Communes : <a href="https://data.geopf.fr/geocodage/" target="_blank" rel="noopener">Géoplateforme / BAN</a>.
+    Positions des moyens aériens : <a href="https://airplanes.live/" target="_blank"
+    rel="noopener">Airplanes.live</a> (ADS-B communautaire, affichage non exhaustif).
     Rendu <a href="https://maplibre.org/" target="_blank" rel="noopener">MapLibre GL</a>.
     Icônes <a href="https://lucide.dev/" target="_blank" rel="noopener">Lucide</a> (ISC).
     <a href="/mentions-legales.html">Mentions légales &amp; confidentialité</a>.
@@ -2429,6 +2439,7 @@ function show(ts) {
   if (was !== atLatest) {
     document.body.classList.toggle('past', !atLatest);
     applyBurnt();
+    aircraftSync();
   }
 
   const clock = fmtClock(ts);
@@ -2471,6 +2482,563 @@ const json = async url => {
   if (!response.ok) throw new Error(`${response.status} ${url}`);
   return response.json();
 };
+
+/*
+ * Moyens aériens : catalogue ICAO24 partagé par des observateurs ADS-B pendant
+ * la saison 2026. Une adresse identifie un transpondeur, pas une mission :
+ * l'interface parle donc de « moyens aériens » et signale seulement leur
+ * proximité éventuelle avec un incendie détecté par la carte.
+ *
+ * La requête reste strictement opt-in. Tant que la case est décochée, aucun
+ * appel n'est envoyé à Airplanes.live ; elle s'arrête aussi dans un onglet
+ * masqué ou lorsque la frise montre le passé.
+ */
+const AIRCRAFT_ICAO = (
+  '3b7b65,3b7b66,3f62f6,3b7b64,3b7b73,3b7b72,3b7b6d,3b7b6f,3b7b6e,'
+  + '3b7b75,3b7b74,3b7b6c,3b7b76,3b7b71,3b7b70,3b7b6b,3b7b86,3b7b85,'
+  + '3b7b63,3b7b3f,3b7b3e,3b7b3d,3b7b3a,3b7b39,3b7baa,3b7ba7,3b7ba6,'
+  + '3b7ba5,3b7ba4,3b7ba3,3b7ba2,3b7ba1,3b7ba0,3b7b9f,3b7b9e,3b7b9d,'
+  + '3b7b9c,3b7b9b,3b7b9a,3b7b98,3b7b96,3b7b95,3b7b94,3b7b93,3b7b92,'
+  + '3b7b91,3b780f,3b7b8e,3b7b8d,3b7b8c,3b7b8b,3b7b52,3b7b51,3b7b50,'
+  + '3b7b4b,3b7b4a,3b7b49,3b7b3c,3b7b3b,3b7b38,3b7b37,3b7ba9,3b7ba8,'
+  + '3b7b8a,3b7b87,3b7b89,3b7b88,3b7b82,3b7b81,3b7b7f,3b7b84,3b7b7e,'
+  + '3b7b7d,3b7b7c,3b7b7b,3b7b7a,7cad89,7cace5,7caeb4,7c4753,7c49bc,'
+  + '7caddf,393013,395244,394866,39bea6,393c65,4ab50d,4ab50e,3b775c,'
+  + '505d0b,505d16,39a165,39ad12,39c672,4b4315,4b42e3,009343,3e9555,'
+  + '39c5c3,3b7601,4ab50f,4d0123,4d0129,396402,39d024,501f9c,348650,'
+  + '3464d9,39ddf7,399d82,4c39f2'
+).split(',');
+const AIRCRAFT_URL = 'https://api.airplanes.live/v2/hex/' + AIRCRAFT_ICAO.join(',');
+const AIRCRAFT_POLL_MS = 28 * 1000;
+const AIRCRAFT_BOOT_POLL_MS = 4 * 1000;
+const AIRCRAFT_DELAY_MS = 30 * 1000;
+const AIRCRAFT_BOOT_DELAY_MS = 2 * 1000;
+const AIRCRAFT_DELAY_RAMP = .5;
+const AIRCRAFT_TRAIL_MS = 10 * 60 * 1000;
+const AIRCRAFT_TRACK_KEEP_MS = 15 * 60 * 1000;
+const AIRCRAFT_TRAIL_GAP_MS = 90 * 1000;
+const AIRCRAFT_POINT_STALE_MS = 90 * 1000;
+const AIRCRAFT_FRAME_MS = 1000 / 20;
+const AIRCRAFT_FIRE_KM = 60;
+const HELICOPTER_TYPES = new Set([
+  'A109', 'A119', 'A139', 'A149', 'A169', 'A189', 'AS32', 'AS50', 'AS55',
+  'AS65', 'B06', 'B105', 'B407', 'B412', 'BK17', 'EC20', 'EC25', 'EC30',
+  'EC35', 'EC45', 'H125', 'H135', 'H145', 'H160', 'H175', 'H225', 'NH90',
+  'R22', 'R44', 'R66', 'S76', 'S92', 'SA32', 'SA34', 'SA36', 'UH1', 'UH60',
+]);
+const aircraftCheck = document.getElementById('ck-aircraft');
+const aircraftStatus = document.getElementById('aircraft-status');
+const A = {
+  on: false, timer: null, controller: null, loading: false,
+  tracks: new Map(), features: [], clockOffset: 0,
+  raf: null, lastFrame: 0, popup: null, popupTimer: null, startedAt: null,
+};
+
+function aircraftStatusText(text) {
+  aircraftStatus.textContent = text;
+  aircraftStatus.hidden = !A.on;
+}
+
+function aircraftSource(data = EMPTY) {
+  const source = map.getSource('aircraft');
+  if (source) source.setData(data);
+}
+
+function aircraftTrailsSource(data = EMPTY) {
+  const source = map.getSource('aircraft-trails');
+  if (source) source.setData(data);
+}
+
+function closeAircraftPopup() {
+  if (A.popup) A.popup.remove();
+  if (A.popupTimer) {
+    clearInterval(A.popupTimer);
+    A.popupTimer = null;
+  }
+}
+
+function nearestAircraftFire(center) {
+  let best = null, distance = Infinity;
+  for (const fire of MAJOR.features) {
+    const d = distanceKm(center, fire.properties.center);
+    if (d < distance) { best = fire; distance = d; }
+  }
+  if (!best || distance > AIRCRAFT_FIRE_KM) return null;
+  return {
+    distance: Math.round(distance),
+    name: best.properties.name || 'un incendie récent',
+  };
+}
+
+function aircraftKind(aircraft) {
+  const category = String(aircraft.category || '').toUpperCase();
+  const type = String(aircraft.t || '').trim().toUpperCase();
+  const description = String(aircraft.desc || '').toUpperCase();
+  return category === 'A7' || HELICOPTER_TYPES.has(type)
+    || /HELICOPTER|ROTORCRAFT|EUROCOPTER|ECUREUIL|SIKORSKY|ROBINSON/.test(description)
+    ? 'helicopter' : 'airplane';
+}
+
+function aircraftFeature(aircraft, receivedAt) {
+  if (!Number.isFinite(aircraft.lon) || !Number.isFinite(aircraft.lat)) return null;
+  if (Number.isFinite(aircraft.seen_pos) && aircraft.seen_pos > 90) return null;
+  const fire = nearestAircraftFire([aircraft.lon, aircraft.lat]);
+  const callsign = String(aircraft.flight || '').trim();
+  const registration = String(aircraft.r || '').trim();
+  const seen = Number.isFinite(aircraft.seen_pos) ? Math.round(aircraft.seen_pos) : 0;
+  return {
+    type: 'Feature',
+    geometry: { type: 'Point', coordinates: [aircraft.lon, aircraft.lat] },
+    properties: {
+      hex: String(aircraft.hex || '').replace(/^~/, '').toLowerCase(),
+      callsign, registration,
+      label: callsign || registration || String(aircraft.hex || '').toUpperCase(),
+      aircraft_type: String(aircraft.t || '').trim(),
+      description: String(aircraft.desc || '').trim(),
+      aircraft_kind: aircraftKind(aircraft),
+      altitude: Number.isFinite(aircraft.alt_baro) ? aircraft.alt_baro : null,
+      speed: Number.isFinite(aircraft.gs) ? aircraft.gs : null,
+      track: Number.isFinite(aircraft.track) ? aircraft.track : 0,
+      seen,
+      position_ts: receivedAt - seen * 1000,
+      near_fire: !!fire,
+      fire_name: fire ? fire.name : '',
+      fire_distance: fire ? fire.distance : null,
+    },
+  };
+}
+
+/*
+ * L'API gratuite ne fournit pas d'historique : chaque navigateur construit le
+ * sien à partir des positions reçues après activation. Une interruption de
+ * plus de 90 s ouvre une nouvelle trace au lieu de relier artificiellement
+ * deux points éloignés.
+ */
+function updateAircraftTracks(points, now) {
+  const active = new Set();
+  for (const feature of points) {
+    const p = feature.properties;
+    const hex = p.hex;
+    active.add(hex);
+    let track = A.tracks.get(hex) || [];
+    const point = { coordinates: feature.geometry.coordinates, ts: p.position_ts };
+    const last = track[track.length - 1];
+    if (!last || point.ts > last.ts) {
+      if (last && point.ts - last.ts > AIRCRAFT_TRAIL_GAP_MS) track = [];
+      const previous = track[track.length - 1];
+      if (previous && distanceKm(previous.coordinates, point.coordinates) < .02) {
+        track[track.length - 1] = point;
+      } else {
+        track.push(point);
+      }
+    }
+    track = track.filter(item =>
+      item.ts >= now - AIRCRAFT_TRACK_KEEP_MS);
+    A.tracks.set(hex, track);
+  }
+
+  for (const [hex, track] of A.tracks)
+    if (!active.has(hex)
+        && (!track.length || track[track.length - 1].ts < now - AIRCRAFT_TRACK_KEEP_MS))
+      A.tracks.delete(hex);
+}
+
+function aircraftDisplayDelay(now = Date.now()) {
+  if (!Number.isFinite(A.startedAt)) return AIRCRAFT_DELAY_MS;
+  const elapsed = Math.max(0, now - A.startedAt);
+  return Math.min(AIRCRAFT_DELAY_MS,
+    AIRCRAFT_BOOT_DELAY_MS + elapsed * AIRCRAFT_DELAY_RAMP);
+}
+
+function aircraftCurve(p0, p1, p2, p3, t) {
+  const t2 = t * t, t3 = t2 * t;
+  return [0, 1].map(axis => .5 * (
+    2 * p1[axis]
+    + (-p0[axis] + p2[axis]) * t
+    + (2 * p0[axis] - 5 * p1[axis] + 4 * p2[axis] - p3[axis]) * t2
+    + (-p0[axis] + 3 * p1[axis] - 3 * p2[axis] + p3[axis]) * t3
+  ));
+}
+
+function aircraftBearing(from, to) {
+  const lat = (from[1] + to[1]) / 2 * Math.PI / 180;
+  const east = (to[0] - from[0]) * Math.cos(lat);
+  const north = to[1] - from[1];
+  return (Math.atan2(east, north) * 180 / Math.PI + 360) % 360;
+}
+
+function aircraftPose(track, ts, fallbackHeading = 0) {
+  if (!track.length) return null;
+  if (track.length === 1 || ts <= track[0].ts)
+    return { coordinates: track[0].coordinates, heading: fallbackHeading };
+  const last = track[track.length - 1];
+  if (ts >= last.ts)
+    return { coordinates: last.coordinates, heading: fallbackHeading };
+
+  let index = 1;
+  while (index < track.length && track[index].ts < ts) index++;
+  const a = track[index - 1], b = track[index];
+  const span = Math.max(b.ts - a.ts, 1);
+  const t = Math.min(Math.max((ts - a.ts) / span, 0), 1);
+  const p0 = track[Math.max(index - 2, 0)].coordinates;
+  const p1 = a.coordinates;
+  const p2 = b.coordinates;
+  const p3 = track[Math.min(index + 1, track.length - 1)].coordinates;
+  const coordinates = aircraftCurve(p0, p1, p2, p3, t);
+  const delta = .025;
+  const before = aircraftCurve(p0, p1, p2, p3, Math.max(t - delta, 0));
+  const after = aircraftCurve(p0, p1, p2, p3, Math.min(t + delta, 1));
+  return {
+    coordinates,
+    heading: distanceKm(before, after) > .001
+      ? aircraftBearing(before, after) : fallbackHeading,
+  };
+}
+
+function aircraftTrailCoordinates(track, endTs) {
+  if (track.length < 2) return [];
+  const startTs = endTs - AIRCRAFT_TRAIL_MS;
+  const anchors = [];
+  const start = aircraftPose(track, startTs);
+  if (start) anchors.push({ coordinates: start.coordinates, ts: startTs });
+  for (const point of track)
+    if (point.ts > startTs && point.ts < endTs) anchors.push(point);
+  const end = aircraftPose(track, endTs);
+  if (end) anchors.push({ coordinates: end.coordinates, ts: endTs });
+  if (anchors.length < 2) return [];
+
+  const coordinates = [anchors[0].coordinates];
+  for (let index = 1; index < anchors.length; index++) {
+    const p0 = anchors[Math.max(index - 2, 0)].coordinates;
+    const p1 = anchors[index - 1].coordinates;
+    const p2 = anchors[index].coordinates;
+    const p3 = anchors[Math.min(index + 1, anchors.length - 1)].coordinates;
+    // Six sous-segments suffisent à arrondir un virage sans faire passer la
+    // courbe loin des positions réellement reçues.
+    for (let step = 1; step <= 6; step++)
+      coordinates.push(aircraftCurve(p0, p1, p2, p3, step / 6));
+  }
+  return coordinates;
+}
+
+function aircraftFrame(timestamp) {
+  A.raf = null;
+  const run = A.on && atLatest && !document.hidden;
+  if (!run) return;
+  if (timestamp - A.lastFrame < AIRCRAFT_FRAME_MS) {
+    A.raf = requestAnimationFrame(aircraftFrame);
+    return;
+  }
+  A.lastFrame = timestamp;
+
+  const localNow = Date.now();
+  const serverNow = localNow + A.clockOffset;
+  const displayTs = serverNow - aircraftDisplayDelay(localNow);
+  const points = [], trails = [];
+  for (const feature of A.features) {
+    const p = feature.properties;
+    const track = A.tracks.get(p.hex) || [];
+    const pose = aircraftPose(track, displayTs, p.track);
+    if (!pose) continue;
+    if (serverNow - p.position_ts <= AIRCRAFT_POINT_STALE_MS) {
+      points.push({
+        ...feature,
+        geometry: { type: 'Point', coordinates: pose.coordinates },
+        properties: { ...p, track: pose.heading },
+      });
+    }
+    const coordinates = aircraftTrailCoordinates(track, displayTs);
+    if (coordinates.length >= 2) {
+      trails.push({
+        type: 'Feature',
+        geometry: { type: 'LineString', coordinates },
+        properties: { hex: p.hex },
+      });
+    }
+  }
+  aircraftSource({ type: 'FeatureCollection', features: points });
+  aircraftTrailsSource({ type: 'FeatureCollection', features: trails });
+  A.raf = requestAnimationFrame(aircraftFrame);
+}
+
+function aircraftLoop() {
+  const run = A.on && atLatest && !document.hidden;
+  if (run && !A.raf) {
+    A.lastFrame = 0;
+    A.raf = requestAnimationFrame(aircraftFrame);
+  } else if (!run && A.raf) {
+    cancelAnimationFrame(A.raf);
+    A.raf = null;
+  }
+}
+
+async function refreshAircraft() {
+  if (!A.on || !atLatest || document.hidden || A.loading) return;
+  const requestStartedAt = Date.now();
+  A.loading = true;
+  A.controller = new AbortController();
+  aircraftStatusText('Recherche des appareils en vol…');
+  try {
+    const response = await fetch(AIRCRAFT_URL, {
+      cache: 'no-store',
+      signal: A.controller.signal,
+    });
+    if (!response.ok) throw new Error(`Airplanes.live HTTP ${response.status}`);
+    const data = await response.json();
+    if (!A.on || !atLatest || document.hidden) return;
+    const serverNow = Number(data.now);
+    const receivedAt = Number.isFinite(serverNow)
+      ? (serverNow > 1e12 ? serverNow : serverNow * 1000)
+      : Date.now();
+    const fresh = (data.ac || [])
+      .map(aircraft => aircraftFeature(aircraft, receivedAt))
+      .filter(Boolean);
+    A.clockOffset = receivedAt - Date.now();
+    updateAircraftTracks(fresh, receivedAt);
+
+    // Un appareil peut être entendu sans position pendant quelques réponses,
+    // notamment lorsqu'il vole bas. On conserve alors son dernier point fiable
+    // et sa trace, sans jamais confondre rr_lat/rr_lon (position du récepteur)
+    // avec celle de l'aéronef.
+    const latest = new Map(fresh.map(feature => [feature.properties.hex, feature]));
+    for (const previous of A.features) {
+      const p = previous.properties;
+      if (!latest.has(p.hex)
+          && p.position_ts >= receivedAt - AIRCRAFT_TRACK_KEEP_MS)
+        latest.set(p.hex, previous);
+    }
+    A.features = [...latest.values()];
+    aircraftLoop();
+    const near = fresh.filter(feature => feature.properties.near_fire).length;
+    aircraftStatusText(fresh.length
+      ? `${fresh.length} en vol${near ? ` · ${near} près d'un incendie` : ''}`
+      : 'Aucun appareil suivi actuellement en vol.');
+  } catch (error) {
+    if (error.name !== 'AbortError' && A.on)
+      aircraftStatusText('Positions momentanément indisponibles.');
+  } finally {
+    A.loading = false;
+    A.controller = null;
+    clearTimeout(A.timer);
+    if (A.on && atLatest && !document.hidden) {
+      const interval = aircraftDisplayDelay() < AIRCRAFT_DELAY_MS
+        ? AIRCRAFT_BOOT_POLL_MS : AIRCRAFT_POLL_MS;
+      // Les 28 s du régime normal sont mesurées entre les départs de requête :
+      // on interroge donc environ 2 s avant que le tampon de 30 s soit épuisé.
+      const wait = Math.max(1000, interval - (Date.now() - requestStartedAt));
+      A.timer = setTimeout(refreshAircraft, wait);
+    }
+  }
+}
+
+function aircraftSync() {
+  clearTimeout(A.timer);
+  A.timer = null;
+  if (A.controller) A.controller.abort();
+  if (!A.on) {
+    closeAircraftPopup();
+    aircraftSource();
+    aircraftTrailsSource();
+    A.startedAt = null;
+    aircraftStatusText('');
+    aircraftLoop();
+    return;
+  }
+  if (!atLatest) {
+    closeAircraftPopup();
+    aircraftSource();
+    aircraftTrailsSource();
+    aircraftStatusText('Masqués pendant la lecture du passé.');
+    aircraftLoop();
+    return;
+  }
+  aircraftLoop();
+  if (document.hidden) return;
+  if (!Number.isFinite(A.startedAt)) {
+    const buffered = [...A.tracks.values()].some(track =>
+      track.length > 1
+      && track[track.length - 1].ts - track[0].ts >= AIRCRAFT_DELAY_MS);
+    A.startedAt = Date.now() - (buffered
+      ? (AIRCRAFT_DELAY_MS - AIRCRAFT_BOOT_DELAY_MS) / AIRCRAFT_DELAY_RAMP : 0);
+  }
+  refreshAircraft();
+}
+
+function aircraftIcon() {
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = 48;
+  const ctx = canvas.getContext('2d');
+  ctx.translate(24, 24);
+  ctx.beginPath();
+  ctx.moveTo(0, -20);
+  ctx.bezierCurveTo(3, -16, 3, -10, 3, -5);
+  ctx.lineTo(18, 4);
+  ctx.lineTo(18, 8);
+  ctx.lineTo(3, 5);
+  ctx.lineTo(3, 14);
+  ctx.lineTo(9, 18);
+  ctx.lineTo(9, 20);
+  ctx.lineTo(0, 18);
+  ctx.lineTo(-9, 20);
+  ctx.lineTo(-9, 18);
+  ctx.lineTo(-3, 14);
+  ctx.lineTo(-3, 5);
+  ctx.lineTo(-18, 8);
+  ctx.lineTo(-18, 4);
+  ctx.lineTo(-3, -5);
+  ctx.bezierCurveTo(-3, -10, -3, -16, 0, -20);
+  ctx.closePath();
+  ctx.fillStyle = '#f4f1eb';
+  ctx.strokeStyle = '#111419';
+  ctx.lineWidth = 2.5;
+  ctx.lineJoin = 'round';
+  ctx.fill();
+  ctx.stroke();
+  return ctx.getImageData(0, 0, canvas.width, canvas.height);
+}
+
+function helicopterIcon() {
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = 48;
+  const ctx = canvas.getContext('2d');
+  ctx.translate(24, 24);
+  ctx.fillStyle = '#f4f1eb';
+  ctx.strokeStyle = '#111419';
+  ctx.lineWidth = 2.5;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  // Vue de dessus, orientée vers le haut comme l'avion : rotor principal,
+  // cabine, poutre de queue et rotor arrière restent lisibles à petite taille.
+  ctx.beginPath();
+  ctx.moveTo(-20, -5);
+  ctx.lineTo(20, 5);
+  ctx.moveTo(-20, 5);
+  ctx.lineTo(20, -5);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.ellipse(0, -4, 6, 11, 0, 0, Math.PI * 2);
+  ctx.moveTo(-2.5, 5);
+  ctx.lineTo(-1.5, 18);
+  ctx.lineTo(1.5, 18);
+  ctx.lineTo(2.5, 5);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(-6, 18);
+  ctx.lineTo(6, 18);
+  ctx.moveTo(0, 13);
+  ctx.lineTo(0, 22);
+  ctx.stroke();
+  return ctx.getImageData(0, 0, canvas.width, canvas.height);
+}
+
+function aircraftPopup(event) {
+  event.originalEvent?.stopPropagation();
+  closeAircraftPopup();
+
+  const p = event.features[0].properties;
+  const root = document.createElement('div');
+  const title = document.createElement('b');
+  title.textContent = p.label;
+  root.append(title);
+  const rows = [
+    [p.description || p.aircraft_type, p.registration],
+    [p.altitude !== null ? `${Number(p.altitude).toLocaleString('fr-FR')} ft` : '',
+     p.speed !== null ? `${Math.round(Number(p.speed) * 1.852)} km/h` : ''],
+    [p.near_fire ? `à ${p.fire_distance} km de ${p.fire_name}` : '', ''],
+  ];
+  for (const values of rows) {
+    const text = values.filter(Boolean).join(' · ');
+    if (!text) continue;
+    root.append(document.createElement('br'), document.createTextNode(text));
+  }
+  const age = document.createElement('span');
+  age.style.opacity = '.65';
+  root.append(document.createElement('br'), age);
+  const updateAge = () => {
+    const current = A.features.find(feature => feature.properties.hex === p.hex);
+    const positionTs = Number(current?.properties.position_ts ?? p.position_ts);
+    const seconds = Number.isFinite(positionTs)
+      ? Math.max(0, Math.round((Date.now() + A.clockOffset - positionTs) / 1000))
+      : null;
+    age.textContent = (seconds === null ? 'âge du signal inconnu'
+      : `signal ADS-B reçu il y a ${seconds} s`)
+      + ` · affichage différé de ${Math.round(aircraftDisplayDelay() / 1000)} s`
+      + ` · ICAO ${p.hex.toUpperCase()}`;
+  };
+  updateAge();
+
+  const popup = new maplibregl.Popup({ closeButton: true })
+    .setLngLat(event.lngLat)
+    .setDOMContent(root)
+    .addTo(map);
+  const timer = setInterval(updateAge, 1000);
+  A.popup = popup;
+  A.popupTimer = timer;
+  popup.on('close', () => {
+    clearInterval(timer);
+    if (A.popup === popup) A.popup = null;
+    if (A.popupTimer === timer) A.popupTimer = null;
+  });
+}
+
+function addAircraftLayers() {
+  map.addSource('aircraft', { type: 'geojson', data: EMPTY });
+  map.addSource('aircraft-trails', { type: 'geojson', data: EMPTY, lineMetrics: true });
+  if (!map.hasImage('fire-aircraft'))
+    map.addImage('fire-aircraft', aircraftIcon(), { pixelRatio: 2 });
+  if (!map.hasImage('fire-helicopter'))
+    map.addImage('fire-helicopter', helicopterIcon(), { pixelRatio: 2 });
+  map.addLayer({
+    id: 'aircraft-trail-case', type: 'line', source: 'aircraft-trails',
+    layout: { 'line-cap': 'round', 'line-join': 'round' },
+    paint: {
+      'line-color': '#111419',
+      'line-width': ['interpolate', ['linear'], ['zoom'], 5, 2, 10, 3.6, 14, 4.4],
+      'line-opacity': .64,
+    },
+  });
+  map.addLayer({
+    id: 'aircraft-trail', type: 'line', source: 'aircraft-trails',
+    layout: { 'line-cap': 'round', 'line-join': 'round' },
+    paint: {
+      'line-width': ['interpolate', ['linear'], ['zoom'], 5, 1, 10, 2.1, 14, 2.6],
+      'line-gradient': ['interpolate', ['linear'], ['line-progress'],
+        0, 'rgba(244,197,139,.16)',
+        .12, 'rgba(244,197,139,.32)',
+        .72, 'rgba(250,211,160,.72)',
+        1, 'rgba(255,235,205,.98)'],
+    },
+  });
+  map.addLayer({
+    id: 'aircraft-symbol', type: 'symbol', source: 'aircraft',
+    layout: {
+      'icon-image': ['case',
+        ['==', ['get', 'aircraft_kind'], 'helicopter'],
+        'fire-helicopter', 'fire-aircraft'],
+      'icon-size': 1,
+      'icon-rotate': ['get', 'track'],
+      'icon-rotation-alignment': 'map',
+      'icon-allow-overlap': true,
+      'text-field': ['get', 'label'],
+      'text-font': ['Noto Sans Bold'],
+      'text-size': 10.5,
+      'text-offset': [0, 2],
+      'text-anchor': 'top',
+      'text-optional': true,
+    },
+    paint: {
+      'text-color': '#f4f1eb',
+      'text-halo-color': 'rgba(10,12,15,.92)',
+      'text-halo-width': 1.4,
+    },
+  });
+  map.on('click', 'aircraft-symbol', aircraftPopup);
+  map.on('mouseenter', 'aircraft-symbol', () => map.getCanvas().style.cursor = 'pointer');
+  map.on('mouseleave', 'aircraft-symbol', () => map.getCanvas().style.cursor = '');
+}
 
 /*
  * Sur la vue nationale, les points d'une meme zone active restent difficiles
@@ -2904,6 +3472,9 @@ async function init() {
     paint: { 'circle-color': V('--front'), 'circle-radius': 4, 'circle-stroke-width': 0,
              'circle-color-transition': NOW, 'circle-radius-transition': NOW,
              'circle-opacity-transition': NOW } });
+  // Les appareils restent au-dessus des foyers et des surfaces : à basse
+  // altitude, plusieurs peuvent se superposer exactement au front actif.
+  addAircraftLayers();
 
   if (windData && windData.nt > 1) {
     W.data = windData;
@@ -2967,6 +3538,7 @@ async function init() {
   lockWidths();
   // on ouvre sur le dernier état observé, pas sur le bout de la prévision
   setTime(steps[lastObs].ts);
+  aircraftSync();
 
   if (manifest.generated_at) {
     document.getElementById('updated').textContent =
@@ -2980,6 +3552,9 @@ async function init() {
 
   // détail d'un polygone au clic, aussi bien dans l'aperçu que dans une cellule
   const popup = e => {
+    // Un appareil est rendu au-dessus du polygone. Sans ce garde-fou, le même
+    // clic déclenche aussi le gestionnaire du fond et ouvre deux fiches.
+    if (map.queryRenderedFeatures(e.point, { layers: ['aircraft-symbol'] }).length) return;
     const p = e.features[0].properties;
     new maplibregl.Popup({ closeButton: true })
       .setLngLat(e.lngLat)
@@ -3007,6 +3582,7 @@ document.addEventListener('visibilitychange', () => {
   else stopPlay();
   windLoop();   // rien à animer tant que l'onglet est caché
   smokeLoop();
+  aircraftSync();
 });
 
 /* Le curseur porte maintenant un instant, pas un numéro de cran : il se déplace
@@ -3065,6 +3641,10 @@ document.getElementById('ck-wind').addEventListener('change', e => {
 });
 document.getElementById('ck-smoke').addEventListener('change', e => {
   S.on = e.target.checked; smokeLoop();
+});
+aircraftCheck.addEventListener('change', event => {
+  A.on = event.target.checked;
+  aircraftSync();
 });
 
 const playBtn = document.getElementById('play');

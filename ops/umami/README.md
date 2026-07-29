@@ -161,7 +161,10 @@ Les paramètres de recherche et fragments d'URL sont volontairement exclus. Les
 mises à jour, ainsi que le démarrage et la mise en pause de la frise avec les
 événements distincts `timeline-play` et `timeline-pause`. L'événement
 `layer-toggle` contient uniquement le nom technique de l'option modifiée et son
-nouvel état booléen.
+nouvel état booléen. Le calque des moyens aériens utilise la valeur
+`aircraft` : son activation envoie donc
+`{ layer: "aircraft", enabled: true }`, et sa désactivation la même charge avec
+`enabled: false`.
 L'événement `incident-shortcut` contient le lieu public déjà affiché sur le
 bouton, ou `unknown`, et sa position dans la liste de raccourcis.
 Ne pas activer `umami.identify`, le replay de sessions ni les cartes de

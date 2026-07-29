@@ -16,6 +16,7 @@ fond satellite :
 | **Foyers** | détections FIRMS des 5 derniers jours | échelle continue, du jaune clair au brun |
 | **Fumée simulée** | foyers FIRMS récents + vent AROME HD | panaches diffus qui suivent le champ de vent |
 | **Vent à 10 m** | modèle AROME HD via Open-Meteo | nappe de particules blanches |
+| **Moyens aériens** | positions ADS-B Airplanes.live | appareils suivis, cap et fiche de vol |
 
 Un curseur temporel rejoue la progression du feu.
 
@@ -28,6 +29,21 @@ l'ancienneté reste le facteur visuel principal.
 La fumée peut elle aussi être masquée dans **Calques**. Elle est indicative :
 ce n'est ni une observation satellite de fumée ni une mesure de qualité de
 l'air.
+Le calque **Moyens aériens** est désactivé par défaut. Son activation interroge
+directement Airplanes.live depuis le navigateur, toutes les 28 secondes en
+régime établi et uniquement lorsque l'onglet est visible. Pendant la première
+minute, des relevés rapprochés amorcent l'animation sans attendre un cycle
+complet. Une liste de 112 adresses ICAO24
+connues limite la requête aux appareils susceptibles de participer aux
+opérations ; leur proximité avec un incendie récent est signalée, mais ne
+constitue pas une confirmation de mission. Le calque disparaît lorsque la
+frise montre le passé, puisque ces positions ne décrivent que l'instant présent.
+Le trajet des 10 dernières minutes se construit et reste en mémoire dans le
+navigateur, y compris si le calque est brièvement masqué ; aucune trace
+antérieure n'est demandée au service. Le différé augmente progressivement
+jusqu'à 30 secondes pendant l'amorçage, puis les appareils avancent
+continûment entre deux positions réellement reçues, sans extrapoler au-delà du
+dernier point connu. Avions et hélicoptères utilisent des symboles distincts.
 Le bouton `i` à droite de la frise ouvre le journal des 40 dernières mises à
 jour : heure, source et volume de données reçu.
 
@@ -166,6 +182,10 @@ affiché : la nappe ne présente ni trou ni bord carré.
   runners GitHub. Si une grille fine reste indisponible, la série fine s'arrête
   proprement : le vent national grossier demeure affiché partout. Vitesse et
   azimut sont convertis en composantes est/nord.
+- Airplanes.live n'est pas interrogé par le collecteur : le navigateur lui
+  demande en une seule fois les positions courantes des ICAO24 connus, seulement
+  après activation explicite du calque. Les réponses sans position fraîche sont
+  ignorées.
 
 **Rendu** (`index.html`) — MapLibre GL, sans build ni bundler. Seules les
 détections des cellules visibles forment la couche `circle`. Avancer dans le
@@ -339,6 +359,8 @@ les sources sont libres d'usage mais demandent d'être citées.
   par EOX ailleurs (données Copernicus Sentinel modifiées 2020) ; toponymes
   **CARTO** / **OpenStreetMap**
 - Commune au centre : géocodage inverse **Géoplateforme / BAN**
+- Positions des moyens aériens : **Airplanes.live** (ADS-B communautaire,
+  affichage non exhaustif)
 - Rendu : **MapLibre GL JS**
 
 Aucune licence n'est déclarée pour l'instant : le code est donc, par défaut,

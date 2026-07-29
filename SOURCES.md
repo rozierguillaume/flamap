@@ -14,6 +14,7 @@ Notes de repérage + ce que j'ai testé pour de vrai le 28/07/2026 sur le feu du
 | **Périmètre haute résolution** | Copernicus EMS Rapid Mapping | heures à jours, seulement si activation | ~10 m et mieux |
 | **Périmètre haute résolution, en autonomie** | Sentinel-2 dNBR | revisite 5 jours | 10–20 m |
 | **Vent (passé + 24 h à venir)** | Open-Meteo / AROME HD | horaire, 7 j en arrière | maille 1,5 km |
+| **Moyens aériens** | Airplanes.live / ADS-B | quelques secondes | position transpondeur |
 
 Les deux premières lignes et la dernière sont celles implémentées dans
 `fetch_fires.py`. Les deux premières font aussi les deux images que tu m'as
@@ -182,7 +183,50 @@ réanalyse ERA5, 25 km, latence 5 jours).
 
 ---
 
-## 4. Les autres pistes, par ordre d'intérêt
+## 4. Moyens aériens — Airplanes.live
+
+Testé le 29/07/2026. L'API REST communautaire accepte une liste d'adresses
+ICAO24 et autorise les requêtes directes du navigateur par CORS :
+
+```
+https://api.airplanes.live/v2/hex/{icao24,icao24,...}
+```
+
+Le calque utilise une liste statique de 112 transpondeurs de la Sécurité civile
+et de renforts étrangers recensés pendant la saison. Une seule requête récupère
+les appareils récemment entendus ; seuls ceux qui portent `lat`, `lon` et une
+position de moins de 90 secondes sont envoyés à MapLibre. Champs utiles :
+`hex`, `flight`, `r`, `t`, `desc`, `alt_baro`, `gs`, `track` et `seen_pos`.
+
+Trois limites doivent rester visibles dans l'interface :
+
+1. une adresse connue identifie un appareil, pas sa mission du moment ;
+2. un appareil bas, hors couverture ou sans transpondeur actif peut manquer ;
+3. la liste évolue avec les locations et les renforts internationaux.
+
+La proximité d'un incendie majeur détecté par FIRMS/EFFIS est donc présentée
+comme un contexte, jamais comme une confirmation d'engagement. La récupération
+est désactivée par défaut, suspendue lorsque l'onglet est masqué et arrêtée dès
+que la frise quitte le dernier instant observé. Airplanes.live annonce un
+service sans SLA : une indisponibilité masque proprement les positions sans
+affecter le reste de la carte.
+
+L'endpoint ne livre que l'état courant. Le navigateur conserve donc les points
+reçus après activation pendant 15 minutes et dessine les 10 dernières minutes,
+même si le calque est brièvement décoché. Un silence de plus de 90 secondes
+coupe la trace pour ne pas fabriquer une longue ligne droite au retour d'un
+appareil ou d'un onglet suspendu. Pendant la première minute, une requête
+toutes les 4 secondes constitue rapidement un tampon ; le différé croît alors
+progressivement de 2 à 30 secondes. Ensuite, une requête part toutes les
+28 secondes, soit deux secondes avant l'épuisement théorique du tampon. Les
+symboles avancent continûment sur une courbe passant par les positions reçues,
+sans extrapolation après le dernier point connu.
+
+Le champ `category` (`A7`) constitue le signal le plus fiable pour reconnaître
+un hélicoptère. Une liste de types ICAO et quelques termes non ambigus de la
+description complètent ce signal quand la catégorie manque.
+
+## 5. Les autres pistes, par ordre d'intérêt
 
 ### Copernicus EMS Rapid Mapping — le plus précis, mais seulement sur activation
 
@@ -234,7 +278,7 @@ Accès : <https://lsa-saf.eumetsat.int> ou l'EUMETSAT Data Store (compte gratuit
 
 ---
 
-## 5. Ce que disent les données sur le feu en cours (état 28/07/2026)
+## 6. Ce que disent les données sur le feu en cours (état 28/07/2026)
 
 Sortie réelle de `fetch_fires.py` sur la bbox `-1.6, 44.2, -0.2, 45.4` :
 
@@ -259,7 +303,7 @@ Répartition des détections par jour dans la zone (NOAA-20 seul) :
 
 ---
 
-## 6. Le modèle à 3 couches que tu décris
+## 7. Le modèle à 3 couches que tu décris
 
 Aucune source ne le fournit tel quel. La façon la plus propre de le construire avec
 ce qui existe :
@@ -304,3 +348,4 @@ brûlée, qui donne la sévérité réelle plutôt que la seule date de passage.
 - LSA SAF : <https://lsa-saf.eumetsat.int/en/a/natural-hazards/>
 - Open-Meteo, modèles Météo-France : <https://open-meteo.com/en/docs/meteofrance-api>
 - Open-Meteo, archive ERA5 : <https://open-meteo.com/en/docs/historical-weather-api>
+- Airplanes.live, API REST : <https://airplanes.live/api-guide/>
