@@ -189,8 +189,8 @@ affiché : la nappe ne présente ni trou ni bord carré.
   proprement : le vent national grossier demeure affiché partout. Vitesse et
   azimut sont convertis en composantes est/nord.
 - Airplanes.live n'est pas interrogé par le collecteur : le navigateur lui
-  demande en une seule fois les positions courantes des ICAO24 connus, seulement
-  après activation explicite du calque. Les réponses sans position fraîche sont
+  demande en une seule fois les positions courantes des ICAO24 connus dès
+  l'ouverture de la carte. Les réponses sans position fraîche sont
   ignorées. Le service autonome `flamap-aircraft-history`, déployé séparément,
   effectue en parallèle une collecte mutualisée pour amorcer les traces lors de
   leur première ouverture ; il ne participe ni aux exports statiques ni à

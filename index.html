@@ -644,7 +644,7 @@
   <!-- Le listener Umami délégué sur #layers reprend cette valeur dans
        `layer-toggle`, avec l'état booléen de la case. -->
   <label title="Positions ADS-B reçues toutes les 4 s, animées avec 6 s de différé ; un historique court amorce les trajets et le suivi peut être incomplet">
-    <input type="checkbox" id="ck-aircraft"
+    <input type="checkbox" id="ck-aircraft" checked
            data-analytics-layer="aircraft"> moyens aériens
   </label>
   <div class="sub-layer">
@@ -2555,7 +2555,7 @@ const aircraftCheck = document.getElementById('ck-aircraft');
 const aircraftLabelsCheck = document.getElementById('ck-aircraft-label');
 const aircraftStatus = document.getElementById('aircraft-status');
 const A = {
-  on: false, timer: null, controller: null, loading: false,
+  on: true, timer: null, controller: null, loading: false,
   labels: false,
   tracks: new Map(), features: [], clockOffset: 0,
   historyLoaded: false, historyLoading: false,
