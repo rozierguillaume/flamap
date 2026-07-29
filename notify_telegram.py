@@ -172,7 +172,16 @@ def main():
         emit({"fresh": "false"})
         return 0
 
-    before = load_zones(prev_root / "zones", prev_manifest.get("zones", []))
+    # Le manifeste de la référence ne liste que les zones réellement reprises :
+    # c'est lui qui borne le diff des deux côtés. Une tuile absente de la
+    # référence est donc muette pour ce cycle, plutôt que toute neuve.
+    zones = prev_manifest.get("zones", [])
+    skipped = len(manifest.get("zones", [])) - len(zones)
+    if skipped > 0:
+        print(f"{skipped} {plural(skipped, 'zone')} hors référence, "
+              f"{plural(skipped, 'écartée')} du diff")
+
+    before = load_zones(prev_root / "zones", zones)
     if before["missing"]:
         count = len(before["missing"])
         print(f"::warning::{count} {plural(count, 'zone')} "
@@ -181,7 +190,7 @@ def main():
         emit({"fresh": "false"})
         return 0
 
-    after = load_zones(data_root / "zones", manifest.get("zones", []))
+    after = load_zones(data_root / "zones", zones)
     if after["missing"]:
         # Le garde-fou du workflow a déjà vérifié la complétude ; si ça arrive
         # quand même, mieux vaut ne rien annoncer que d'annoncer à moitié.

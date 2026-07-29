@@ -45,8 +45,14 @@ jobs:
       # Le même jeu repris sert de référence à la notification Telegram : il est
       # recopié dans `prev/` avant que le collecteur n'écrase `data/`. C'est le
       # seul état « avant » disponible, puisque les données ne vivent pas dans
-      # git. Une reprise partielle ne devient pas une référence : le diff
-      # annoncerait des milliers de faux nouveaux foyers.
+      # git. Le manifeste de `prev/` ne liste que les zones réellement reprises :
+      # une tuile perdue est écartée du diff au lieu d'y verser des centaines de
+      # faux nouveaux foyers.
+      #
+      # Les reprises comptent : 176 requêtes par cycle, douze cycles par jour, un
+      # 503 de CDN finit toujours par tomber. Sans elles, un incident sur une
+      # seule tuile coûtait à la fois trois jours d'historique FIRMS et la
+      # notification du cycle.
       - name: Reprendre l'historique FIRMS publié
         shell: bash
         run: |
@@ -55,52 +61,66 @@ jobs:
           import os
           import pathlib
           import shutil
+          import time
           import urllib.parse
           import urllib.request
           from concurrent.futures import ThreadPoolExecutor
 
           base = os.environ['LIVE_SITE'].rstrip('/')
           root = pathlib.Path('data/zones')
+          BACKOFF = (0, 3, 9)
 
-          try:
-              with urllib.request.urlopen(f"{base}/data/manifest.json",
-                                          timeout=60) as response:
-                  payload = response.read()
-              manifest = json.loads(payload)
-          except Exception as error:
+          def fetch(url):
+              for attempt, pause in enumerate(BACKOFF, start=1):
+                  if pause:
+                      time.sleep(pause)
+                  try:
+                      with urllib.request.urlopen(url, timeout=60) as response:
+                          body = response.read()
+                  except Exception as error:
+                      last = error
+                      continue
+                  if body:
+                      return body, None
+                  last = 'réponse vide'
+              return None, f"{last} (après {len(BACKOFF)} tentatives)"
+
+          payload, error = fetch(f"{base}/data/manifest.json")
+          if payload is None:
               print(f"::warning::Historique FIRMS indisponible : {error}")
               raise SystemExit(0)
+          manifest = json.loads(payload)
 
           root.mkdir(parents=True, exist_ok=True)
 
           def download(zone_id):
               encoded = urllib.parse.quote(str(zone_id), safe='')
-              url = f"{base}/data/zones/{encoded}.json"
-              target = root / f"{zone_id}.json"
-              try:
-                  with urllib.request.urlopen(url, timeout=60) as response:
-                      body = response.read()
-              except Exception as error:
+              body, error = fetch(f"{base}/data/zones/{encoded}.json")
+              if body is None:
                   print(f"::warning::Historique {zone_id} ignoré : {error}")
-                  return False
-              if not body:
-                  print(f"::warning::Historique {zone_id} vide")
-                  return False
-              target.write_bytes(body)
-              return True
+                  return None
+              (root / f"{zone_id}.json").write_bytes(body)
+              return zone_id
 
           zones = manifest.get('zones', [])
           with ThreadPoolExecutor(max_workers=12) as pool:
-              complete = all(pool.map(download, zones)) and bool(zones)
+              taken = [zone_id for zone_id in pool.map(download, zones)
+                       if zone_id]
 
-          if complete:
-              prev = pathlib.Path('prev')
-              shutil.copytree(root, prev / 'zones', dirs_exist_ok=True)
-              (prev / 'manifest.json').write_bytes(payload)
-              print(f"Référence Telegram : {len(zones)} zones publiées")
-          else:
-              print('::warning::Reprise incomplète : pas de référence pour la '
+          if not taken:
+              print('::warning::Aucune zone reprise : pas de référence pour la '
                     'notification Telegram.')
+              raise SystemExit(0)
+
+          prev = pathlib.Path('prev')
+          (prev / 'zones').mkdir(parents=True, exist_ok=True)
+          for zone_id in taken:
+              shutil.copy(root / f"{zone_id}.json", prev / 'zones')
+          manifest['zones'] = taken
+          (prev / 'manifest.json').write_text(json.dumps(manifest))
+          missing = len(zones) - len(taken)
+          print(f"Référence Telegram : {len(taken)} zones reprises"
+                + (f", {missing} écartées du diff" if missing else ""))
           PY
 
       # La génération nationale prend quelques minutes : quatre flux FIRMS
