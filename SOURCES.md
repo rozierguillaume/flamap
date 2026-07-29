@@ -211,15 +211,26 @@ que la frise quitte le dernier instant observé. Airplanes.live annonce un
 service sans SLA : une indisponibilité masque proprement les positions sans
 affecter le reste de la carte.
 
-L'endpoint ne livre que l'état courant. Le navigateur conserve donc les points
-reçus après activation pendant 15 minutes et dessine les 10 dernières minutes,
-même si le calque est brièvement décoché. Un silence de plus de 90 secondes
-coupe la trace pour ne pas fabriquer une longue ligne droite au retour d'un
-appareil ou d'un onglet suspendu. Une requête part toutes les 4 secondes,
-mesurées entre deux départs. Le symbole est affiché avec 6 secondes de différé,
-ce qui laisse 2 secondes de marge au cycle suivant si sa réponse tarde. Il
-avance continûment sur une courbe passant par les positions reçues, sans
-extrapolation après le dernier point connu.
+L'endpoint ne livre que l'état courant. Le service isolé
+`flamap-aircraft-history`, installé séparément sur le VPS, effectue donc la
+même requête toutes les 4 secondes et conserve 15 minutes de points dans un
+tampon circulaire en RAM. Il ne stocke pas d'archive durable : après un
+redémarrage, le tampon se reconstitue progressivement. Son endpoint agrégé
+n'est appelé qu'à l'activation du calque pour fournir le début des traces à
+tous les visiteurs sans multiplier la collecte amont.
+
+Le navigateur continue ensuite sa collecte directe, conserve les points pendant
+15 minutes et dessine les 10 dernières minutes, même si le calque est brièvement
+décoché. Le service du VPS reste un enrichissement facultatif : en cas d'échec,
+la trace se construit localement à partir de l'activation. Le navigateur
+abandonne l'amorçage après 4 secondes, rejette les formats inattendus, les ICAO24
+hors catalogue et les coordonnées ou horodatages incohérents. Un silence de plus
+de 90 secondes coupe la trace pour ne pas fabriquer une longue ligne droite au
+retour d'un appareil ou d'un onglet suspendu. Une requête directe part toutes
+les 4 secondes, mesurées entre deux départs. Le symbole est affiché avec
+6 secondes de différé, ce qui laisse 2 secondes de marge au cycle suivant si sa
+réponse tarde. Il avance continûment sur une courbe passant par les positions
+reçues, sans extrapolation après le dernier point connu.
 
 Le champ `category` (`A7`) constitue le signal le plus fiable pour reconnaître
 un hélicoptère. Une liste de types ICAO et quelques termes non ambigus de la

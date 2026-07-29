@@ -1,9 +1,10 @@
 # Flamap
 
 Cartographie des incendies en France métropolitaine, en quasi temps réel, à
-partir de données satellite publiques. Aucune clé d'API, aucune dépendance,
-aucun serveur applicatif : Python fabrique des fichiers statiques que le
-navigateur charge progressivement selon le zoom.
+partir de données satellite publiques. Aucune clé d'API ni dépendance :
+Python fabrique des fichiers statiques que le navigateur charge
+progressivement selon le zoom. Un petit service facultatif et isolé amorce
+l'historique récent des moyens aériens.
 
 ## Ce que la carte montre
 
@@ -36,13 +37,17 @@ connues limite la requête aux appareils susceptibles de participer aux
 opérations ; leur proximité avec un incendie récent est signalée, mais ne
 constitue pas une confirmation de mission. Le calque disparaît lorsque la
 frise montre le passé, puisque ces positions ne décrivent que l'instant présent.
-Le trajet des 10 dernières minutes se construit et reste en mémoire dans le
-navigateur, y compris si le calque est brièvement masqué ; aucune trace
-antérieure n'est demandée au service. Les appareils sont affichés avec
-6 secondes de différé — un cycle de collecte plus 2 secondes de marge — puis
-avancent continûment entre deux positions réellement reçues, sans extrapoler
-au-delà du dernier point connu. Avions et hélicoptères utilisent des symboles
-distincts.
+À l'activation, le navigateur demande au service du VPS les positions déjà
+collectées pendant les quinze dernières minutes, puis fusionne cet amorçage
+avec sa collecte directe. Si le service est indisponible, le trajet se
+construit simplement à partir de l'activation comme auparavant. Cette requête
+d'amorçage est abandonnée après 4 secondes et ses données sont validées avant
+fusion. Les 10 dernières minutes sont dessinées et restent en mémoire dans le
+navigateur, y compris si le calque est brièvement masqué. Les appareils sont
+affichés avec 6 secondes de différé — un cycle de collecte plus 2 secondes de
+marge — puis avancent continûment entre deux positions réellement reçues, sans
+extrapoler au-delà du dernier point connu. Avions et hélicoptères utilisent des
+symboles distincts.
 Le bouton `i` à droite de la frise ouvre le journal des 40 dernières mises à
 jour : heure, source et volume de données reçu.
 
@@ -184,7 +189,10 @@ affiché : la nappe ne présente ni trou ni bord carré.
 - Airplanes.live n'est pas interrogé par le collecteur : le navigateur lui
   demande en une seule fois les positions courantes des ICAO24 connus, seulement
   après activation explicite du calque. Les réponses sans position fraîche sont
-  ignorées.
+  ignorées. Le service autonome `flamap-aircraft-history`, déployé séparément,
+  effectue en parallèle une collecte mutualisée pour amorcer les traces lors de
+  leur première ouverture ; il ne participe ni aux exports statiques ni à
+  l'affichage des positions courantes.
 
 **Rendu** (`index.html`) — MapLibre GL, sans build ni bundler. Seules les
 détections des cellules visibles forment la couche `circle`. Avancer dans le
@@ -237,6 +245,11 @@ Le site est publié par GitHub Pages avec deux workflows :
 
 Un premier déploiement complet doit naturellement avoir réussi avant un
 déploiement front seul.
+
+Le service `flamap-aircraft-history` est déployé séparément sur le VPS. Il
+conserve quinze minutes en RAM et expose
+`https://api.flamap.fr/aircraft-history` derrière nginx. Il n'est pas inclus
+dans l'artefact GitHub Pages.
 
 Les données rafraîchies ne sont **jamais commitées**. À plusieurs Mo par version et
 12 exécutions par jour, l'historique git gonflerait de plusieurs gigaoctets par
