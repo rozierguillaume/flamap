@@ -637,7 +637,7 @@
                 data-analytics-layer="wind" checked> vent à 10 m</label>
   <!-- Le listener Umami délégué sur #layers reprend cette valeur dans
        `layer-toggle`, avec l'état booléen de la case. -->
-  <label title="Positions ADS-B reçues toutes les 4 s, animées avec 6 s de différé ; les trajets se construisent dans le navigateur et le suivi peut être incomplet">
+  <label title="Positions ADS-B reçues toutes les 4 s, animées avec 6 s de différé ; un historique court amorce les trajets et le suivi peut être incomplet">
     <input type="checkbox" id="ck-aircraft"
            data-analytics-layer="aircraft"> moyens aériens
   </label>
@@ -2516,8 +2516,13 @@ const AIRCRAFT_ICAO = (
   + '3464d9,39ddf7,399d82,4c39f2'
 ).split(',');
 const AIRCRAFT_URL = 'https://api.airplanes.live/v2/hex/' + AIRCRAFT_ICAO.join(',');
+const AIRCRAFT_HISTORY_URL = 'https://api.flamap.fr/aircraft-history';
+// Un relevé toutes les 4 s, affiché 6 s plus tard : le cycle suivant dispose
+// ainsi de 2 s supplémentaires pour arriver avant d'épuiser le tampon.
 const AIRCRAFT_POLL_MS = 4 * 1000;
 const AIRCRAFT_DELAY_MS = 6 * 1000;
+const AIRCRAFT_HISTORY_TIMEOUT_MS = 4 * 1000;
+const AIRCRAFT_HISTORY_MAX_POINTS = 300;
 const AIRCRAFT_TRAIL_MS = 10 * 60 * 1000;
 const AIRCRAFT_TRACK_KEEP_MS = 15 * 60 * 1000;
 const AIRCRAFT_TRAIL_GAP_MS = 90 * 1000;
@@ -2535,6 +2540,7 @@ const aircraftStatus = document.getElementById('aircraft-status');
 const A = {
   on: false, timer: null, controller: null, loading: false,
   tracks: new Map(), features: [], clockOffset: 0,
+  historyLoaded: false, historyLoading: false,
   raf: null, lastFrame: 0, popup: null, popupTimer: null,
 };
 
@@ -2645,6 +2651,82 @@ function updateAircraftTracks(points, now) {
     if (!active.has(hex)
         && (!track.length || track[track.length - 1].ts < now - AIRCRAFT_TRACK_KEEP_MS))
       A.tracks.delete(hex);
+}
+
+/*
+ * Le VPS mutualise la collecte des quinze dernières minutes. Cet amorçage
+ * reste facultatif : s'il est indisponible, la collecte directe ci-dessous
+ * construit exactement la même trace dans le navigateur.
+ */
+async function loadAircraftHistory() {
+  if (A.historyLoaded || A.historyLoading) return;
+  A.historyLoading = true;
+  const controller = new AbortController();
+  const timeout = setTimeout(
+    () => controller.abort(), AIRCRAFT_HISTORY_TIMEOUT_MS);
+  try {
+    const response = await fetch(AIRCRAFT_HISTORY_URL, {
+      headers: { Accept: 'application/json' },
+      signal: controller.signal,
+    });
+    if (!response.ok)
+      throw new Error(`historique aérien HTTP ${response.status}`);
+    const data = await response.json();
+    if (!A.on || !atLatest || document.hidden) return;
+    if (!data || !Array.isArray(data.aircraft))
+      throw new Error('historique aérien invalide');
+
+    const allowed = new Set(AIRCRAFT_ICAO);
+    const localNow = Date.now();
+    const serverNow = Number(data.now);
+    const now = Number.isFinite(serverNow)
+      && Math.abs(serverNow - localNow) < 2 * 60 * 1000
+      ? serverNow : localNow;
+    const oldest = now - AIRCRAFT_TRACK_KEEP_MS;
+    for (const aircraft of data.aircraft.slice(0, AIRCRAFT_ICAO.length)) {
+      const hex = String(aircraft.hex || '').replace(/^~/, '').toLowerCase();
+      if (!allowed.has(hex) || !Array.isArray(aircraft.points)) continue;
+      const received = aircraft.points
+        .slice(-AIRCRAFT_HISTORY_MAX_POINTS)
+        .map(point => ({
+          coordinates: [Number(point.lon), Number(point.lat)],
+          ts: Number(point.ts),
+        }))
+        .filter(point =>
+          Number.isFinite(point.coordinates[0])
+          && Number.isFinite(point.coordinates[1])
+          && point.coordinates[0] >= -180 && point.coordinates[0] <= 180
+          && point.coordinates[1] >= -90 && point.coordinates[1] <= 90
+          && Number.isFinite(point.ts)
+          && point.ts >= oldest && point.ts <= now + 10 * 1000)
+        .sort((a, b) => a.ts - b.ts);
+
+      // Seule la portion continue la plus récente est utile : une interruption
+      // ADS-B ne doit jamais être comblée par une diagonale.
+      let start = 0;
+      for (let index = 1; index < received.length; index++)
+        if (received[index].ts - received[index - 1].ts > AIRCRAFT_TRAIL_GAP_MS)
+          start = index;
+      const existing = A.tracks.get(hex) || [];
+      const merged = [...received.slice(start), ...existing]
+        .sort((a, b) => a.ts - b.ts);
+      const unique = [];
+      for (const point of merged) {
+        const previous = unique[unique.length - 1];
+        if (previous && point.ts === previous.ts) unique[unique.length - 1] = point;
+        else unique.push(point);
+      }
+      if (unique.length) A.tracks.set(hex, unique);
+    }
+    A.historyLoaded = true;
+    aircraftLoop();
+  } catch (error) {
+    // L'historique améliore seulement le premier affichage. Les positions
+    // directes et la trace construite localement restent la source de repli.
+  } finally {
+    clearTimeout(timeout);
+    A.historyLoading = false;
+  }
 }
 
 function aircraftCurve(p0, p1, p2, p3, t) {
@@ -2848,6 +2930,7 @@ function aircraftSync() {
   }
   aircraftLoop();
   if (document.hidden) return;
+  loadAircraftHistory();
   refreshAircraft();
 }
 
