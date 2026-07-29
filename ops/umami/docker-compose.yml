@@ -1,0 +1,102 @@
+---
+name: umami
+
+services:
+  app:
+    image: ${UMAMI_IMAGE}
+    container_name: umami-app
+    init: true
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      DATABASE_URL: postgresql://umami:${POSTGRES_PASSWORD}@db:5432/umami
+      APP_SECRET: ${APP_SECRET}
+      DISABLE_TELEMETRY: "1"
+      DISABLE_UPDATES: "1"
+    networks:
+      - backend
+      - frontend
+    cpus: "0.75"
+    mem_limit: 768m
+    memswap_limit: 768m
+    mem_reservation: 256m
+    pids_limit: 200
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:3000/api/heartbeat"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    logging:
+      driver: local
+      options:
+        max-size: 10m
+        max-file: "3"
+    stop_grace_period: 30s
+
+  db:
+    image: ${POSTGRES_IMAGE}
+    container_name: umami-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: umami
+      POSTGRES_USER: umami
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_INITDB_ARGS: --data-checksums
+    command:
+      - postgres
+      - -c
+      - shared_buffers=128MB
+      - -c
+      - work_mem=4MB
+      - -c
+      - maintenance_work_mem=64MB
+      - -c
+      - max_connections=30
+      - -c
+      - temp_file_limit=512MB
+      - -c
+      - statement_timeout=60s
+      - -c
+      - idle_in_transaction_session_timeout=60s
+    volumes:
+      - umami-db-data:/var/lib/postgresql/data
+    networks:
+      - backend
+    cpus: "0.50"
+    mem_limit: 640m
+    memswap_limit: 640m
+    mem_reservation: 128m
+    pids_limit: 100
+    shm_size: 128m
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U umami -d umami"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    logging:
+      driver: local
+      options:
+        max-size: 10m
+        max-file: "3"
+    stop_grace_period: 60s
+
+networks:
+  backend:
+    name: umami-backend
+    internal: true
+  frontend:
+    name: umami-frontend
+
+volumes:
+  umami-db-data:
+    name: umami-db-data

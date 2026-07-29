@@ -1,0 +1,13 @@
+[Unit]
+Description=Stop Umami before it can exhaust VPS storage
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/umami-guard
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/umami-guard

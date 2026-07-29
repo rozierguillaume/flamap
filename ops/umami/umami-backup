@@ -1,0 +1,27 @@
+#!/bin/sh
+set -eu
+
+backup_dir=/var/backups/umami
+min_free_kib=$((8 * 1024 * 1024))
+stamp=$(date -u +%Y-%m-%dT%H%M%SZ)
+final="$backup_dir/umami-$stamp.dump"
+tmp="$final.tmp"
+
+install -d -m 0700 "$backup_dir"
+free_kib=$(df -Pk "$backup_dir" | awk 'NR == 2 { print $4 }')
+if [ "$free_kib" -lt "$min_free_kib" ]; then
+  logger -t umami-backup "backup skipped: only ${free_kib} KiB free"
+  exit 1
+fi
+
+trap 'rm -f "$tmp"' EXIT HUP INT TERM
+docker exec umami-db pg_dump -U umami -d umami -Fc -Z6 > "$tmp"
+test -s "$tmp"
+docker exec -i umami-db pg_restore -l < "$tmp" >/dev/null
+chmod 0600 "$tmp"
+mv "$tmp" "$final"
+trap - EXIT HUP INT TERM
+
+# Keep two weeks locally. An off-server copy is still recommended.
+find "$backup_dir" -maxdepth 1 -type f -name 'umami-*.dump' -mtime +14 -delete
+logger -t umami-backup "created $final"

@@ -1,0 +1,46 @@
+#!/bin/sh
+set -eu
+
+state_dir=/var/lib/umami-guard
+blocked_file="$state_dir/blocked"
+docker_root=/var/lib/docker
+db_volume=/var/lib/docker/volumes/umami-db-data/_data
+
+# Stop collecting early enough to leave room for the other VPS workloads.
+min_free_kib=$((8 * 1024 * 1024))
+critical_free_kib=$((5 * 1024 * 1024))
+max_db_kib=$((10 * 1024 * 1024))
+
+mkdir -p "$state_dir"
+
+free_kib=$(df -Pk "$docker_root" | awk 'NR == 2 { print $4 }')
+db_kib=0
+if [ -d "$db_volume" ]; then
+  db_kib=$(du -sk "$db_volume" | awk '{ print $1 }')
+fi
+stop_container() {
+  container=$1
+  reason=$2
+  if [ "$(docker inspect -f '{{.State.Running}}' "$container" 2>/dev/null || true)" = true ]; then
+    logger -t umami-guard "stopping $container: $reason"
+    docker stop --time 60 "$container"
+  fi
+}
+
+if [ "$db_kib" -ge "$max_db_kib" ]; then
+  reason="database is ${db_kib} KiB (limit ${max_db_kib} KiB)"
+  printf '%s\n' "$reason" > "$blocked_file"
+  stop_container umami-app "$reason"
+fi
+
+if [ "$free_kib" -lt "$min_free_kib" ]; then
+  reason="only ${free_kib} KiB free on Docker filesystem"
+  printf '%s\n' "$reason" > "$blocked_file"
+  stop_container umami-app "$reason"
+fi
+
+if [ "$free_kib" -lt "$critical_free_kib" ]; then
+  reason="critical disk space: only ${free_kib} KiB free"
+  printf '%s\n' "$reason" > "$blocked_file"
+  stop_container umami-db "$reason"
+fi
