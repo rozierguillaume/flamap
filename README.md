@@ -240,9 +240,10 @@ Deux points de vigilance propres aux workflows planifiés :
 La carte est un canvas WebGL : un robot d'indexation, comme l'aperçu d'un lien
 collé dans une messagerie, n'en voit strictement rien. D'où, dans `index.html` :
 titre et `description`, `canonical` sur `https://flamap.fr/`, balises OpenGraph
-et Twitter, JSON-LD `WebApplication`, favicon en `data:` URI, et un court texte
-décrivant la carte — masqué à l'écran, lu par les lecteurs d'écran et les
-robots. Un `<noscript>` renvoie vers les GeoJSON bruts.
+et Twitter, JSON-LD `WebSite` et `WebApplication`, favicon servi à une URL
+explorable, et un court texte décrivant la carte — masqué à l'écran, lu par les
+lecteurs d'écran et les robots. Un `<noscript>` renvoie vers les GeoJSON bruts.
+`robots.txt` indique également le plan de site `sitemap.xml`.
 
 L'image d'aperçu `og.png` est produite par `make_og.py`, qui rejoue hors
 navigateur le rendu de la carte — mêmes tuiles IGN, mêmes polygones EFFIS,

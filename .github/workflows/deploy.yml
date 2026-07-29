@@ -93,7 +93,9 @@ jobs:
         if: steps.collect.outputs.deploy == 'true'
         run: |
           mkdir -p _site/data
-          cp index.html og.png robots.txt _site/
+          cp index.html og.png favicon.svg favicon.ico \
+             apple-touch-icon.png icon-192.png icon-512.png \
+             site.webmanifest robots.txt sitemap.xml _site/
           cp data/manifest.json data/overview_hotspots.geojson \
              data/burnt_recent.geojson data/timeline.json \
              data/wind_coarse.json _site/data/

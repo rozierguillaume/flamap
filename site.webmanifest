@@ -1,0 +1,28 @@
+{
+  "name": "Flamap — carte des incendies en France",
+  "short_name": "Flamap",
+  "description": "Carte des incendies et feux de forêt en France en quasi temps réel.",
+  "lang": "fr-FR",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0d0f12",
+  "theme_color": "#0d0f12",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
