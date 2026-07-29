@@ -64,6 +64,8 @@ FIRMS_FINE_MIN = 50
 FIRMS_TIMEOUT = 60
 FIRMS_ATTEMPTS = 2
 WIND_REQUEST_PAUSE = 6
+# EX_TEMPFAIL : le workflow reconnaît ce cas externe et conserve le site actif.
+TEMPORARY_SOURCE_FAILURE = 75
 
 EMPTY_FC = {"type": "FeatureCollection", "features": []}
 
@@ -117,6 +119,13 @@ def fetch_hotspots(bbox):
             lambda feed: download_firms_feed(*feed),
             FIRMS_FEEDS,
         ))
+
+    if not any(raw is not None for raw, _ in downloads):
+        for (label, _), (_, error) in zip(FIRMS_FEEDS, downloads):
+            print(f"  ! {label} : {error}", file=sys.stderr)
+        print("tous les flux FIRMS sont indisponibles : mise à jour reportée",
+              file=sys.stderr)
+        raise SystemExit(TEMPORARY_SOURCE_FAILURE)
 
     for (label, _), (raw, error) in zip(FIRMS_FEEDS, downloads):
         if raw is None:
@@ -329,7 +338,16 @@ def fetch_burnt(bbox):
     )
     print(f"  EFFIS dates France : {len(kept)} polygones")
 
-    nrt = effis_wfs("effis.nrt.ba.poly", bbox)
+    try:
+        nrt = effis_wfs("effis.nrt.ba.poly", bbox)
+    except Exception as error:
+        # Cette couche est un complément sans attribut, qui contient aussi
+        # d'anciennes cicatrices et ne participe ni à la frise ni au cadrage.
+        # La perdre ponctuellement ne doit pas bloquer les foyers FIRMS et les
+        # périmètres datés de la saison, qui restent obligatoires.
+        print(f"  ! EFFIS NRT ignoré après les reprises : {error}",
+              file=sys.stderr)
+        nrt = fc([])
     for feature in nrt["features"]:
         swap_axes(feature["geometry"])
         feature.setdefault("properties", {})["_id"] = stable_feature_id(feature, "n")

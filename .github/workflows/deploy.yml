@@ -28,21 +28,39 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      deploy: ${{ steps.collect.outputs.deploy }}
     steps:
       - uses: actions/checkout@v5
 
       # La génération nationale prend quelques minutes : quatre flux FIRMS
       # parallèles, deux requêtes EFFIS et les grilles Open-Meteo séquentielles.
       # Les 25 min laissent une large marge aux reprises HTTP 429 et au WFS lent.
-      # Si une source indispensable reste indisponible, le script lève et le
-      # job échoue ; une grille fine seule se dégrade vers le vent national.
-      # Le site déjà en ligne reste intact plutôt que publier une carte vide.
+      # Une panne FIRMS totale reporte la mise à jour et conserve le site actif.
+      # Les autres erreurs restent fatales ; une grille fine seule se dégrade
+      # vers le vent national. Aucun de ces cas ne publie une carte vide.
       - name: Récupérer les données
-        run: python3 -u fetch_fires.py
+        id: collect
+        shell: bash
+        run: |
+          set +e
+          python3 -u fetch_fires.py
+          status=$?
+          set -e
+          if [ "$status" -eq 75 ]; then
+            echo "::warning::Tous les flux FIRMS sont indisponibles ; le site publié est conservé."
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "$status" -ne 0 ]; then
+            exit "$status"
+          fi
+          echo "deploy=true" >> "$GITHUB_OUTPUT"
         timeout-minutes: 25
 
       # Garde-fou : sans foyers, la page planterait au premier cran.
       - name: Vérifier les données
+        if: steps.collect.outputs.deploy == 'true'
         run: |
           python3 - <<'PY'
           import json, pathlib, sys
@@ -72,6 +90,7 @@ jobs:
           PY
 
       - name: Assembler le site
+        if: steps.collect.outputs.deploy == 'true'
         run: |
           mkdir -p _site/data
           cp index.html og.png robots.txt _site/
@@ -84,6 +103,7 @@ jobs:
       # Le seuil de 100 Mio laisse plus de cinq fois le volume actuel tout en
       # bloquant une croissance accidentelle avant la création de l'artefact.
       - name: Vérifier la taille du site
+        if: steps.collect.outputs.deploy == 'true'
         run: |
           python3 - <<'PY'
           import pathlib, sys
@@ -98,11 +118,13 @@ jobs:
           PY
 
       - uses: actions/upload-pages-artifact@v3
+        if: steps.collect.outputs.deploy == 'true'
         with:
           path: _site
 
   deploy:
     needs: build
+    if: needs.build.outputs.deploy == 'true'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
