@@ -31,8 +31,11 @@ Deux réseaux Docker sont utilisés :
 - `umami-backend`, interne, relie uniquement Umami à PostgreSQL ;
 - `umami-frontend`, relie Umami au port local publié pour Nginx.
 
-Le tableau de bord est protégé deux fois : authentification HTTP Nginx, puis
-authentification Umami. Seuls `/script.js` et `/api/send` sont publics.
+Le tableau de bord utilise l'authentification persistante fournie par Umami.
+La précédente authentification HTTP Nginx a été retirée, car certains
+navigateurs redemandaient les identifiants à chaque requête de l'application.
+Nginx bloque explicitement les sondes visant des fichiers comme `.env` ou
+`.git`.
 
 ## Ressources et garde-fous
 
@@ -117,8 +120,7 @@ sudo du -sh /var/backups/umami
 Les secrets ont été générés directement sur le VPS. Ils ne doivent jamais être
 copiés dans ce dépôt.
 
-Pour afficher les deux identifiants du tableau de bord et l'identifiant du
-site :
+Pour afficher l'identifiant du tableau de bord Umami et l'identifiant du site :
 
 ```bash
 sudo cat /root/umami-admin-credentials
@@ -148,24 +150,23 @@ curl -I https://analytics.flamap.fr/script.js
 
 ## Tracker installé sur Flamap
 
-La balise Umami Cloud a été remplacée par :
+`index.html` charge dynamiquement le tracker servi par
+`https://analytics.flamap.fr/script.js`, uniquement si le visiteur n'a pas
+désactivé la mesure d'audience depuis `mentions-legales.html`. Ce choix est
+mémorisé dans la clé locale `flamap-analytics`. Le signal « Ne pas me pister »
+reste également respecté.
 
-```html
-<script
-  defer
-  src="https://analytics.flamap.fr/script.js"
-  data-website-id="<WEBSITE_ID>"
-  data-domains="flamap.fr,www.flamap.fr"
-  data-exclude-search="true"
-  data-exclude-hash="true"
-  data-do-not-track="true">
-</script>
-```
-
-Les paramètres de recherche et fragments d'URL sont volontairement exclus.
+Les paramètres de recherche et fragments d'URL sont volontairement exclus. Les
+événements personnalisés ne contiennent aucune propriété supplémentaire et
+mesurent uniquement l'ouverture de la météo, des calques, des mises à jour et
+le démarrage de la frise.
 Ne pas activer `umami.identify`, le replay de sessions ni les cartes de
 chaleur si l'objectif reste une mesure d'audience minimale sans fenêtre de
 consentement.
+
+La politique de confidentialité fixe la conservation des statistiques
+détaillées à 13 mois. Aucune donnée n'atteint encore cette ancienneté ; une
+purge automatique devra être installée avant la première échéance.
 
 ## Sauvegardes
 
@@ -239,5 +240,4 @@ Vérifier enfin que `ecmwf-meteograms.service` et Nginx sont toujours actifs.
 - unités `umami-guard.*` et `umami-backup.*` dans systemd ;
 - `/etc/nginx/sites-available/umami` ;
 - `/etc/nginx/conf.d/umami-rate-limit.conf` ;
-- `/etc/nginx/.htpasswd-umami` ;
 - `/root/umami-admin-credentials`.

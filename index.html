@@ -514,18 +514,27 @@
         "Surfaces brûlées récentes",
         "Vent à 10 mètres",
         "Évolution des feux sur une frise temporelle"
-      ],
-      "author": { "@type": "Person", "name": "Guillaume Rozier" }
+      ]
     }
   ]
 }
 </script>
-  <script defer src="https://analytics.flamap.fr/script.js"
-          data-website-id="22fcacdf-1b33-4954-abbe-43e104613f2f"
-          data-domains="flamap.fr,www.flamap.fr"
-          data-exclude-search="true"
-          data-exclude-hash="true"
-          data-do-not-track="true"></script>
+<script>
+  try {
+    if (localStorage.getItem('flamap-analytics') !== 'disabled') {
+      const analytics = document.createElement('script');
+      analytics.src = 'https://analytics.flamap.fr/script.js';
+      analytics.dataset.websiteId = '22fcacdf-1b33-4954-abbe-43e104613f2f';
+      analytics.dataset.domains = 'flamap.fr,www.flamap.fr';
+      analytics.dataset.excludeSearch = 'true';
+      analytics.dataset.excludeHash = 'true';
+      analytics.dataset.doNotTrack = 'true';
+      document.head.appendChild(analytics);
+    }
+  } catch (_) {
+    // Un stockage local indisponible ne doit jamais empêcher la carte de charger.
+  }
+</script>
 </head>
 <body>
 <div id="map" role="img"
@@ -697,6 +706,7 @@
     Communes : <a href="https://data.geopf.fr/geocodage/" target="_blank" rel="noopener">Géoplateforme / BAN</a>.
     Rendu <a href="https://maplibre.org/" target="_blank" rel="noopener">MapLibre GL</a>.
     Icônes <a href="https://lucide.dev/" target="_blank" rel="noopener">Lucide</a> (ISC).
+    <a href="/mentions-legales.html">Mentions légales &amp; confidentialité</a>.
     <span id="updated"></span>
   </div>
 </div>
@@ -717,6 +727,10 @@
 const MOBILE = matchMedia('(max-width: 720px)').matches;
 const H = 3600, DAY = 86400;
 const V = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+function trackUsage(eventName) {
+  window.umami?.track?.(eventName);
+}
 
 const MAX_AGE = 5 * DAY;   // au-dela, c'est le polygone qui parle
 
@@ -965,6 +979,7 @@ document.getElementById('layers-btn').addEventListener('click', e => {
   e.currentTarget.setAttribute('aria-expanded', open);
   document.getElementById('incidents').classList.toggle('layers-open', open);
   if (open) {
+    trackUsage('layers-open');
     setUpdatesOpen(false);
     setActivityOpen(false);
     setWeatherOpen(false);
@@ -1048,7 +1063,11 @@ function setUpdatesOpen(open) {
     document.getElementById('incidents').classList.remove('credits-open', 'layers-open');
   }
 }
-updatesBtn.addEventListener('click', () => setUpdatesOpen(!updatesPanel.classList.contains('open')));
+updatesBtn.addEventListener('click', () => {
+  const open = !updatesPanel.classList.contains('open');
+  if (open) trackUsage('updates-open');
+  setUpdatesOpen(open);
+});
 document.getElementById('updates-close').addEventListener('click', () => setUpdatesOpen(false));
 
 function setActivityOpen(open, selected = null) {
@@ -1280,7 +1299,11 @@ function setWeatherOpen(open) {
     weatherBtn.focus({ preventScroll: true });
   }
 }
-weatherBtn.addEventListener('click', () => setWeatherOpen(!weatherPanel.classList.contains('open')));
+weatherBtn.addEventListener('click', () => {
+  const open = !weatherPanel.classList.contains('open');
+  if (open) trackUsage('weather-open');
+  setWeatherOpen(open);
+});
 document.getElementById('weather-close').addEventListener('click', () => setWeatherOpen(false));
 map.on('moveend', () => {
   if (!weatherPanel.classList.contains('open')) return;
@@ -2988,6 +3011,7 @@ function playFrame(now) {
 playBtn.addEventListener('click', () => {
   if (playing) { stopPlay(); return; }
   if (!steps.length) return;
+  trackUsage('timeline-play');
 
   // une lecture terminée — ou lâchée tout au bout — repart du début ; ailleurs
   // on reprend là où le curseur a été laissé, sans le renvoyer à gauche

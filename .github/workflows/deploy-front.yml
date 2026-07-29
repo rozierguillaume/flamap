@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - index.html
+      - mentions-legales.html
       - social.html
       - og.png
       - favicon.svg
@@ -62,7 +63,7 @@ jobs:
             changed="$(git diff --name-only "$before" "$head")"
           fi
           other="$(printf '%s\n' "$changed" | grep -Ev \
-            '^(index\.html|social\.html|og\.png|favicon\.svg|favicon\.ico|apple-touch-icon\.png|icon-192\.png|icon-512\.png|site\.webmanifest|robots\.txt|sitemap\.xml|\.github/workflows/deploy-front\.yml)$' || true)"
+            '^(index\.html|mentions-legales\.html|social\.html|og\.png|favicon\.svg|favicon\.ico|apple-touch-icon\.png|icon-192\.png|icon-512\.png|site\.webmanifest|robots\.txt|sitemap\.xml|\.github/workflows/deploy-front\.yml)$' || true)"
           if [ -n "$other" ]; then
             echo "Push mixte : le déploiement complet publiera aussi le front."
             printf '%s\n' "$other"
@@ -124,7 +125,7 @@ jobs:
 
       - name: Remplacer le front
         if: steps.scope.outputs.deploy == 'true'
-        run: cp index.html social.html og.png favicon.svg favicon.ico apple-touch-icon.png icon-192.png icon-512.png site.webmanifest robots.txt sitemap.xml _site/
+        run: cp index.html mentions-legales.html social.html og.png favicon.svg favicon.ico apple-touch-icon.png icon-192.png icon-512.png site.webmanifest robots.txt sitemap.xml _site/
 
       # Meme garde-fou que le workflow complet : une relecture du site publie
       # ne doit jamais transformer une panne reseau en carte vide.
