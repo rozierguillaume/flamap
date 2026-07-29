@@ -637,7 +637,7 @@
                 data-analytics-layer="wind" checked> vent à 10 m</label>
   <!-- Le listener Umami délégué sur #layers reprend cette valeur dans
        `layer-toggle`, avec l'état booléen de la case. -->
-  <label title="Positions ADS-B reçues en direct, animées avec un différé progressif jusqu’à 30 s ; les trajets se construisent dans le navigateur et le suivi peut être incomplet">
+  <label title="Positions ADS-B reçues toutes les 4 s, animées avec 6 s de différé ; les trajets se construisent dans le navigateur et le suivi peut être incomplet">
     <input type="checkbox" id="ck-aircraft"
            data-analytics-layer="aircraft"> moyens aériens
   </label>
@@ -2511,11 +2511,8 @@ const AIRCRAFT_ICAO = (
   + '3464d9,39ddf7,399d82,4c39f2'
 ).split(',');
 const AIRCRAFT_URL = 'https://api.airplanes.live/v2/hex/' + AIRCRAFT_ICAO.join(',');
-const AIRCRAFT_POLL_MS = 28 * 1000;
-const AIRCRAFT_BOOT_POLL_MS = 4 * 1000;
-const AIRCRAFT_DELAY_MS = 30 * 1000;
-const AIRCRAFT_BOOT_DELAY_MS = 2 * 1000;
-const AIRCRAFT_DELAY_RAMP = .5;
+const AIRCRAFT_POLL_MS = 4 * 1000;
+const AIRCRAFT_DELAY_MS = 6 * 1000;
 const AIRCRAFT_TRAIL_MS = 10 * 60 * 1000;
 const AIRCRAFT_TRACK_KEEP_MS = 15 * 60 * 1000;
 const AIRCRAFT_TRAIL_GAP_MS = 90 * 1000;
@@ -2533,7 +2530,7 @@ const aircraftStatus = document.getElementById('aircraft-status');
 const A = {
   on: false, timer: null, controller: null, loading: false,
   tracks: new Map(), features: [], clockOffset: 0,
-  raf: null, lastFrame: 0, popup: null, popupTimer: null, startedAt: null,
+  raf: null, lastFrame: 0, popup: null, popupTimer: null,
 };
 
 function aircraftStatusText(text) {
@@ -2645,13 +2642,6 @@ function updateAircraftTracks(points, now) {
       A.tracks.delete(hex);
 }
 
-function aircraftDisplayDelay(now = Date.now()) {
-  if (!Number.isFinite(A.startedAt)) return AIRCRAFT_DELAY_MS;
-  const elapsed = Math.max(0, now - A.startedAt);
-  return Math.min(AIRCRAFT_DELAY_MS,
-    AIRCRAFT_BOOT_DELAY_MS + elapsed * AIRCRAFT_DELAY_RAMP);
-}
-
 function aircraftCurve(p0, p1, p2, p3, t) {
   const t2 = t * t, t3 = t2 * t;
   return [0, 1].map(axis => .5 * (
@@ -2735,7 +2725,7 @@ function aircraftFrame(timestamp) {
 
   const localNow = Date.now();
   const serverNow = localNow + A.clockOffset;
-  const displayTs = serverNow - aircraftDisplayDelay(localNow);
+  const displayTs = serverNow - AIRCRAFT_DELAY_MS;
   const points = [], trails = [];
   for (const feature of A.features) {
     const p = feature.properties;
@@ -2823,11 +2813,9 @@ async function refreshAircraft() {
     A.controller = null;
     clearTimeout(A.timer);
     if (A.on && atLatest && !document.hidden) {
-      const interval = aircraftDisplayDelay() < AIRCRAFT_DELAY_MS
-        ? AIRCRAFT_BOOT_POLL_MS : AIRCRAFT_POLL_MS;
-      // Les 28 s du régime normal sont mesurées entre les départs de requête :
-      // on interroge donc environ 2 s avant que le tampon de 30 s soit épuisé.
-      const wait = Math.max(1000, interval - (Date.now() - requestStartedAt));
+      // Les 4 s sont mesurées entre les départs de requête. Le différé de 6 s
+      // laisse donc encore 2 s de marge si une réponse tarde à arriver.
+      const wait = Math.max(1000, AIRCRAFT_POLL_MS - (Date.now() - requestStartedAt));
       A.timer = setTimeout(refreshAircraft, wait);
     }
   }
@@ -2841,7 +2829,6 @@ function aircraftSync() {
     closeAircraftPopup();
     aircraftSource();
     aircraftTrailsSource();
-    A.startedAt = null;
     aircraftStatusText('');
     aircraftLoop();
     return;
@@ -2856,13 +2843,6 @@ function aircraftSync() {
   }
   aircraftLoop();
   if (document.hidden) return;
-  if (!Number.isFinite(A.startedAt)) {
-    const buffered = [...A.tracks.values()].some(track =>
-      track.length > 1
-      && track[track.length - 1].ts - track[0].ts >= AIRCRAFT_DELAY_MS);
-    A.startedAt = Date.now() - (buffered
-      ? (AIRCRAFT_DELAY_MS - AIRCRAFT_BOOT_DELAY_MS) / AIRCRAFT_DELAY_RAMP : 0);
-  }
   refreshAircraft();
 }
 
@@ -2967,7 +2947,7 @@ function aircraftPopup(event) {
       : null;
     age.textContent = (seconds === null ? 'âge du signal inconnu'
       : `signal ADS-B reçu il y a ${seconds} s`)
-      + ` · affichage différé de ${Math.round(aircraftDisplayDelay() / 1000)} s`
+      + ` · affichage différé de ${AIRCRAFT_DELAY_MS / 1000} s`
       + ` · ICAO ${p.hex.toUpperCase()}`;
   };
   updateAge();
