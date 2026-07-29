@@ -157,9 +157,13 @@ mémorisé dans la clé locale `flamap-analytics`. Le signal « Ne pas me pister
 reste également respecté.
 
 Les paramètres de recherche et fragments d'URL sont volontairement exclus. Les
-événements personnalisés ne contiennent aucune propriété supplémentaire et
-mesurent uniquement l'ouverture de la météo, des calques, des mises à jour et
-le démarrage de la frise.
+événements personnalisés mesurent l'ouverture de la météo, des calques, des
+mises à jour, ainsi que le démarrage et la mise en pause de la frise avec les
+événements distincts `timeline-play` et `timeline-pause`. L'événement
+`layer-toggle` contient uniquement le nom technique de l'option modifiée et son
+nouvel état booléen.
+L'événement `incident-shortcut` contient le lieu public déjà affiché sur le
+bouton, ou `unknown`, et sa position dans la liste de raccourcis.
 Ne pas activer `umami.identify`, le replay de sessions ni les cartes de
 chaleur si l'objectif reste une mesure d'audience minimale sans fenêtre de
 consentement.

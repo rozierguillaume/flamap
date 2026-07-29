@@ -588,27 +588,37 @@
   </svg><span class="wide">Calques</span>
 </button>
 <div id="layers" class="glass">
-  <label><input type="checkbox" id="ck-hotspots" checked> foyers détectés</label>
+  <label><input type="checkbox" id="ck-hotspots" data-analytics-layer="hotspots" checked> foyers détectés</label>
   <fieldset>
     <legend>Sources FIRMS</legend>
-    <label><input type="checkbox" class="ck-source" value="VIIRS/NOAA-20" checked> VIIRS/NOAA-20</label>
-    <label><input type="checkbox" class="ck-source" value="VIIRS/NOAA-21" checked> VIIRS/NOAA-21</label>
-    <label><input type="checkbox" class="ck-source" value="VIIRS/S-NPP" checked> VIIRS/S-NPP</label>
-    <label><input type="checkbox" class="ck-source" value="MODIS" checked> MODIS</label>
+    <label><input type="checkbox" class="ck-source" value="VIIRS/NOAA-20"
+                  data-analytics-layer="firms-noaa20" checked> VIIRS/NOAA-20</label>
+    <label><input type="checkbox" class="ck-source" value="VIIRS/NOAA-21"
+                  data-analytics-layer="firms-noaa21" checked> VIIRS/NOAA-21</label>
+    <label><input type="checkbox" class="ck-source" value="VIIRS/S-NPP"
+                  data-analytics-layer="firms-snpp" checked> VIIRS/S-NPP</label>
+    <label><input type="checkbox" class="ck-source" value="MODIS"
+                  data-analytics-layer="firms-modis" checked> MODIS</label>
   </fieldset>
   <fieldset id="activity-metric">
     <legend>Métrique des graphiques</legend>
-    <label><input type="radio" name="activity-metric" value="count"> nombre de foyers</label>
+    <label><input type="radio" name="activity-metric" value="count"
+                  data-analytics-layer="metric-count"> nombre de foyers</label>
     <label title="Somme de la puissance radiative instantanée des pixels détectés">
-      <input type="radio" name="activity-metric" value="frp" checked> puissance radiative (MW)
+      <input type="radio" name="activity-metric" value="frp"
+             data-analytics-layer="metric-frp" checked> puissance radiative (MW)
     </label>
   </fieldset>
-  <label class="ba"><input type="checkbox" id="ck-dated" checked> surfaces brûlées (datées)</label>
-  <label class="ba"><input type="checkbox" id="ck-nrt" checked> surfaces brûlées (NRT)</label>
+  <label class="ba"><input type="checkbox" id="ck-dated"
+                           data-analytics-layer="burnt-dated" checked> surfaces brûlées (datées)</label>
+  <label class="ba"><input type="checkbox" id="ck-nrt"
+                           data-analytics-layer="burnt-nrt" checked> surfaces brûlées (NRT)</label>
   <label title="Dispersion indicative calculée à partir des foyers FIRMS et du vent AROME">
-    <input type="checkbox" id="ck-smoke" checked> panaches de fumée (simulés)
+    <input type="checkbox" id="ck-smoke"
+           data-analytics-layer="smoke" checked> panaches de fumée (simulés)
   </label>
-  <label><input type="checkbox" id="ck-wind" checked> vent à 10 m</label>
+  <label><input type="checkbox" id="ck-wind"
+                data-analytics-layer="wind" checked> vent à 10 m</label>
   <div class="hint">Masquées : EFFIS ne publie que le contour le plus récent,
   pas son évolution. Ramenez le curseur à droite pour les revoir.</div>
 </div>
@@ -728,8 +738,12 @@ const MOBILE = matchMedia('(max-width: 720px)').matches;
 const H = 3600, DAY = 86400;
 const V = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 
-function trackUsage(eventName) {
-  window.umami?.track?.(eventName);
+function trackUsage(eventName, data) {
+  if (data === undefined) {
+    window.umami?.track?.(eventName);
+  } else {
+    window.umami?.track?.(eventName, data);
+  }
 }
 
 const MAX_AGE = 5 * DAY;   // au-dela, c'est le polygone qui parle
@@ -2465,7 +2479,7 @@ function fireContext(center) {
 
 function renderIncidentButtons(features) {
   incidentsEl.replaceChildren();
-  for (const feature of features) {
+  for (const [index, feature] of features.entries()) {
     const { center, n, name, area, maxArea } = feature.properties;
     const button = document.createElement('button');
     button.type = 'button';
@@ -2478,6 +2492,7 @@ function renderIncidentButtons(features) {
       + ' — zoomer sur cette zone';
     button.setAttribute('aria-label', `Zoomer sur ${name || 'un incendie important'}, ${metric}`);
     button.addEventListener('click', () => {
+      trackUsage('incident-shortcut', { place: name || 'unknown', rank: index + 1 });
       stopPlay();
       map.easeTo({ center, zoom: Math.max(map.getZoom(), 8.5), duration: 850 });
     });
@@ -2944,6 +2959,11 @@ slider.addEventListener('input', () => {
   smokeTime(curTs, true, true);
 });
 
+document.getElementById('layers').addEventListener('change', event => {
+  const layer = event.target.dataset.analyticsLayer;
+  if (layer) trackUsage('layer-toggle', { layer, enabled: event.target.checked });
+});
+
 document.getElementById('ck-dated').addEventListener('change', e => {
   shown.dated = e.target.checked; applyBurnt();
 });
@@ -3009,7 +3029,11 @@ function playFrame(now) {
 }
 
 playBtn.addEventListener('click', () => {
-  if (playing) { stopPlay(); return; }
+  if (playing) {
+    trackUsage('timeline-pause');
+    stopPlay();
+    return;
+  }
   if (!steps.length) return;
   trackUsage('timeline-play');
 
