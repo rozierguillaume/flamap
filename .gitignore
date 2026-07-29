@@ -15,5 +15,8 @@ data/wind_coarse.json
 data/weather_forecast.json
 data/zones/
 
+# jeu publie repris comme reference du diff Telegram
+prev/
+
 # macOS
 .DS_Store

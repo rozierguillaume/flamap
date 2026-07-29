@@ -1,0 +1,213 @@
+#!/usr/bin/env python3
+"""Compare le jeu de données fraîchement collecté à celui déjà publié et
+rédige le message Telegram correspondant.
+
+Bibliothèque standard uniquement, comme `fetch_fires.py`. Le script ne parle
+pas à Telegram : il écrit `fresh` et `message` dans `$GITHUB_OUTPUT` et laisse
+le workflow poster. Ça le rend exécutable en local, sans jeton, pour relire un
+message avant de l'envoyer :
+
+    python3 notify_telegram.py --prev prev --data data
+
+La référence « avant » est le site publié, repris par le workflow au même
+endroit que l'historique FIRMS. Sans référence complète, le script se taît :
+annoncer 16 000 foyers « nouveaux » parce que le téléchargement a échoué serait
+pire que de rater une mise à jour.
+"""
+
+import argparse
+import json
+import os
+import pathlib
+import sys
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
+
+SITE = "https://flamap.fr"
+PARIS = ZoneInfo("Europe/Paris")
+MONTHS = ["janv.", "févr.", "mars", "avril", "mai", "juin", "juil.",
+          "août", "sept.", "oct.", "nov.", "déc."]
+# Un gros incendie fait éclore des dizaines de périmètres EFFIS le même jour :
+# les lister tous produirait un pavé illisible sur téléphone.
+MAX_LISTED = 5
+
+
+def load_zones(root, zone_ids):
+    """Renvoie les ensembles d'identifiants d'un jeu de paquets de zones.
+
+    `missing` remonte les zones absentes : c'est le seul moyen de distinguer un
+    site partiellement repris d'un vrai jeu de données.
+    """
+    hotspots = {}
+    dated = {}
+    nrt = set()
+    missing = []
+    for zone_id in zone_ids:
+        path = root / f"{zone_id}.json"
+        try:
+            zone = json.loads(path.read_text())
+        except Exception:
+            missing.append(zone_id)
+            continue
+        for feature in zone.get("hotspots", {}).get("features", []):
+            prop = feature["properties"]
+            lon, lat = feature["geometry"]["coordinates"]
+            # Les coordonnées sont arrondies à l'écriture, donc stables d'une
+            # publication à l'autre : la clé ne dérive pas.
+            hotspots[(prop.get("source"), prop.get("ts"), lon, lat)] = prop
+        for feature in zone.get("burnt_dated", {}).get("features", []):
+            prop = feature["properties"]
+            if prop.get("_id"):
+                dated[prop["_id"]] = prop
+        for feature in zone.get("burnt_nrt", {}).get("features", []):
+            if feature.get("properties", {}).get("_id"):
+                nrt.add(feature["properties"]["_id"])
+    return {"hotspots": hotspots, "dated": dated, "nrt": nrt,
+            "missing": missing}
+
+
+def french_date(ts, with_time=True):
+    moment = datetime.fromtimestamp(ts, timezone.utc).astimezone(PARIS)
+    day = f"{moment.day} {MONTHS[moment.month - 1]}"
+    if not with_time:
+        return day
+    return f"{day} à {moment.hour} h {moment.minute:02d}"
+
+
+def escape(text):
+    return (str(text).replace("&", "&amp;").replace("<", "&lt;")
+            .replace(">", "&gt;"))
+
+
+def plural(count, singular, suffix="s"):
+    return singular if abs(count) < 2 else f"{singular}{suffix}"
+
+
+def compose(new_hotspots, new_dated, new_nrt):
+    """Construit le message en HTML Telegram."""
+    lines = ["🔥 <b>Flamap · nouvelles données</b>"]
+
+    if new_hotspots:
+        by_source = {}
+        for source, _ts, _lon, _lat in new_hotspots:
+            by_source[source] = by_source.get(source, 0) + 1
+        latest = max(key[1] for key in new_hotspots)
+        peak = max(prop.get("frp") or 0 for prop in new_hotspots.values())
+        detail = " · ".join(
+            f"{escape(source or 'source inconnue')} {count}"
+            for source, count in sorted(by_source.items(),
+                                        key=lambda item: -item[1])
+        )
+        lines.append("")
+        lines.append(f"🛰 <b>{len(new_hotspots)} nouveaux foyers</b> détectés")
+        lines.append(detail)
+        lines.append(f"Dernier passage {french_date(latest)} · "
+                     f"foyer le plus intense {peak:.0f} MW")
+
+    if new_dated:
+        ranked = sorted(
+            new_dated.values(),
+            key=lambda prop: -(float(prop.get("AREA_HA") or 0)),
+        )
+        count = len(ranked)
+        lines.append("")
+        lines.append(f"🟧 <b>{count} nouveau{'x' if count > 1 else ''} "
+                     f"{plural(count, 'périmètre')} EFFIS</b>")
+        for prop in ranked[:MAX_LISTED]:
+            where = escape(prop.get("COMMUNE") or "commune inconnue")
+            province = prop.get("PROVINCE")
+            if province:
+                where += f" ({escape(province)})"
+            area = float(prop.get("AREA_HA") or 0)
+            piece = f"{where} — {area:.0f} ha"
+            if prop.get("ts"):
+                piece += f", feu du {french_date(prop['ts'], with_time=False)}"
+            lines.append(piece)
+        if count > MAX_LISTED:
+            lines.append(f"… et {count - MAX_LISTED} autres")
+
+    if new_nrt:
+        # La couche NRT n'a ni date ni surface ni commune (voir SOURCES.md) :
+        # elle ne peut être annoncée qu'en nombre.
+        lines.append("")
+        lines.append(f"🟨 {new_nrt} nouvelle{'s' if new_nrt > 1 else ''} "
+                     f"{plural(new_nrt, 'emprise')} EFFIS NRT "
+                     f"(sans commune ni surface)")
+
+    lines.append("")
+    lines.append(f'<a href="{SITE}">flamap.fr</a>')
+    return "\n".join(lines)
+
+
+def emit(outputs):
+    """Écrit les sorties de l'étape, y compris le message multiligne."""
+    target = os.environ.get("GITHUB_OUTPUT")
+    if not target:
+        return
+    with open(target, "a", encoding="utf-8") as handle:
+        for name, value in outputs.items():
+            if "\n" in str(value):
+                handle.write(f"{name}<<FLAMAP_EOF\n{value}\nFLAMAP_EOF\n")
+            else:
+                handle.write(f"{name}={value}\n")
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--prev", default="prev",
+                        help="racine du jeu publié repris (défaut : prev)")
+    parser.add_argument("--data", default="data",
+                        help="racine du jeu fraîchement collecté")
+    args = parser.parse_args()
+
+    prev_root = pathlib.Path(args.prev)
+    data_root = pathlib.Path(args.data)
+
+    try:
+        prev_manifest = json.loads((prev_root / "manifest.json").read_text())
+        manifest = json.loads((data_root / "manifest.json").read_text())
+    except Exception as error:
+        print(f"::warning::Pas de référence publiée exploitable ({error}) ; "
+              "aucune notification.")
+        emit({"fresh": "false"})
+        return 0
+
+    before = load_zones(prev_root / "zones", prev_manifest.get("zones", []))
+    if before["missing"]:
+        count = len(before["missing"])
+        print(f"::warning::{count} {plural(count, 'zone')} "
+              f"{plural(count, 'manque', 'nt')} dans la référence publiée ; "
+              "aucune notification pour ce cycle.")
+        emit({"fresh": "false"})
+        return 0
+
+    after = load_zones(data_root / "zones", manifest.get("zones", []))
+    if after["missing"]:
+        # Le garde-fou du workflow a déjà vérifié la complétude ; si ça arrive
+        # quand même, mieux vaut ne rien annoncer que d'annoncer à moitié.
+        sys.exit(f"zones absentes du jeu collecté : {after['missing'][:5]}")
+
+    new_hotspots = {key: prop for key, prop in after["hotspots"].items()
+                    if key not in before["hotspots"]}
+    new_dated = {key: prop for key, prop in after["dated"].items()
+                 if key not in before["dated"]}
+    new_nrt = len(after["nrt"] - before["nrt"])
+
+    print(f"{len(new_hotspots)} nouveaux foyers, {len(new_dated)} nouveaux "
+          f"périmètres datés, {new_nrt} nouvelles emprises NRT "
+          f"(référence : {len(before['hotspots'])} foyers)")
+
+    if not new_hotspots and not new_dated and not new_nrt:
+        print("Rien de neuf depuis la publication précédente.")
+        emit({"fresh": "false"})
+        return 0
+
+    message = compose(new_hotspots, new_dated, new_nrt)
+    print("--- message ---")
+    print(message)
+    emit({"fresh": "true", "message": message})
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

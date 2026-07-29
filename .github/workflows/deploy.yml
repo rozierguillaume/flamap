@@ -32,6 +32,8 @@ jobs:
       LIVE_SITE: https://flamap.fr
     outputs:
       deploy: ${{ steps.collect.outputs.deploy }}
+      fresh: ${{ steps.diff.outputs.fresh }}
+      message: ${{ steps.diff.outputs.message }}
     steps:
       - uses: actions/checkout@v5
 
@@ -39,6 +41,12 @@ jobs:
       # zones actuellement publiés permet au collecteur de conserver trois
       # jours supplémentaires, sans clé d'API. Une première publication ou une
       # indisponibilité du site dégrade simplement la fenêtre à sept jours.
+      #
+      # Le même jeu repris sert de référence à la notification Telegram : il est
+      # recopié dans `prev/` avant que le collecteur n'écrase `data/`. C'est le
+      # seul état « avant » disponible, puisque les données ne vivent pas dans
+      # git. Une reprise partielle ne devient pas une référence : le diff
+      # annoncerait des milliers de faux nouveaux foyers.
       - name: Reprendre l'historique FIRMS publié
         shell: bash
         run: |
@@ -46,6 +54,7 @@ jobs:
           import json
           import os
           import pathlib
+          import shutil
           import urllib.parse
           import urllib.request
           from concurrent.futures import ThreadPoolExecutor
@@ -56,7 +65,8 @@ jobs:
           try:
               with urllib.request.urlopen(f"{base}/data/manifest.json",
                                           timeout=60) as response:
-                  manifest = json.load(response)
+                  payload = response.read()
+              manifest = json.loads(payload)
           except Exception as error:
               print(f"::warning::Historique FIRMS indisponible : {error}")
               raise SystemExit(0)
@@ -69,15 +79,28 @@ jobs:
               target = root / f"{zone_id}.json"
               try:
                   with urllib.request.urlopen(url, timeout=60) as response:
-                      payload = response.read()
-                  if payload:
-                      target.write_bytes(payload)
+                      body = response.read()
               except Exception as error:
                   print(f"::warning::Historique {zone_id} ignoré : {error}")
+                  return False
+              if not body:
+                  print(f"::warning::Historique {zone_id} vide")
+                  return False
+              target.write_bytes(body)
+              return True
 
+          zones = manifest.get('zones', [])
           with ThreadPoolExecutor(max_workers=12) as pool:
-              for _ in pool.map(download, manifest.get('zones', [])):
-                  pass
+              complete = all(pool.map(download, zones)) and bool(zones)
+
+          if complete:
+              prev = pathlib.Path('prev')
+              shutil.copytree(root, prev / 'zones', dirs_exist_ok=True)
+              (prev / 'manifest.json').write_bytes(payload)
+              print(f"Référence Telegram : {len(zones)} zones publiées")
+          else:
+              print('::warning::Reprise incomplète : pas de référence pour la '
+                    'notification Telegram.')
           PY
 
       # La génération nationale prend quelques minutes : quatre flux FIRMS
@@ -143,6 +166,13 @@ jobs:
                   sys.exit(f"vent fin absent : {path}")
           PY
 
+      # Le message n'est pas envoyé ici : la publication peut encore échouer, et
+      # annoncer des foyers absents du site serait pire que de se taire.
+      - name: Comparer aux données publiées
+        id: diff
+        if: steps.collect.outputs.deploy == 'true'
+        run: python3 notify_telegram.py --prev prev --data data
+
       - name: Assembler le site
         if: steps.collect.outputs.deploy == 'true'
         run: |
@@ -188,3 +218,32 @@ jobs:
     steps:
       - id: deployment
         uses: actions/deploy-pages@v4
+
+  # Un seul message par cycle, seulement si la carte publiée montre vraiment du
+  # neuf : de nouveaux foyers FIRMS ou un nouveau périmètre EFFIS.
+  notify:
+    needs: [build, deploy]
+    if: needs.build.outputs.fresh == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publier sur Telegram
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          MESSAGE: ${{ needs.build.outputs.message }}
+        shell: bash
+        run: |
+          # Les secrets ne sont pas lisibles dans un `if` de job : le dépôt sans
+          # bot configuré doit se contenter d'un avertissement, pas d'un échec.
+          if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_CHAT_ID" ]; then
+            echo "::warning::Secrets Telegram absents, message non envoyé."
+            exit 0
+          fi
+          curl -sS --fail-with-body -X POST \
+            "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
+            -d chat_id="$TELEGRAM_CHAT_ID" \
+            -d parse_mode=HTML \
+            -d link_preview_options='{"is_disabled":true}' \
+            --data-urlencode "text=$MESSAGE" \
+            -o response.json
+          python3 -c "import json;print(json.load(open('response.json'))['ok'])"
