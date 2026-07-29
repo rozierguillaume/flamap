@@ -582,7 +582,7 @@ def wind_subset(wind, xs, ys, time_stride=1):
     box = wind["box"]
     dx = (box[2] - box[0]) / (wind["nx"] - 1)
     dy = (box[3] - box[1]) / (wind["ny"] - 1)
-    return {
+    result = {
         "model": wind["model"],
         "unit": "m/s",
         "bbox": [
@@ -600,6 +600,12 @@ def wind_subset(wind, xs, ys, time_stride=1):
         "v": [[wind["v"][row][index] for index in indices] for row in rows],
         "gust": [[wind["gust"][row][index] for index in indices] for row in rows],
     }
+    if "temperature" in wind:
+        result["temperature"] = [
+            [wind["temperature"][row][index] for index in indices]
+            for row in rows
+        ]
+    return result
 
 
 def whole_wind(wind, time_stride=1):
@@ -634,18 +640,6 @@ def weather_forecast(wind, now, hours=12):
         "gust": [wind["gust"][row] for row in rows],
         "temperature": [wind["temperature"][row] for row in rows],
         "precipitation": [wind["precipitation"][row] for row in rows],
-    }
-
-
-def temperature_snapshot(wind, now):
-    """Temperature de la maille horaire la plus proche pour la legende."""
-    row = min(
-        range(len(wind["temperature"])),
-        key=lambda index: abs(wind["t0"] + index * wind["dt"] - now),
-    )
-    return {
-        "temperature_ts": wind["t0"] + row * wind["dt"],
-        "temperature_2m": wind["temperature"][row],
     }
 
 
@@ -757,7 +751,6 @@ def main():
     overview = aggregate_hotspots(hotspots)
     coarse = whole_wind(coarse_wind)
     now = datetime.now(timezone.utc).timestamp()
-    coarse.update(temperature_snapshot(coarse_wind, now))
     weather = weather_forecast(coarse_wind, now)
     manifest = {
         "version": 1,

@@ -1810,7 +1810,10 @@ function windAtGrid(d, g, lon, lat, out) {
 }
 
 function temperatureAt(lon, lat) {
-  const d = W.data, values = d && d.temperature_2m;
+  const d = W.data;
+  // Format courant : la température suit la même interpolation temporelle que
+  // le vent. L'instantané reste accepté pour les anciens exports locaux.
+  const values = W.cur?.temperature || d?.temperature_2m;
   if (!values) return null;
   const gx = (lon - d.bbox[0]) / (d.bbox[2] - d.bbox[0]) * (d.nx - 1);
   const gy = (lat - d.bbox[1]) / (d.bbox[3] - d.bbox[1]) * (d.ny - 1);
@@ -1872,6 +1875,7 @@ function windGridTime(d, ts) {
     return o;
   };
   d._cur = { u: mix(d.u), v: mix(d.v), gust: mix(d.gust) };
+  if (d.temperature) d._cur.temperature = mix(d.temperature);
   return d._cur;
 }
 
@@ -1891,6 +1895,7 @@ function windTime(ts, force = false) {
   W.cur = windGridTime(d, ts);
   for (const tile of W.tiles.values()) windGridTime(tile, ts);
   windBadge();
+  temperatureBadge();
   windLoop();
   smokeLoop();
 }
@@ -1922,9 +1927,9 @@ function temperatureBadge() {
   tempKey.hidden = !Number.isFinite(value);
   if (tempKey.hidden) return;
   tempVal.textContent = `${Math.round(value)} °C`;
-  const stamp = W.data.temperature_ts;
+  const stamp = W.cur?.temperature ? W.ts : W.data.temperature_ts;
   tempKey.title = 'Température à 2 m au centre de la carte'
-                + (stamp ? `, modèle du ${fmt(stamp)}` : '');
+                + (stamp ? `, au ${fmt(stamp)}` : '');
 }
 
 function windSpawn(p) {
