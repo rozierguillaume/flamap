@@ -134,13 +134,42 @@ dernier état observé — le vieillir jusqu'à demain le ferait s'éteindre à
 l'écran alors qu'on n'en sait rien. Désactivé pour l'instant : la constante
 `FORECAST_H` d'`index.html` vaut 0, la remonter à 24 rouvre ces crans.
 
+## Cliquer sur la carte
+
+Toute la carte répond au clic, et une seule fiche reste ouverte à la fois. La
+priorité de lecture est explicite : un appareil, puis un foyer, puis un
+regroupement de la vue nationale, puis un périmètre brûlé, puis le sol.
+
+Chaque fiche a deux étages séparés par un filet — ce qui a été observé au-dessus,
+l'air qu'il y fait en dessous :
+
+- **Foyer** — satellite et heure de détection, ancienneté relative au cran
+  affiché, puissance radiative en MW, indice de confiance FIRMS (classe pour
+  VIIRS, pourcentage pour MODIS).
+- **Regroupement national** — nombre de détections de l'heure et FRP cumulée.
+- **Périmètre EFFIS daté** — commune, département, surface en hectares, date de
+  départ, puis la composition du couvert brûlé publiée par EFFIS (conifères,
+  feuillus, forêt mixte, maquis, landes, cultures, bâti…) et, le cas échéant, la
+  part située en zone Natura 2000.
+- **Emprise NRT** — rappel qu'elle arrive sans date ni surface et peut englober
+  d'anciennes cicatrices.
+- **Fond de carte** — la commune, les coordonnées, la température et le vent du
+  point cliqué.
+
+L'étage météo lit les grilles déjà en mémoire pour la nappe de vent : aucune
+requête réseau n'est déclenchée par l'ouverture d'une fiche. Son bouton
+**Prévisions météo** ouvre le volet détaillé sur ce point précis.
+
 Le bouton discret **Météo** ouvre un graphique pour le centre courant de la
-carte : température, vent moyen, direction, rafales et précipitations horaires
+carte — ou pour le point épinglé si l'on y est arrivé depuis une fiche, auquel
+cas le volet ne suit plus les déplacements et un bouton ramène au centre :
+température, vent moyen, direction, rafales et précipitations horaires
 sur les 12 dernières et les 12 prochaines heures. Deux traits situent l'heure
 actuelle et l'extraction des données affichées sur la carte. Ces séries sont
 isolées dans `data/weather_forecast.json` et ne sont téléchargées qu'à la
 première ouverture du volet. Un déplacement de la carte ouverte réinterpole
-ensuite la même grille, sans requête réseau supplémentaire. Le survol donne,
+ensuite la même grille, sans requête réseau supplémentaire — sauf sur un point
+épinglé, qui reste fixe. Le survol donne,
 heure par heure, la température, le vent moyen, sa direction, les rafales et le
 cumul de précipitations en millimètres. La légende principale affiche aussi la
 température actuelle grâce à un seul instantané de 225 valeurs inclus dans

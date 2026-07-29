@@ -295,6 +295,18 @@
   #weather-close:hover { background: #2c313a; }
   #weather-place { margin: 12px 0 7px; font-size: 12px; color: var(--ink-dim);
                    font-variant-numeric: tabular-nums; }
+  #weather-follow { display: block; margin: 0 0 8px; font: inherit; font-size: 11.5px;
+    color: var(--ink); background: #21252b; border: 1px solid #363b43;
+    border-radius: 7px; padding: 5px 9px; cursor: pointer; }
+  /* `display: block` sur un sélecteur d'id l'emporte sur la règle `[hidden]` du
+     navigateur : sans cette ligne, le bouton resterait visible en permanence. */
+  #weather-follow[hidden] { display: none; }
+  #weather-follow:hover { background: #2c313a; }
+  /* Le point épinglé : un repère discret, qui ne peut pas être confondu avec un
+     foyer (couleur du vent, anneau creux). */
+  .weather-pin { width: 16px; height: 16px; border-radius: 50%;
+    border: 2px solid var(--wind); background: rgba(10,12,15,.45);
+    box-shadow: 0 0 0 1px rgba(10,12,15,.8); }
   #weather-chart-wrap { position: relative; }
   #weather-chart { display: block; width: 100%; height: auto; overflow: visible;
                    cursor: crosshair; }
@@ -370,10 +382,44 @@
   .maplibregl-ctrl-group button span { filter: invert(1) brightness(1.4); }
 
   .maplibregl-popup-content { background: #171a1f; color: var(--ink);
-    border-radius: 10px; padding: 11px 14px; font-size: 13px; box-shadow: none; }
+    border-radius: 10px; padding: 11px 26px 12px 14px; font-size: 13px;
+    line-height: 1.42; box-shadow: none; }
   .maplibregl-popup-tip { border-top-color: #171a1f !important;
     border-bottom-color: #171a1f !important; }
   .maplibregl-popup-close-button { color: var(--ink-dim); font-size: 17px; padding: 2px 7px; }
+  /* Au-dessus des nappes de vent et de fumée (399/400) et du réticule du centre
+     (401), sous les panneaux (499+). `#map` n'a pas de `z-index` : il ne crée
+     donc pas de contexte d'empilement et la fiche se place bien dans celui de
+     la page, pas seulement dans la carte. */
+  .maplibregl-popup { z-index: 450; }
+
+  /* Fiches au clic : foyers, emprises brûlées, appareils et sonde météo
+     partagent la même feuille de style — une seule fiche est ouverte à la
+     fois, donc les blocs se ressemblent d'une couche à l'autre. Deux étages
+     seulement : ce qui a été observé, puis l'air qu'il y fait. */
+  .pop > b { font-size: 13.5px; }
+  .pop .sub { display: block; margin-top: 1px; color: var(--ink-dim); font-size: 11.5px; }
+  .pop .row { margin-top: 5px; }
+  .pop .dim { color: var(--ink-dim); font-size: 11.5px; }
+  .pop .big { margin-top: 6px; font-size: 21px; font-weight: 700; color: #ffc19c;
+              letter-spacing: -.02em; }
+  .pop .big .unit { font-size: 13px; font-weight: 600; }
+  /* Composition du couvert : la barre est le fond de la ligne, pas un élément
+     de plus — le pourcentage arrive en `--p` depuis le script. */
+  .pop .cover { margin-top: 7px; display: grid; gap: 3px; }
+  .pop .cover span { padding: 2px 7px; border-radius: 4px; font-size: 11.5px;
+    display: flex; justify-content: space-between; gap: 10px;
+    background: linear-gradient(90deg, rgba(255,107,26,.34) var(--p),
+                                       rgba(255,255,255,.05) var(--p)); }
+  .pop .cover span em { font-style: normal; color: var(--ink-dim); }
+  .pop .meteo.sep { margin-top: 10px; padding-top: 9px;
+                    border-top: 1px solid rgba(255,255,255,.11); }
+  .pop .meteo .temp { font-size: 17px; font-weight: 700; color: #ffc19c; }
+  .pop .meteo .wind { margin-top: 1px; font-size: 12px; color: #c7cbd0; }
+  .pop button { margin-top: 8px; font: inherit; font-size: 12px; color: var(--ink);
+    background: #21252b; border: 1px solid #363b43; border-radius: 7px;
+    padding: 6px 10px; cursor: pointer; width: 100%; }
+  .pop button:hover { background: #2c313a; }
 
   /* =======================  DESKTOP  ======================= */
   @media (min-width: 721px) {
@@ -434,6 +480,11 @@
     #weather-btn .weather-icon { margin: 0; }
     #weather-btn::after { content: none; }
     #layers.open ~ #weather-btn { display: none; }
+
+    /* La fiche doit tenir dans la bande laissée par le dock : `fitPopup()`
+       remonte la carte, encore faut-il que la fiche soit assez basse pour y
+       entrer. Au-delà, elle défile dans son propre cadre. */
+    .maplibregl-popup-content { max-height: 42vh; overflow-y: auto; }
 
     /* Le bas est compose de cartes flottantes distinctes : la legende explique
        la carte, la frise la pilote. Les fondre dans une seule feuille donnait
@@ -663,7 +714,8 @@
 </div>
 
 <button id="weather-btn" class="glass" aria-expanded="false"
-        aria-controls="weather-panel" aria-label="Prévisions météo au centre de la carte">
+        aria-controls="weather-panel" aria-label="Prévisions météo au centre de la carte"
+        title="Prévisions au centre de la carte — ou cliquez n'importe où sur la carte pour la météo de ce point">
   <svg class="weather-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
        stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
     <path d="M12 2v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="M20 12h2"/>
@@ -677,6 +729,7 @@
     <button id="weather-close" aria-label="Fermer">×</button>
   </header>
   <p id="weather-place">—</p>
+  <button id="weather-follow" hidden>↺ revenir au centre de la carte</button>
   <div id="weather-chart-wrap">
     <svg id="weather-chart" viewBox="0 0 430 424" role="img"
          aria-label="Évolution de la température, du vent et des précipitations"></svg>
@@ -1070,46 +1123,91 @@ const weatherChart = document.getElementById('weather-chart');
 const weatherTip = document.getElementById('weather-tip');
 const weatherPlace = document.getElementById('weather-place');
 const weatherStatus = document.getElementById('weather-status');
+const weatherTitle = document.getElementById('weather-title');
+const weatherFollow = document.getElementById('weather-follow');
 let weatherData = null, weatherPromise = null, weatherRows = [];
 let weatherCommune = '', weatherPlaceRequest = 0;
 const weatherPlaceCache = new Map();
+/* Le panneau lit soit le centre de la carte — son comportement d'origine, qui
+ * suit les déplacements — soit un point épinglé au clic. Un seul point à la
+ * fois : la fiche météo du clic et le panneau parlent du même endroit. */
+let weatherPin = null, weatherPinMarker = null;
 
-function weatherCoordinates(center) {
-  return `${Math.abs(center.lat).toFixed(3)}° ${center.lat >= 0 ? 'N' : 'S'}`
-       + ` · ${Math.abs(center.lng).toFixed(3)}° ${center.lng >= 0 ? 'E' : 'O'}`;
+const weatherTarget = () => weatherPin || map.getCenter();
+
+function weatherCoordinates(point) {
+  return `${Math.abs(point.lat).toFixed(3)}° ${point.lat >= 0 ? 'N' : 'S'}`
+       + ` · ${Math.abs(point.lng).toFixed(3)}° ${point.lng >= 0 ? 'E' : 'O'}`;
 }
 
-function renderWeatherPlace(center = map.getCenter()) {
+/* Géocodage inverse mutualisé entre le panneau et la fiche au clic : le service
+ * de l'IGN est rapide mais public, et deux lectures du même endroit sont la
+ * règle dès qu'on clique puis qu'on ouvre les prévisions. */
+async function communeAt(lon, lat) {
+  const key = `${lon.toFixed(4)},${lat.toFixed(4)}`;
+  if (weatherPlaceCache.has(key)) return weatherPlaceCache.get(key);
+  const url = new URL('https://data.geopf.fr/geocodage/reverse/');
+  url.searchParams.set('lon', lon.toFixed(6));
+  url.searchParams.set('lat', lat.toFixed(6));
+  url.searchParams.set('limit', '1');
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`Géocodage HTTP ${response.status}`);
+  const result = await response.json();
+  const properties = result.features?.[0]?.properties || {};
+  const name = properties.city || properties.municipality || '';
+  if (weatherPlaceCache.size >= 40) weatherPlaceCache.delete(weatherPlaceCache.keys().next().value);
+  weatherPlaceCache.set(key, name);
+  return name;
+}
+
+function renderWeatherPlace(point = weatherTarget()) {
   weatherPlace.textContent = (weatherCommune ? `${weatherCommune} · ` : '')
-                           + weatherCoordinates(center);
+                           + weatherCoordinates(point);
+  weatherTitle.textContent = weatherPin ? 'Météo au point choisi'
+                                        : 'Météo au centre de la carte';
+  weatherFollow.hidden = !weatherPin;
 }
 
 async function updateWeatherPlace() {
-  const center = map.getCenter();
-  const key = `${center.lng.toFixed(4)},${center.lat.toFixed(4)}`;
+  const point = weatherTarget();
   const request = ++weatherPlaceRequest;
-  weatherCommune = weatherPlaceCache.get(key) || '';
-  renderWeatherPlace(center);
-  if (weatherCommune) return;
+  weatherCommune = '';
+  renderWeatherPlace(point);
   try {
-    const url = new URL('https://data.geopf.fr/geocodage/reverse/');
-    url.searchParams.set('lon', center.lng.toFixed(6));
-    url.searchParams.set('lat', center.lat.toFixed(6));
-    url.searchParams.set('limit', '1');
-    const response = await fetch(url);
-    if (!response.ok) throw new Error(`Géocodage HTTP ${response.status}`);
-    const result = await response.json();
+    const name = await communeAt(point.lng, point.lat);
     if (request !== weatherPlaceRequest || !weatherPanel.classList.contains('open')) return;
-    const properties = result.features?.[0]?.properties || {};
-    weatherCommune = properties.city || properties.municipality || '';
-    if (weatherCommune) {
-      if (weatherPlaceCache.size >= 40) weatherPlaceCache.delete(weatherPlaceCache.keys().next().value);
-      weatherPlaceCache.set(key, weatherCommune);
-    }
-    renderWeatherPlace(center);
+    weatherCommune = name;
+    renderWeatherPlace(point);
   } catch (_) {
     // Le nom est un enrichissement : les coordonnées restent disponibles si
     // le service est momentanément inaccessible ou hors de France.
+  }
+}
+
+function setWeatherPin(lngLat) {
+  weatherPin = lngLat ? maplibregl.LngLat.convert(lngLat) : null;
+  if (!weatherPin) {
+    if (weatherPinMarker) { weatherPinMarker.remove(); weatherPinMarker = null; }
+    return;
+  }
+  if (!weatherPinMarker) {
+    const element = document.createElement('div');
+    element.className = 'weather-pin';
+    weatherPinMarker = new maplibregl.Marker({ element }).setLngLat(weatherPin).addTo(map);
+  } else {
+    weatherPinMarker.setLngLat(weatherPin);
+  }
+}
+
+/* Le panneau ouvert sur un point épinglé : la fiche au clic y renvoie pour les
+ * 24 h de contexte que la lecture instantanée ne donne pas. */
+function openWeatherAt(lngLat) {
+  setWeatherPin(lngLat);
+  if (weatherPanel.classList.contains('open')) {
+    updateWeatherPlace();
+    if (weatherData) drawWeather(); else loadWeather();
+  } else {
+    setWeatherOpen(true);
   }
 }
 
@@ -1181,14 +1279,14 @@ const svgText = (x, y, text, cls = 'axis', anchor = 'middle') =>
 function drawWeather() {
   if (!weatherData) return;
   hideWeatherTip();
-  const center = map.getCenter();
+  const point = weatherTarget();
   const rows = [];
   for (let index = 0; index < weatherData.nt; index++) {
-    const value = weatherValue(weatherData, index, center.lng, center.lat);
+    const value = weatherValue(weatherData, index, point.lng, point.lat);
     if (value) rows.push({ ...value, ts: weatherData.t0 + index * weatherData.dt });
   }
   weatherRows = rows;
-  renderWeatherPlace(center);
+  renderWeatherPlace(point);
   if (rows.length < 2) {
     weatherChart.innerHTML = '';
     weatherStatus.textContent = "Prévisions indisponibles à cette localisation.";
@@ -1392,17 +1490,27 @@ function setWeatherOpen(open) {
     document.getElementById('weather-close').focus();
   } else if (wasOpen) {
     weatherPlaceRequest++;
+    setWeatherPin(null);
     weatherBtn.focus({ preventScroll: true });
   }
 }
 weatherBtn.addEventListener('click', () => {
   const open = !weatherPanel.classList.contains('open');
   if (open) trackUsage('weather-open');
+  // Le bouton parle du centre de la carte : il reprend la main sur un point
+  // éventuellement épinglé par un clic précédent.
+  setWeatherPin(null);
   setWeatherOpen(open);
 });
 document.getElementById('weather-close').addEventListener('click', () => setWeatherOpen(false));
+weatherFollow.addEventListener('click', () => {
+  setWeatherPin(null);
+  updateWeatherPlace();
+  if (weatherData) drawWeather();
+});
 map.on('moveend', () => {
-  if (!weatherPanel.classList.contains('open')) return;
+  // Un point épinglé ne suit pas la carte : c'est tout l'intérêt du clic.
+  if (!weatherPanel.classList.contains('open') || weatherPin) return;
   updateWeatherPlace();
   if (weatherData) drawWeather();
 });
@@ -1412,6 +1520,7 @@ addEventListener('keydown', event => {
     setUpdatesOpen(false);
     if (activityPanel.classList.contains('open')) setActivityOpen(false);
     setWeatherOpen(false);
+    closePopup();
   }
 });
 
@@ -2570,7 +2679,7 @@ const A = {
   labels: false,
   tracks: new Map(), features: [], clockOffset: 0,
   historyLoaded: false, historyLoading: false,
-  raf: null, lastFrame: 0, popup: null, popupTimer: null,
+  raf: null, lastFrame: 0,
 };
 
 function aircraftStatusText(text) {
@@ -2595,12 +2704,11 @@ function applyAircraftLabels() {
   }
 }
 
+// Les appareils disparaissent dès qu'on quitte le dernier cran, ou qu'on décoche
+// la couche : leur fiche ne doit pas rester ouverte sur un symbole absent. Les
+// autres fiches, elles, restent valables.
 function closeAircraftPopup() {
-  if (A.popup) A.popup.remove();
-  if (A.popupTimer) {
-    clearInterval(A.popupTimer);
-    A.popupTimer = null;
-  }
+  if (POP.kind === 'aircraft-symbol') closePopup();
 }
 
 function nearestAircraftFire(center) {
@@ -3040,12 +3148,10 @@ function helicopterIcon() {
   return ctx.getImageData(0, 0, canvas.width, canvas.height);
 }
 
-function aircraftPopup(event) {
-  event.originalEvent?.stopPropagation();
-  closeAircraftPopup();
-
-  const p = event.features[0].properties;
+function aircraftPopup(feature, lngLat) {
+  const p = feature.properties;
   const root = document.createElement('div');
+  root.className = 'pop';
   const title = document.createElement('b');
   title.textContent = p.label;
   root.append(title);
@@ -3074,20 +3180,8 @@ function aircraftPopup(event) {
       + ` · affichage différé de ${AIRCRAFT_DELAY_MS / 1000} s`
       + ` · ICAO ${p.hex.toUpperCase()}`;
   };
-  updateAge();
-
-  const popup = new maplibregl.Popup({ closeButton: true })
-    .setLngLat(event.lngLat)
-    .setDOMContent(root)
-    .addTo(map);
-  const timer = setInterval(updateAge, 1000);
-  A.popup = popup;
-  A.popupTimer = timer;
-  popup.on('close', () => {
-    clearInterval(timer);
-    if (A.popup === popup) A.popup = null;
-    if (A.popupTimer === timer) A.popupTimer = null;
-  });
+  // Le compteur de l'âge du signal est rafraîchi par le gestionnaire de fiches.
+  return openPopup(lngLat, root, 'aircraft-symbol', updateAge);
 }
 
 function addAircraftLayers() {
@@ -3149,9 +3243,7 @@ function addAircraftLayers() {
     },
   });
   applyAircraftLabels();
-  map.on('click', 'aircraft-symbol', aircraftPopup);
-  map.on('mouseenter', 'aircraft-symbol', () => map.getCanvas().style.cursor = 'pointer');
-  map.on('mouseleave', 'aircraft-symbol', () => map.getCanvas().style.cursor = '');
+  hoverCursor('aircraft-symbol');
 }
 
 /*
@@ -3474,6 +3566,322 @@ async function loadVisibleZones() {
   }
 }
 
+/* =====================================================================
+ * FICHES AU CLIC
+ *
+ * Un seul aiguillage pour toute la carte, et une seule fiche ouverte à la fois.
+ * Avant, chaque couche posait son propre `map.on('click', id, …)` : les
+ * gestionnaires se déclenchaient tous pour un même clic — d'où le garde-fou qui
+ * cherchait un appareil depuis la fiche EFFIS — et le fond de carte, lui,
+ * n'était cliquable nulle part. L'ordre de priorité est explicite ici, et ce
+ * qui ne touche aucune couche tombe sur la sonde météo.
+ * ===================================================================== */
+const POP = { popup: null, timer: null, kind: null };
+
+function closePopup() {
+  if (POP.popup) POP.popup.remove();   // le gestionnaire 'close' fait le ménage
+}
+
+/* Le dock (frise, légende) et le bandeau du haut sont des panneaux posés sur la
+ * carte : MapLibre ne les connaît pas et laisserait la fiche filer dessous, ce
+ * qui est fatal sur téléphone où la barre du bas occupe un bon tiers de l'écran.
+ * On remonte donc la carte de ce qu'il faut — la fiche suit son point. */
+function fitPopup(popup) {
+  const element = popup.getElement();
+  if (!element) return;
+  const view = map.getContainer().getBoundingClientRect();
+  const dock = document.getElementById('dock').getBoundingClientRect();
+  const rect = element.getBoundingClientRect();
+  const floor = Math.min(view.bottom, dock.top) - 10;
+  const ceiling = view.top + 10;
+  let dy = 0;
+  if (rect.bottom > floor) dy = rect.bottom - floor;
+  // Une fiche plus haute que la bande disponible : on privilégie son en-tête.
+  if (rect.top - dy < ceiling) dy = rect.top - ceiling;
+  if (Math.abs(dy) > 2) map.panBy([0, dy], { duration: 240 });
+}
+
+function openPopup(lngLat, content, kind, tick) {
+  closePopup();
+  // Ancrage figé : sans lui, MapLibre le recalcule pendant le recadrage de
+  // `fitPopup()` et la fiche saute d'un côté à l'autre de son point.
+  const anchor = map.project(lngLat).y > map.getContainer().clientHeight * .45
+    ? 'bottom' : 'top';
+  const popup = new maplibregl.Popup({ closeButton: true, maxWidth: '290px', anchor })
+    .setLngLat(lngLat)
+    .setDOMContent(content)
+    .addTo(map);
+  fitPopup(popup);
+  POP.popup = popup;
+  POP.kind = kind;
+  if (tick) {
+    tick();
+    POP.timer = setInterval(tick, 1000);
+  }
+  popup.on('close', () => {
+    if (POP.popup !== popup) return;
+    clearInterval(POP.timer);
+    POP.popup = null; POP.timer = null; POP.kind = null;
+  });
+  return popup;
+}
+
+/* Le curseur de lecture, pas la main du lien : sur une carte, la main promet une
+ * navigation alors qu'on ouvre une mesure au point visé. Le réticule dit
+ * « je relève ici », et il reste distinct de la main ouverte du déplacement. */
+function hoverCursor(id) {
+  map.on('mouseenter', id, () => map.getCanvas().style.cursor = 'crosshair');
+  map.on('mouseleave', id, () => map.getCanvas().style.cursor = '');
+}
+
+const popEl = (tag, cls, text) => {
+  const node = document.createElement(tag);
+  if (cls) node.className = cls;
+  if (text !== undefined) node.textContent = text;
+  return node;
+};
+
+function popRoot(title, subtitle) {
+  const root = popEl('div', 'pop');
+  root.append(popEl('b', '', title));
+  if (subtitle) root.append(popEl('span', 'sub', subtitle));
+  return root;
+}
+
+function popRow(root, text, cls = 'row') {
+  if (text) root.append(popEl('div', cls, text));
+  return root;
+}
+
+const nf = (value, digits = 0) =>
+  Number(value).toLocaleString('fr-FR', { maximumFractionDigits: digits });
+
+/* Ancienneté relative au cran affiché, pas à l'heure murale : c'est ce que la
+ * couleur du foyer raconte quand on remonte la frise. */
+function ago(seconds) {
+  if (!Number.isFinite(seconds) || seconds < 0) return '';
+  if (seconds < 90) return "à l'instant";
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `il y a ${minutes} min`;
+  const hours = Math.floor(seconds / 3600);
+  if (hours < 24) {
+    const rest = Math.round((seconds - hours * 3600) / 60);
+    return `il y a ${hours} h${rest ? ' ' + String(rest).padStart(2, '0') : ''}`;
+  }
+  const days = Math.round(seconds / DAY);
+  return `il y a ${days} jour${days > 1 ? 's' : ''}`;
+}
+
+// instant réellement représenté : la prévision de vent ne vieillit pas le feu
+const shownTs = () => Math.min(curTs, steps.length ? steps[lastObs].ts : curTs);
+
+function windPhrase(lon, lat) {
+  const out = {};
+  if (!W.cur || !windAt(lon, lat, out)) return '';
+  const kmh = Math.hypot(out.u, out.v) * 3.6;
+  const to = (Math.atan2(out.u, out.v) * 180 / Math.PI + 360) % 360;
+  const from = CARD[Math.round(((to + 180) % 360) / 22.5) % 16];
+  // Même formulation que la légende, pour qu'on retrouve la lecture du centre.
+  // « de » s'élide devant est et ouest : « vent d'ouest », pas « de ouest ».
+  const de = /^[aeiou]/.test(from) ? `d'${from}` : `de ${from}`;
+  return `Vent ${de} · ${Math.round(kmh)} km/h (raf. ${Math.round(out.g)} km/h)`;
+}
+
+/* Deuxième étage de toutes les fiches : l'air à cet endroit, au cran affiché.
+ * Séparé du reste par un filet — ce qui est au-dessus a été observé par un
+ * satellite ou publié par EFFIS, ce qui est ici sort d'un modèle. */
+function weatherBlock(root, lngLat, { divider = true, stamp = false } = {}) {
+  const block = popEl('div', divider ? 'meteo sep' : 'meteo');
+  const temperature = temperatureAt(lngLat.lng, lngLat.lat);
+  if (Number.isFinite(temperature))
+    block.append(popEl('div', 'temp', `${nf(temperature, 1)} °C`));
+  const wind = windPhrase(lngLat.lng, lngLat.lat);
+  block.append(popEl('div', 'wind',
+    wind || 'Modèle de vent non couvert à cet endroit.'));
+  if (stamp) block.append(popEl('div', 'row dim', `AROME · au ${fmt(curTs)}`));
+
+  const button = popEl('button', '', 'Prévisions météo');
+  button.addEventListener('click', () => {
+    trackUsage('popup-weather');
+    closePopup();
+    openWeatherAt(lngLat);
+  });
+  block.append(button);
+  root.append(block);
+  return root;
+}
+
+/* La confiance FIRMS est une classe pour VIIRS (l/n/h) et un pourcentage pour
+ * MODIS : les deux formats arrivent dans le même champ. */
+function confidenceText(value) {
+  const text = String(value ?? '').toLowerCase();
+  const words = { l: 'faible', low: 'faible', n: 'nominale', nominal: 'nominale',
+                  h: 'haute', high: 'haute' };
+  if (words[text]) return `confiance ${words[text]}`;
+  const number = Number(text);
+  return Number.isFinite(number) && text !== '' ? `confiance ${number} %` : '';
+}
+
+function hotspotPopup(feature, lngLat) {
+  const p = feature.properties;
+  const ts = Number(p.ts);
+  const root = popRoot('Foyer détecté', `${p.source} · ${fmt(ts)}`);
+  popRow(root, ago(shownTs() - ts));
+  const frp = Number(p.frp);
+  if (Number.isFinite(frp)) {
+    const big = popEl('div', 'big', `${nf(frp, 1)} `);
+    big.append(popEl('span', 'unit', 'MW rayonnés'));
+    root.append(big);
+  }
+  popRow(root, confidenceText(p.confidence), 'row dim');
+  return weatherBlock(root, lngLat);
+}
+
+function overviewPopup(feature, lngLat) {
+  const p = feature.properties;
+  const ts = Number(p.ts);
+  const count = Number(p.n) || 0;
+  const root = popRoot(`${nf(count)} foyer${count > 1 ? 's' : ''} en une heure`,
+                       `${p.source} · ${fmt(ts)}`);
+  const frp = Number(p.frp);
+  if (Number.isFinite(frp)) {
+    const big = popEl('div', 'big', `${nf(frp, 1)} `);
+    big.append(popEl('span', 'unit', 'MW cumulés'));
+    root.append(big);
+  }
+  popRow(root, 'Regroupement de la vue nationale — zoomez pour le détail.',
+    'row dim');
+  return weatherBlock(root, lngLat);
+}
+
+/* Occupation du sol brûlée, telle qu'EFFIS la publie : neuf pourcentages dont
+ * la somme fait 100. C'est la donnée la plus parlante du lot — savoir qu'un
+ * périmètre a emporté de la pinède, du maquis ou des cultures. */
+const BURNT_COVER = [
+  ['CONIFER',    'conifères'],
+  ['BROADLEA',   'feuillus'],
+  ['MIXED',      'forêt mixte'],
+  ['SCLEROPH',   'maquis, garrigue'],
+  ['TRANSIT',    'landes, recrû'],
+  ['OTHERNATLC', 'autres milieux naturels'],
+  ['AGRIAREAS',  'surfaces agricoles'],
+  ['ARTIFSURF',  'surfaces bâties'],
+  ['OTHERLC',    'autres'],
+];
+
+function coverBlock(p) {
+  const rows = BURNT_COVER
+    .map(([key, label]) => [label, Number(p[key])])
+    .filter(([, share]) => Number.isFinite(share) && share >= 1)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 4);
+  if (!rows.length) return null;
+  const block = popEl('div', 'cover');
+  for (const [label, share] of rows) {
+    const line = popEl('span');
+    line.style.setProperty('--p', `${Math.min(100, share).toFixed(0)}%`);
+    line.append(popEl('em', '', label), popEl('b', '', `${nf(share)} %`));
+    block.append(line);
+  }
+  return block;
+}
+
+function burntPopup(feature, lngLat) {
+  const p = feature.properties;
+  const place = p.COMMUNE || p.PROVINCE || 'Périmètre brûlé';
+  const ts = Number(p.ts);
+  const root = popRoot(place, [p.COMMUNE ? p.PROVINCE : '', 'périmètre EFFIS']
+    .filter(Boolean).join(' · '));
+  const area = Number(p.AREA_HA);
+  if (Number.isFinite(area)) {
+    const big = popEl('div', 'big', `${nf(area)} `);
+    big.append(popEl('span', 'unit', 'ha'));
+    root.append(big);
+  }
+  if (ts) popRow(root, `Départ le ${fmt(ts)} · ${ago(shownTs() - ts)}`);
+  const cover = coverBlock(p);
+  if (cover) root.append(cover);
+  const na2k = Number(p.PERCNA2K);
+  if (Number.isFinite(na2k) && na2k >= 1)
+    popRow(root, `${nf(na2k)} % en zone Natura 2000`, 'row dim');
+  return weatherBlock(root, lngLat);
+}
+
+function nrtPopup(lngLat) {
+  const root = popRoot('Emprise en cours d\'évaluation', 'EFFIS quasi temps réel');
+  popRow(root, 'Publiée sans date ni surface, elle peut englober d\'anciennes'
+    + ' cicatrices.', 'row dim');
+  return weatherBlock(root, lngLat);
+}
+
+/* Fiche du fond de carte : la lecture du modèle à l'endroit cliqué, au cran
+ * affiché. Les grilles sont déjà en mémoire pour la nappe de vent et la sonde
+ * du centre — rien à télécharger, et les 24 h de contexte restent à un bouton. */
+function weatherPopup(lngLat) {
+  const root = popRoot('Météo à ce point', weatherCoordinates(lngLat));
+  weatherBlock(root, lngLat, { divider: false, stamp: true });
+
+  const popup = openPopup(lngLat, root, 'weather');
+  // Le nom de la commune arrive après coup : la fiche est déjà lisible sans lui.
+  communeAt(lngLat.lng, lngLat.lat).then(name => {
+    if (!name || POP.popup !== popup) return;
+    root.querySelector('b').textContent = name;
+  }).catch(() => {});
+  return popup;
+}
+
+// Priorité de lecture : ce qui vole, puis ce qui brûle, puis le sol.
+const POP_LAYERS = ['aircraft-symbol', 'hotspots', 'hotspots-overview',
+                    'recent-fill', 'burnt-fill', 'nrt-fill'];
+
+function popTarget(event) {
+  const layers = POP_LAYERS.filter(id => map.getLayer(id));
+  if (!layers.length) return null;
+  // Un foyer fait quelques pixels de rayon : au doigt, un point exact ne
+  // l'atteint presque jamais. La tolérance ne vaut que pour les symboles et les
+  // disques — un polygone, on est dedans ou on ne l'est pas.
+  const pad = MOBILE ? 13 : 8;
+  const box = [[event.point.x - pad, event.point.y - pad],
+               [event.point.x + pad, event.point.y + pad]];
+  const near = map.queryRenderedFeatures(box, { layers });
+  const under = map.queryRenderedFeatures(event.point, { layers });
+  const now = shownTs();
+  // Hors de la fenêtre d'ancienneté, un foyer est peint à opacité nulle mais
+  // reste « rendu » pour MapLibre : sans ce test, on ouvrirait la fiche d'un
+  // point invisible (voir le commentaire de `show()` sur l'absence de filtre).
+  const visible = feature => {
+    const ts = Number(feature.properties.ts);
+    return !Number.isFinite(ts) || (ts <= now && now - ts <= MAX_AGE);
+  };
+  for (const id of layers) {
+    const isPoint = id === 'aircraft-symbol' || id.startsWith('hotspots');
+    // Même chose pour les surfaces brûlées : au passé, `applyBurnt()` les rend
+    // transparentes sans les masquer.
+    if (!isPoint && !atLatest) continue;
+    const found = (isPoint ? near : under)
+      .filter(feature => feature.layer.id === id)
+      .find(feature => id === 'aircraft-symbol' || visible(feature));
+    if (found) return { id, feature: found };
+  }
+  return null;
+}
+
+function mapClick(event) {
+  const hit = popTarget(event);
+  if (!hit) {
+    trackUsage('popup-ground');
+    weatherPopup(event.lngLat);
+    return;
+  }
+  trackUsage('popup-feature', { layer: hit.id });
+  if (hit.id === 'aircraft-symbol') return aircraftPopup(hit.feature, event.lngLat);
+  const content = hit.id === 'hotspots' ? hotspotPopup(hit.feature, event.lngLat)
+    : hit.id === 'hotspots-overview' ? overviewPopup(hit.feature, event.lngLat)
+    : hit.id === 'nrt-fill' ? nrtPopup(event.lngLat)
+    : burntPopup(hit.feature, event.lngLat);
+  openPopup(event.lngLat, content, hit.id);
+}
+
 // Les donnees nationales partent tout de suite, sans attendre MapLibre.
 const dataP = Promise.all([
   json('data/manifest.json'),
@@ -3671,24 +4079,11 @@ async function init() {
     else fitFrance(0);
   }
 
-  // détail d'un polygone au clic, aussi bien dans l'aperçu que dans une cellule
-  const popup = e => {
-    // Un appareil est rendu au-dessus du polygone. Sans ce garde-fou, le même
-    // clic déclenche aussi le gestionnaire du fond et ouvre deux fiches.
-    if (map.queryRenderedFeatures(e.point, { layers: ['aircraft-symbol'] }).length) return;
-    const p = e.features[0].properties;
-    new maplibregl.Popup({ closeButton: true })
-      .setLngLat(e.lngLat)
-      .setHTML(`<b>${p.COMMUNE || '?'}</b><br>${(+p.AREA_HA).toLocaleString('fr-FR')} ha`
-             + `<br>départ ${String(p.FIREDATE).slice(0, 10)}`
-             + `<br><span style="opacity:.6">publié ${String(p.LASTUPDATE).slice(0, 16)}</span>`)
-      .addTo(map);
-  };
-  for (const id of ['recent-fill', 'burnt-fill']) {
-    map.on('click', id, popup);
-    map.on('mouseenter', id, () => map.getCanvas().style.cursor = 'pointer');
-    map.on('mouseleave', id, () => map.getCanvas().style.cursor = '');
-  }
+  // Un seul aiguillage pour tous les clics : voir la section « FICHES AU CLIC ».
+  // Le fond de carte est cliquable lui aussi, il répond par la météo du point.
+  map.on('click', mapClick);
+  for (const id of ['recent-fill', 'burnt-fill', 'nrt-fill', 'hotspots',
+                    'hotspots-overview']) hoverCursor(id);
 
   // le conteneur peut avoir été mesuré à zéro avant la mise en page
   map.resize();
