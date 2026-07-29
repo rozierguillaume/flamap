@@ -463,7 +463,7 @@ def wind_request(points, model, temperature=False):
     lon = ",".join(str(point[1]) for point in points)
     variables = "wind_speed_10m,wind_direction_10m,wind_gusts_10m"
     if temperature:
-        variables += ",temperature_2m"
+        variables += ",temperature_2m,precipitation"
     url = (
         f"{OPEN_METEO}?latitude={lat}&longitude={lon}"
         f"&hourly={variables}"
@@ -535,9 +535,17 @@ def fetch_wind(box, spacing_km, label, temperature=False):
     v = [[0.0] * len(points) for _ in timestamps]
     gust = [[0] * len(points) for _ in timestamps]
     temp = [[None] * len(points) for _ in timestamps] if temperature else None
+    precipitation = [[None] * len(points) for _ in timestamps] if temperature else None
     for column, location in enumerate(series):
         hourly = location["hourly"]
         for row, index in enumerate(keep):
+            if temperature:
+                value = hourly["temperature_2m"][index]
+                temp[row][column] = round(value, 1) if value is not None else None
+                value = hourly["precipitation"][index]
+                precipitation[row][column] = (
+                    round(value, 2) if value is not None else None
+                )
             speed = hourly["wind_speed_10m"][index]
             direction = hourly["wind_direction_10m"][index]
             if speed is None or direction is None:
@@ -547,9 +555,6 @@ def fetch_wind(box, spacing_km, label, temperature=False):
             v[row][column] = round(-speed * math.cos(angle), 1)
             value = hourly["wind_gusts_10m"][index]
             gust[row][column] = round(value * 3.6) if value is not None else 0
-            if temperature:
-                value = hourly["temperature_2m"][index]
-                temp[row][column] = round(value, 1) if value is not None else None
 
     print(f"  {len(timestamps)} heures, modele {model}")
     result = {
@@ -565,6 +570,7 @@ def fetch_wind(box, spacing_km, label, temperature=False):
     }
     if temperature:
         result["temperature"] = temp
+        result["precipitation"] = precipitation
     return result
 
 
@@ -627,6 +633,7 @@ def weather_forecast(wind, now, hours=12):
         "v": [wind["v"][row] for row in rows],
         "gust": [wind["gust"][row] for row in rows],
         "temperature": [wind["temperature"][row] for row in rows],
+        "precipitation": [wind["precipitation"][row] for row in rows],
     }
 
 

@@ -148,7 +148,8 @@ jobs:
           weather_rows = weather.get('nt', 0)
           if (weather_rows < 2
               or any(len(weather.get(name, [])) != weather_rows
-                     for name in ('u', 'v', 'gust', 'temperature'))):
+                     for name in ('u', 'v', 'gust', 'temperature',
+                                  'precipitation'))):
               sys.exit('export météo absent ou incomplet')
           fine = set(manifest['fine_wind_zones'])
           for path in zone_paths:

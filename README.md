@@ -114,15 +114,16 @@ l'écran alors qu'on n'en sait rien. Désactivé pour l'instant : la constante
 `FORECAST_H` d'`index.html` vaut 0, la remonter à 24 rouvre ces crans.
 
 Le bouton discret **Météo** ouvre un graphique pour le centre courant de la
-carte : température, vent moyen, direction et rafales sur les 12 dernières et
-les 12 prochaines heures. Deux traits situent l'heure actuelle et l'extraction
-des données affichées sur la carte. Ces séries sont isolées dans
-`data/weather_forecast.json` et ne sont téléchargées qu'à la première ouverture
-du volet. Un déplacement de la carte ouverte réinterpole ensuite la même grille,
-sans requête réseau supplémentaire. Le survol donne, heure par heure, la
-température, le vent moyen, sa direction et les rafales. La légende principale
-affiche aussi la température actuelle grâce à un seul instantané de 225 valeurs
-inclus dans `data/wind_coarse.json`, sans charger toute la série météo.
+carte : température, vent moyen, direction, rafales et précipitations horaires
+sur les 12 dernières et les 12 prochaines heures. Deux traits situent l'heure
+actuelle et l'extraction des données affichées sur la carte. Ces séries sont
+isolées dans `data/weather_forecast.json` et ne sont téléchargées qu'à la
+première ouverture du volet. Un déplacement de la carte ouverte réinterpole
+ensuite la même grille, sans requête réseau supplémentaire. Le survol donne,
+heure par heure, la température, le vent moyen, sa direction, les rafales et le
+cumul de précipitations en millimètres. La légende principale affiche aussi la
+température actuelle grâce à un seul instantané de 225 valeurs inclus dans
+`data/wind_coarse.json`, sans charger toute la série météo.
 
 ## Chargement progressif
 

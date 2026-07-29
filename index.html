@@ -87,7 +87,7 @@
   .maplibregl-ctrl-attrib { display: none; }   /* credits en clair dans #credits */
 
   .glass {
-    background: rgba(13,15,18,.9); backdrop-filter: blur(14px);
+    background: rgba(13,15,18,.84); backdrop-filter: blur(14px);
     -webkit-backdrop-filter: blur(14px);
     border: 1px solid rgba(255,255,255,.10); border-radius: 12px;
   }
@@ -95,10 +95,14 @@
   /* ---- logo ---- */
   #head { position: absolute; z-index: 500; top: 14px; left: 14px;
           padding: 11px 18px 12px; }
-  #head .brand { display: flex; align-items: center; gap: 10px; }
+  #head .brand { display: flex; align-items: center; gap: 10px; pointer-events: none; }
   #head .mark { display: block; width: 42px; height: auto; flex: none; }
   #head h1 { margin: 0; font-size: 21px; font-weight: 700; letter-spacing: .4px; }
   #head h1 .brand-hot { color: var(--hot); }
+  #home-btn { position: absolute; z-index: 1; inset: 0; width: 100%; height: 100%;
+              border: 0; border-radius: inherit; background: transparent;
+              cursor: pointer; }
+  #home-btn:focus-visible { outline: 2px solid var(--front); outline-offset: 2px; }
   #incidents {
     position: absolute; z-index: 500; top: 76px; left: 14px;
     display: flex; flex-wrap: wrap; gap: 6px;
@@ -107,13 +111,13 @@
   #incidents[hidden] { display: none; }
   #incidents button {
     min-width: 0; padding: 7px 10px; border: 1px solid rgba(255,255,255,.12);
-    border-radius: 8px; background: rgba(13,15,18,.91); color: #d8d5d1;
+    border-radius: 8px; background: rgba(13,15,18,.85); color: #d8d5d1;
     backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
     font: inherit; font-size: 11.5px; line-height: 1.2; cursor: pointer;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   #incidents button:hover, #incidents button:focus-visible {
-    background: rgba(25,28,33,.96); border-color: rgba(255,255,255,.25);
+    background: rgba(25,28,33,.92); border-color: rgba(255,255,255,.25);
     color: var(--ink);
   }
 
@@ -268,7 +272,7 @@
     font: inherit; font-size: 11px; cursor: pointer;
   }
   #weather-btn:hover, #weather-btn[aria-expanded="true"] { color: var(--ink); }
-  #weather-btn .weather-icon { margin-right: 5px; color: var(--wind); vertical-align: -3px; }
+  #weather-btn .weather-icon { margin-right: 5px; color: #fff; vertical-align: -3px; }
   #weather-panel { display: none; }
   #weather-panel.open { display: block; }
   #weather-panel header { display: flex; align-items: center; justify-content: space-between;
@@ -286,6 +290,10 @@
                    cursor: crosshair; }
   #weather-chart text { font: 11px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
   #weather-chart .axis { fill: #9da3aa; }
+  #weather-chart .weather-band { stroke: rgba(255,255,255,.10); stroke-width: .8; }
+  #weather-chart .temp-band { fill: rgba(255,107,26,.070); }
+  #weather-chart .wind-band { fill: rgba(191,227,255,.065); }
+  #weather-chart .precip-band { fill: rgba(109,199,238,.075); }
   #weather-chart .grid { stroke: rgba(255,255,255,.13); stroke-width: 1; }
   #weather-chart .temp-area { fill: url("#temp-fill"); }
   #weather-chart .temp-line { fill: none; stroke: var(--hot); stroke-width: 3.5;
@@ -297,6 +305,9 @@
   #weather-chart .gust-line { fill: none; stroke: #dceeff; stroke-width: 1.6;
                               stroke-dasharray: 4 4; opacity: .65; }
   #weather-chart .wind-arrow { fill: var(--wind); }
+  #weather-chart .precip-bar { fill: #6dc7ee; opacity: .72; }
+  #weather-chart .precip-bar.zero { opacity: .24; }
+  #weather-chart .precip-zero { fill: #9db2bd; font-weight: 600; }
   #weather-chart .now-line { stroke: var(--front); stroke-width: 1.5; }
   #weather-chart .update-line { stroke: #d3d7dc; stroke-width: 1.2;
                                 stroke-dasharray: 3 4; opacity: .8; }
@@ -342,7 +353,7 @@
   #cr-btn::after { content: " ›"; }
   #cr-btn[aria-expanded="true"]::after { content: " ⌄"; }
 
-  .maplibregl-ctrl-group { background: rgba(13,15,18,.9) !important;
+  .maplibregl-ctrl-group { background: rgba(13,15,18,.84) !important;
     border: 1px solid rgba(255,255,255,.10) !important; border-radius: 12px !important;
     box-shadow: none !important; }
   .maplibregl-ctrl-group button + button { border-top-color: rgba(255,255,255,.10) !important; }
@@ -554,6 +565,8 @@
     </svg>
     <h1>Fla<span class="brand-hot">map</span><span class="sr-only"> — carte des incendies en France en quasi temps réel</span></h1>
   </div>
+  <button id="home-btn" type="button" aria-label="Recentrer la carte sur la France"
+          title="Recentrer sur la France"></button>
   <section class="sr-only" aria-label="Présentation de Flamap">
     <h2>Suivre les incendies et feux de forêt en cours en France</h2>
     <p>Flamap est une carte des incendies en France mise à jour toutes les deux
@@ -639,8 +652,8 @@
   </header>
   <p id="weather-place">—</p>
   <div id="weather-chart-wrap">
-    <svg id="weather-chart" viewBox="0 0 430 270" role="img"
-         aria-label="Évolution de la température et du vent"></svg>
+    <svg id="weather-chart" viewBox="0 0 430 424" role="img"
+         aria-label="Évolution de la température, du vent et des précipitations"></svg>
     <div id="weather-tip" role="tooltip"></div>
   </div>
   <p id="weather-status" aria-live="polite"></p>
@@ -848,6 +861,7 @@ drawAgeKey();
  */
 const ZOOM_SCALE = MOBILE ? [[5, .28], [8, .50], [11, .85], [14, 1.35]]
                           : [[5, .34], [8, .60], [11, .95], [14, 1.40]];
+const FRANCE_BBOX = [-5.5, 41.0, 10.0, 51.5];
 
 // MapLibre lit et maintient automatiquement #map=zoom/latitude/longitude.
 // Le test sert plus bas à ne pas recadrer sur la France par-dessus un lien
@@ -1120,8 +1134,9 @@ function weatherValue(data, row, lon, lat) {
   };
   const u = bil(data.u[row]), v = bil(data.v[row]);
   const gust = bil(data.gust[row]), temperature = bil(data.temperature[row]);
-  if (![u, v, gust, temperature].every(Number.isFinite)) return null;
-  return { u, v, gust, temperature, speed: Math.hypot(u, v) * 3.6 };
+  const precipitation = bil(data.precipitation[row]);
+  if (![u, v, gust, temperature, precipitation].every(Number.isFinite)) return null;
+  return { u, v, gust, temperature, precipitation, speed: Math.hypot(u, v) * 3.6 };
 }
 
 const svgText = (x, y, text, cls = 'axis', anchor = 'middle') =>
@@ -1145,16 +1160,20 @@ function drawWeather() {
     return;
   }
 
-  const left = 40, right = 416, tempTop = 28, tempBottom = 105;
-  const windTop = 160, windBottom = 232;
+  const left = 40, right = 416, tempTop = 40, tempBottom = 107;
+  const windTop = 185, windBottom = 241, precipTop = 315, precipBottom = 368;
   const x = index => left + index * (right - left) / (rows.length - 1);
   const temperatures = rows.map(row => row.temperature);
   let tempMin = Math.floor(Math.min(...temperatures) - 1);
   let tempMax = Math.ceil(Math.max(...temperatures) + 1);
   if (tempMax - tempMin < 4) { tempMin -= 1; tempMax += 1; }
   const windMax = Math.max(10, Math.ceil(Math.max(...rows.map(row => row.gust)) / 10) * 10);
+  const precipitationPeak = Math.max(...rows.map(row => row.precipitation));
+  const precipitationMax = Math.max(1, Math.ceil(precipitationPeak * 2) / 2);
   const tempY = value => tempBottom - (value - tempMin) / (tempMax - tempMin) * (tempBottom - tempTop);
   const windY = value => windBottom - value / windMax * (windBottom - windTop);
+  const precipitationY = value =>
+    precipBottom - value / precipitationMax * (precipBottom - precipTop);
   const path = (values, y) => values.map((value, index) =>
     `${index ? 'L' : 'M'}${x(index).toFixed(1)},${y(value).toFixed(1)}`).join(' ');
   const smoothPath = (values, y) => {
@@ -1173,7 +1192,13 @@ function drawWeather() {
   let svg = '<defs><linearGradient id="temp-fill" x1="0" y1="0" x2="0" y2="1">'
           + '<stop offset="0" stop-color="#ff6b1a" stop-opacity=".27"/>'
           + '<stop offset="1" stop-color="#ff6b1a" stop-opacity="0"/></linearGradient></defs>';
-  for (const y of [tempTop, tempBottom, windTop, windBottom])
+  svg += `<rect x="32" y="4" width="392" height="116" rx="8"`
+       + ` class="weather-band temp-band"/>`;
+  svg += `<rect x="32" y="140" width="392" height="116" rx="8"`
+       + ` class="weather-band wind-band"/>`;
+  svg += `<rect x="32" y="276" width="392" height="108" rx="8"`
+       + ` class="weather-band precip-band"/>`;
+  for (const y of [tempTop, tempBottom, windTop, windBottom, precipTop, precipBottom])
     svg += `<line x1="${left}" y1="${y}" x2="${right}" y2="${y}" class="grid"/>`;
   const now = Date.now() / 1000;
   const updated = Z.manifest && Z.manifest.generated_at
@@ -1185,18 +1210,18 @@ function drawWeather() {
     const anchor = markerX < (left + right) / 2 ? 'start' : 'end';
     const offset = anchor === 'start' ? 5 : -5;
     svg += `<line x1="${markerX.toFixed(1)}" y1="${tempTop}" x2="${markerX.toFixed(1)}"`
-         + ` y2="${windBottom}" class="update-line"/>`;
-    svg += svgText((markerX + offset).toFixed(1), 126, `carte ${hour}`, 'update-label', anchor);
+         + ` y2="${precipBottom}" class="update-line"/>`;
+    svg += svgText((markerX + offset).toFixed(1), 134, `carte ${hour}`, 'update-label', anchor);
   }
   if (now >= rows[0].ts && now <= rows[rows.length - 1].ts) {
     const markerX = timeX(now);
     const anchor = markerX < (left + right) / 2 ? 'start' : 'end';
     const offset = anchor === 'start' ? 5 : -5;
     svg += `<line x1="${markerX.toFixed(1)}" y1="${tempTop}" x2="${markerX.toFixed(1)}"`
-         + ` y2="${windBottom}" class="now-line"/>`;
-    svg += svgText((markerX + offset).toFixed(1), 16, 'maintenant', 'now-label', anchor);
+         + ` y2="${precipBottom}" class="now-line"/>`;
+    svg += svgText((markerX + offset).toFixed(1), 25, 'maintenant', 'now-label', anchor);
   }
-  svg += svgText(left, 16, 'Température', 'axis', 'start');
+  svg += svgText(left, 25, 'Température', 'axis', 'start');
   svg += svgText(4, tempTop + 4, `${tempMax}°`, 'axis', 'start');
   svg += svgText(4, tempBottom + 4, `${tempMin}°`, 'axis', 'start');
   const temperaturePath = smoothPath(temperatures, tempY);
@@ -1208,7 +1233,7 @@ function drawWeather() {
        + ` r="4.5" class="temp-dot"/>`;
   svg += svgText(x(peak).toFixed(1), Math.max(12, tempY(temperatures[peak]) - 10).toFixed(1),
     `${Math.round(temperatures[peak])}°`, 'temp-value');
-  svg += svgText(left, 144, 'Vent moyen · rafales', 'axis', 'start');
+  svg += svgText(left, 161, 'Vent moyen · rafales', 'axis', 'start');
   svg += svgText(4, windTop + 4, `${windMax}`, 'axis', 'start');
   svg += svgText(4, windBottom + 4, '0', 'axis', 'start');
   svg += `<path d="${path(rows.map(row => row.gust), windY)}" class="gust-line"/>`;
@@ -1218,22 +1243,41 @@ function drawWeather() {
     const to = (Math.atan2(row.u, row.v) * 180 / Math.PI + 360) % 360;
     if (index % arrowEvery === 0 || index === rows.length - 1)
       svg += `<path d="M0,-8 L4.5,3 L0,1 L-4.5,3 Z" class="wind-arrow"`
-           + ` transform="translate(${x(index).toFixed(1)} 151) rotate(${to.toFixed(0)})"/>`;
+           + ` transform="translate(${x(index).toFixed(1)} 176) rotate(${to.toFixed(0)})"/>`;
+  });
+  svg += svgText(left, 297, 'Précipitations horaires', 'axis', 'start');
+  svg += svgText(4, precipTop + 4,
+    precipitationMax.toLocaleString('fr-FR', { maximumFractionDigits: 1 }), 'axis', 'start');
+  svg += svgText(4, precipBottom + 4, '0', 'axis', 'start');
+  const barWidth = Math.max(2, (right - left) / (rows.length - 1) - 2);
+  rows.forEach((row, index) => {
+    const y = precipitationY(row.precipitation);
+    const empty = row.precipitation <= 0;
+    const barY = empty ? precipBottom - 2 : y;
+    const barHeight = empty ? 2 : precipBottom - y;
+    svg += `<rect x="${(x(index) - barWidth / 2).toFixed(1)}" y="${barY.toFixed(1)}"`
+         + ` width="${barWidth.toFixed(1)}" height="${barHeight.toFixed(1)}"`
+         + ` rx="1" class="precip-bar${empty ? ' zero' : ''}"/>`;
     if (index % tickEvery === 0 || index === rows.length - 1) {
       const hour = new Date(row.ts * 1000).toLocaleTimeString('fr-FR',
         { hour: '2-digit', timeZone: 'Europe/Paris' }).replace(' h', 'h');
-      svg += svgText(x(index).toFixed(1), 255, hour);
+      svg += svgText(x(index).toFixed(1), 405, hour);
     }
   });
-  svg += svgText(right, 269, 'km/h', 'axis', 'end');
-  svg += '<line class="hover-line" x1="0" y1="28" x2="0" y2="232" visibility="hidden"/>';
+  if (precipitationPeak === 0)
+    svg += svgText(right - 6, precipBottom - 10, '0 mm', 'precip-zero', 'end');
+  svg += svgText(right, 251, 'km/h', 'axis', 'end');
+  svg += svgText(right, 421, 'mm', 'axis', 'end');
+  svg += '<line class="hover-line" x1="0" y1="40" x2="0" y2="368" visibility="hidden"/>';
   weatherChart.innerHTML = svg;
   const first = rows[0], last = rows[rows.length - 1];
   weatherChart.setAttribute('aria-label',
     `Historique et prévisions météo sur 24 heures. Température de `
     + `${first.temperature.toFixed(1)} à ${last.temperature.toFixed(1)} degrés. `
     + `Vent initial ${Math.round(first.speed)} kilomètres heure, `
-    + `rafales ${Math.round(first.gust)} kilomètres heure.`);
+    + `rafales ${Math.round(first.gust)} kilomètres heure. `
+    + `Précipitations horaires maximales `
+    + `${Math.max(...rows.map(row => row.precipitation)).toFixed(2)} millimètres.`);
   weatherStatus.textContent = '';
   weatherStatus.className = '';
 }
@@ -1261,7 +1305,9 @@ function showWeatherTip(event) {
     + `<span class="temperature">${row.temperature.toLocaleString('fr-FR',
       { minimumFractionDigits: 1, maximumFractionDigits: 1 })} °C</span>`
     + `<span>Vent de ${from} · ${Math.round(row.speed)} km/h</span>`
-    + `<span>Rafales · ${Math.round(row.gust)} km/h</span>`;
+    + `<span>Rafales · ${Math.round(row.gust)} km/h</span>`
+    + `<span>Précipitations · ${row.precipitation.toLocaleString('fr-FR',
+      { minimumFractionDigits: 1, maximumFractionDigits: 2 })} mm</span>`;
   weatherTip.style.left = `${x / 430 * rect.width}px`;
   weatherTip.style.top = (event.clientY - rect.top) < rect.height / 2
     ? `${rect.height * .44}px` : '28px';
@@ -2437,7 +2483,7 @@ const json = async url => {
  */
 const MAJOR_WINDOW = 24 * H, MAJOR_KM = 30, MAJOR_MIN = 25;
 const MAJOR_BURNT_HA = 200, MAJOR_SUPPORT = 5;
-const MAJOR = { overview: [], places: [], bucket: null };
+const MAJOR = { overview: [], places: [], features: [], bucket: null };
 const incidentsEl = document.getElementById('incidents');
 
 function distanceKm(a, b) {
@@ -2493,8 +2539,7 @@ function renderIncidentButtons(features) {
     button.setAttribute('aria-label', `Zoomer sur ${name || 'un incendie important'}, ${metric}`);
     button.addEventListener('click', () => {
       trackUsage('incident-shortcut', { place: name || 'unknown', rank: index + 1 });
-      stopPlay();
-      map.easeTo({ center, zoom: Math.max(map.getZoom(), 8.5), duration: 850 });
+      focusIncident(feature);
     });
     incidentsEl.appendChild(button);
   }
@@ -2572,6 +2617,7 @@ function updateMajorFires(now) {
   }).filter(feature => feature.properties.major)
     .sort((a, b) => b.properties.score - a.properties.score);
 
+  MAJOR.features = features;
   map.getSource('major-hs').setData({ type: 'FeatureCollection', features });
   renderIncidentButtons(features);
 }
@@ -2582,6 +2628,36 @@ const Z = {
   manifest: null, available: new Set(), cache: new Map(), visible: new Set(),
   hotspots: [], token: 0, disabled: false,
 };
+
+function focusIncident(feature, duration = 850) {
+  stopPlay();
+  map.easeTo({
+    center: feature.properties.center,
+    zoom: Math.max(map.getZoom(), 8.5),
+    duration,
+  });
+}
+
+function fitFrance(duration = 850) {
+  const bounds = new maplibregl.LngLatBounds(
+    [FRANCE_BBOX[0], FRANCE_BBOX[1]], [FRANCE_BBOX[2], FRANCE_BBOX[3]]);
+  const dockH = document.getElementById('dock').offsetHeight;
+  map.fitBounds(bounds, {
+    padding: {
+      top: document.getElementById('head').offsetHeight + (MOBILE ? 22 : 28),
+      bottom: (MOBILE ? dockH : 0) + 28,
+      left: MOBILE ? 14 : 28, right: MOBILE ? 14 : 28,
+    },
+    duration,
+  });
+}
+
+document.getElementById('home-btn').addEventListener('click', () => {
+  trackUsage('home-france');
+  stopPlay();
+  fitFrance();
+});
+
 const signed = value => `${value >= 0 ? '+' : '-'}${String(Math.abs(value)).padStart(2, '0')}`;
 const zoneId = (x, y) => `x${signed(x)}_y${signed(y)}`;
 
@@ -2898,17 +2974,8 @@ async function init() {
   }
 
   if (!HAS_MAP_HASH) {
-    const b = new maplibregl.LngLatBounds(
-      [manifest.bbox[0], manifest.bbox[1]], [manifest.bbox[2], manifest.bbox[3]]);
-    const dockH = document.getElementById('dock').offsetHeight;
-    map.fitBounds(b, {
-      padding: {
-        top: document.getElementById('head').offsetHeight + (MOBILE ? 22 : 28),
-        bottom: (MOBILE ? dockH : 0) + 28,
-        left: MOBILE ? 14 : 28, right: MOBILE ? 14 : 28,
-      },
-      duration: 0,
-    });
+    if (MAJOR.features.length) focusIncident(MAJOR.features[0]);
+    else fitFrance(0);
   }
 
   // détail d'un polygone au clic, aussi bien dans l'aperçu que dans une cellule
