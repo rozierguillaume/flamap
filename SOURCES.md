@@ -215,12 +215,11 @@ L'endpoint ne livre que l'état courant. Le navigateur conserve donc les points
 reçus après activation pendant 15 minutes et dessine les 10 dernières minutes,
 même si le calque est brièvement décoché. Un silence de plus de 90 secondes
 coupe la trace pour ne pas fabriquer une longue ligne droite au retour d'un
-appareil ou d'un onglet suspendu. Pendant la première minute, une requête
-toutes les 4 secondes constitue rapidement un tampon ; le différé croît alors
-progressivement de 2 à 30 secondes. Ensuite, une requête part toutes les
-28 secondes, soit deux secondes avant l'épuisement théorique du tampon. Les
-symboles avancent continûment sur une courbe passant par les positions reçues,
-sans extrapolation après le dernier point connu.
+appareil ou d'un onglet suspendu. Une requête part toutes les 4 secondes,
+mesurées entre deux départs. Le symbole est affiché avec 6 secondes de différé,
+ce qui laisse 2 secondes de marge au cycle suivant si sa réponse tarde. Il
+avance continûment sur une courbe passant par les positions reçues, sans
+extrapolation après le dernier point connu.
 
 Le champ `category` (`A7`) constitue le signal le plus fiable pour reconnaître
 un hélicoptère. Une liste de types ICAO et quelques termes non ambigus de la

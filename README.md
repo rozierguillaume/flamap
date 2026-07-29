@@ -30,20 +30,19 @@ La fumée peut elle aussi être masquée dans **Calques**. Elle est indicative :
 ce n'est ni une observation satellite de fumée ni une mesure de qualité de
 l'air.
 Le calque **Moyens aériens** est désactivé par défaut. Son activation interroge
-directement Airplanes.live depuis le navigateur, toutes les 28 secondes en
-régime établi et uniquement lorsque l'onglet est visible. Pendant la première
-minute, des relevés rapprochés amorcent l'animation sans attendre un cycle
-complet. Une liste de 112 adresses ICAO24
+directement Airplanes.live depuis le navigateur, toutes les 4 secondes et
+uniquement lorsque l'onglet est visible. Une liste de 112 adresses ICAO24
 connues limite la requête aux appareils susceptibles de participer aux
 opérations ; leur proximité avec un incendie récent est signalée, mais ne
 constitue pas une confirmation de mission. Le calque disparaît lorsque la
 frise montre le passé, puisque ces positions ne décrivent que l'instant présent.
 Le trajet des 10 dernières minutes se construit et reste en mémoire dans le
 navigateur, y compris si le calque est brièvement masqué ; aucune trace
-antérieure n'est demandée au service. Le différé augmente progressivement
-jusqu'à 30 secondes pendant l'amorçage, puis les appareils avancent
-continûment entre deux positions réellement reçues, sans extrapoler au-delà du
-dernier point connu. Avions et hélicoptères utilisent des symboles distincts.
+antérieure n'est demandée au service. Les appareils sont affichés avec
+6 secondes de différé — un cycle de collecte plus 2 secondes de marge — puis
+avancent continûment entre deux positions réellement reçues, sans extrapoler
+au-delà du dernier point connu. Avions et hélicoptères utilisent des symboles
+distincts.
 Le bouton `i` à droite de la frise ouvre le journal des 40 dernières mises à
 jour : heure, source et volume de données reçu.
 
