@@ -149,7 +149,7 @@ bord : grille 16 × 16 = 256 points au pas de 15 km, 206 heures, **1,7 Mo en
 0,4 s**, aucune valeur manquante — y compris au large, AROME couvre les abords
 maritimes.
 
-`past_days` va jusqu'à 92, donc les 7 jours de la fenêtre FIRMS passent large.
+`past_days` va jusqu'à 92, donc les 10 jours de foyers conservés passent large.
 Au-delà, il faut basculer sur l'API archive (`archive-api.open-meteo.com`,
 réanalyse ERA5, 25 km, latence 5 jours).
 
@@ -320,12 +320,14 @@ ce qui existe :
 
 | Couche | Construction |
 |---|---|
-| **Foyers** | hotspots FIRMS des 5 derniers jours, couleur continue selon l'âge |
+| **Foyers** | hotspots FIRMS des 10 derniers jours, couleur continue selon l'âge |
 | **Terre brûlée** | polygone EFFIS, moins la zone couverte par la précédente |
 
 C'est ce que fait `index.html`, où l'âge d'un foyer pilote une échelle continue du
 jaune clair au brun sombre. Attention à ne pas confondre les deux dégradés : celui
 de la carte représente l'**ancienneté** de la détection, pas la sévérité du feu.
+Les flux publics ne remontant qu'à sept jours, les trois jours supplémentaires
+sont conservés depuis le déploiement précédent.
 Version plus ambitieuse pour cette dernière : un dNBR Sentinel-2 sur la surface
 brûlée, qui donne la sévérité réelle plutôt que la seule date de passage.
 

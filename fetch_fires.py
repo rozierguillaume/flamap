@@ -11,6 +11,10 @@ Le navigateur ne charge d'abord qu'un apercu national leger :
 Les detections detaillees, la saison EFFIS, le NRT et le vent fin sont repartis
 dans des cellules de 1 degre chargees seulement lorsque la carte zoome.
 
+Les flux FIRMS publics ne couvrent que sept jours. Le collecteur reprend donc
+les detections encore valides du deploiement precedent pour porter la fenetre
+d'affichage a dix jours, sans cle d'API.
+
 Usage :
     python3 fetch_fires.py
     python3 fetch_fires.py west south east north
@@ -44,6 +48,7 @@ OVERVIEW_H = 1
 # jour recemment. C'est cette date, et non le debut du feu, qui determine sa
 # presence dans l'apercu national et l'eligibilite d'un incident important.
 RECENT_DAYS = 7
+HOTSPOT_DAYS = 10
 
 FIRMS_BASE = "https://firms.modaps.eosdis.nasa.gov/data/active_fire"
 FIRMS_FEEDS = [
@@ -57,7 +62,7 @@ EFFIS_WFS = "https://maps.effis.emergency.copernicus.eu/effis"
 
 OPEN_METEO = "https://api.open-meteo.com/v1/forecast"
 WIND_MODEL = "meteofrance_arome_france_hd"
-WIND_PAST_DAYS = 7
+WIND_PAST_DAYS = 10
 WIND_SPACING_KM = 20
 WIND_BATCH = 250
 WIND_MARGIN_KM = 60
@@ -167,6 +172,58 @@ def fetch_hotspots(bbox):
 
     features.sort(key=lambda feature: feature["properties"]["ts"])
     return fc(features)
+
+
+def extend_hotspot_history(hotspots, bbox):
+    """Complete les 7 jours FIRMS avec l'historique du deploiement precedent."""
+    if not os.path.isdir(ZONES_OUT) or not hotspots["features"]:
+        return hotspots
+
+    west, south, east, north = bbox
+    latest = hotspots["features"][-1]["properties"]["ts"]
+    cutoff = latest - HOTSPOT_DAYS * 86400
+    keys = {
+        (
+            feature["properties"]["source"],
+            feature["properties"]["ts"],
+            *feature["geometry"]["coordinates"],
+        )
+        for feature in hotspots["features"]
+    }
+    kept = 0
+    for name in os.listdir(ZONES_OUT):
+        if not name.endswith(".json"):
+            continue
+        try:
+            with open(os.path.join(ZONES_OUT, name), encoding="utf-8") as source:
+                previous = json.load(source)
+        except (OSError, ValueError):
+            continue
+        for feature in previous.get("hotspots", {}).get("features", []):
+            prop = feature.get("properties", {})
+            coordinates = feature.get("geometry", {}).get("coordinates", [])
+            if len(coordinates) < 2:
+                continue
+            lon, lat = coordinates[:2]
+            ts = prop.get("ts", 0)
+            key = (prop.get("source"), ts, lon, lat)
+            if (
+                cutoff <= ts <= latest
+                and west <= lon <= east
+                and south <= lat <= north
+                and key not in keys
+            ):
+                hotspots["features"].append(feature)
+                keys.add(key)
+                kept += 1
+
+    hotspots["features"].sort(key=lambda feature: feature["properties"]["ts"])
+    if kept:
+        print(
+            f"  historique conserve : {kept} detections "
+            f"(fenetre de {HOTSPOT_DAYS} jours)"
+        )
+    return hotspots
 
 
 def aggregate_hotspots(hotspots):
@@ -682,7 +739,10 @@ def main():
     hotspots = fetch_hotspots(bbox)
     if not hotspots["features"]:
         raise SystemExit("aucun foyer FIRMS : export annule")
+    # `latest` vient du flux frais : l'historique repris ne doit jamais reculer
+    # l'instant de reference si un ancien paquet est incomplet ou corrompu.
     latest = hotspots["features"][-1]["properties"]["ts"]
+    hotspots = extend_hotspot_history(hotspots, bbox)
 
     print("\nCopernicus EFFIS - surfaces brulees")
     burnt = fetch_burnt(bbox)

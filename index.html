@@ -688,9 +688,9 @@
     <span class="burnt-key"><i class="poly" style="background:var(--burnt);border:1px solid var(--burnt-edge)"></i>terre brûlée</span>
     <!-- l'échelle d'ancienneté : le dégradé et la position des repères sont
          posés par le script, à partir de la rampe qui peint la carte -->
-    <span id="agekey" title="Couleur d'un foyer selon son ancienneté, de cinq jours à l'instant de la détection">
+    <span id="agekey" title="Couleur d'un foyer selon son ancienneté, de dix jours à l'instant de la détection">
       <span id="ageramp">
-        <b data-age="432000">5 j</b><b data-age="86400">24 h</b><b data-age="0">à l'instant</b>
+        <b data-age="864000">10 j</b><b data-age="86400">24 h</b><b data-age="0">à l'instant</b>
       </span>
     </span>
     <span id="tempkey" hidden>
@@ -783,7 +783,7 @@ function trackUsage(eventName, data) {
   }
 }
 
-const MAX_AGE = 5 * DAY;   // au-dela, c'est le polygone qui parle
+const MAX_AGE = 10 * DAY;
 
 /*
  * Anciennete d'un foyer : une echelle continue, du jaune clair de la detection
@@ -797,7 +797,7 @@ const MAX_AGE = 5 * DAY;   // au-dela, c'est le polygone qui parle
  * Les crans ne sont volontairement pas regulierement espaces : tout se joue
  * dans les premieres heures, ou le feu court, et les trois derniers jours ne
  * sont qu'une longue extinction. On tient donc quatre crans dans les six
- * premieres heures et un seul sur les deux derniers jours.
+ * premieres heures, puis la rampe s'assombrit lentement jusqu'au dixieme jour.
  */
 const AGE_COLOR = [
   [      0, '#fff3b8'],   // detection de l'instant, presque blanche
@@ -808,7 +808,9 @@ const AGE_COLOR = [
   [ 24 * H, V('--recent')],
   [ 48 * H, '#8f3623'],
   [ 72 * H, V('--old')],
-  [MAX_AGE, '#4f2a1f'],   // brun sombre, la limite du visible
+  [  5 * DAY, '#4f2a1f'],
+  [  7 * DAY, '#352019'],
+  [MAX_AGE, '#211714'],   // brun presque noir pour les traces les plus anciennes
 ];
 
 // rayon de reference a z12, et opacite : memes bornes, moins de crans — l'oeil
@@ -816,7 +818,7 @@ const AGE_COLOR = [
 const AGE_SIZE = [
   [0, MOBILE ? 4.0 : 4.4], [6 * H, MOBILE ? 3.5 : 3.9],
   [24 * H, MOBILE ? 3.0 : 3.3], [72 * H, MOBILE ? 2.5 : 2.7],
-  [MAX_AGE, MOBILE ? 2.1 : 2.2],
+  [5 * DAY, MOBILE ? 2.1 : 2.2], [MAX_AGE, MOBILE ? 1.6 : 1.7],
 ];
 // La FRP ne remplace pas l'ancienneté : elle module seulement le rayon. La
 // médiane observée tourne autour de 7 MW ; même les 1 % de pixels les plus
@@ -834,7 +836,8 @@ const FRP_OVERVIEW_SIZE = ['case', ['has', 'frp'],
   1];
 const AGE_OPACITY = [
   [0, 1], [6 * H, .95], [24 * H, .82], [72 * H, .6],
-  [MAX_AGE - 12 * H, .45], [MAX_AGE, 0],   // le dernier cran est l'extinction
+  [5 * DAY, .45], [7 * DAY, .34], [MAX_AGE, .16],
+  [MAX_AGE + 1, 0],   // visible au dixieme jour, eteint juste au-dela
 ];
 
 // interpolation lineaire dans une table [[age, valeur], …]
@@ -2060,8 +2063,9 @@ function buildSteps(hs, dated) {
   }
 
   // Chaque publication EFFIS d'un polygone, mais seulement dans la fenêtre
-  // couverte par les foyers : les flux FIRMS ne remontent qu'à 7 jours, alors
-  // que la couche EFFIS contient toute la saison. Sans ce filtre, une
+  // couverte par les foyers : 7 jours viennent des flux FIRMS et 3 de
+  // l'historique conserve, alors que la couche EFFIS contient toute la saison.
+  // Sans ce filtre, une
   // publication de mars étirerait la frise sur cinq mois et tasserait tous les
   // passages satellite à l'extrémité droite.
   const t0 = out.length ? out[0].ts : 0;
@@ -2442,8 +2446,8 @@ function show(ts) {
         ...ZOOM_SCALE.flatMap(([z, k]) => [z,
           ['*', ['*', radiiAt(k), countScale], FRP_OVERVIEW_SIZE]])]);
   }
-  // et la mort : plutôt que de disparaître net à MAX_AGE, le point s'efface sur
-  // les dernières heures — la coupure ne tombe plus que sur du vide
+  // Les traces les plus anciennes restent encore légèrement visibles à dix
+  // jours ; la collecte ne conserve rien au-delà de cette limite.
   const opacity = ['interpolate', ['linear'], age,
     0, 0, APPEAR, rampAt(AGE_OPACITY, APPEAR),
     ...rampAfter(AGE_OPACITY, APPEAR)];
@@ -3626,11 +3630,11 @@ async function init() {
     area: +feature.properties.AREA_HA || 0,
   })).filter(place => place.center && place.name);
   addForecast(W.data);
-  // le curseur porte des secondes epoch ; un pas d'une minute suffit à un
-  // déplacement fluide à la souris et évite d'appeler `show` pour rien
+  // Le pas d'une seconde garde atteignables les publications EFFIS, dont
+  // LASTUPDATE n'est pas nécessairement aligné sur une minute.
   slider.min = steps[0].ts;
   slider.max = steps[steps.length - 1].ts;
-  slider.step = 60;
+  slider.step = 1;
   buildWarp();
   drawActivity();
   drawUpdates();

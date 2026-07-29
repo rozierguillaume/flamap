@@ -14,7 +14,7 @@ fond satellite :
 | Couche | Source | Rendu |
 |---|---|---|
 | **Terre brûlée** | polygones Copernicus EFFIS | aplat sombre |
-| **Foyers** | détections FIRMS des 5 derniers jours | échelle continue, du jaune clair au brun |
+| **Foyers** | détections FIRMS des 10 derniers jours | échelle continue, du jaune clair au brun sombre |
 | **Fumée simulée** | foyers FIRMS récents + vent AROME HD | panaches diffus qui suivent le champ de vent |
 | **Vent à 10 m** | modèle AROME HD via Open-Meteo | nappe de particules blanches |
 | **Moyens aériens** | positions ADS-B Airplanes.live | appareils suivis, cap et fiche de vol |
@@ -148,7 +148,7 @@ température actuelle grâce à un seul instantané de 225 valeurs inclus dans
 
 ## Chargement progressif
 
-À l'ouverture, la page ne télécharge qu'environ 230 ko compressés :
+À l'ouverture, la page ne télécharge que quelques centaines de ko compressés :
 
 - foyers FIRMS regroupés par cellule de 0,25°, heure et satellite, avec leur
   nombre et leur FRP totale ;
@@ -175,7 +175,8 @@ affiché : la nappe ne présente ni trou ni bord carré.
 - NASA FIRMS expose des flux CSV régionaux publics (24 h / 48 h / 7 j) qui ne
   demandent pas de clé. Le script en télécharge quatre en parallèle, avec une
   reprise courte : VIIRS NOAA-20, NOAA-21, Suomi-NPP et MODIS. Il filtre ensuite
-  sur la bbox et convertit en GeoJSON.
+  sur la bbox, reprend les détections encore valides du déploiement précédent
+  pour conserver 10 jours, puis convertit l'ensemble en GeoJSON.
 - Copernicus EFFIS expose un WFS MapServer. Le script y prend les polygones
   datés de la saison (`modis.ba.poly.season`) et le produit NRT
   (`effis.nrt.ba.poly`), et ajoute deux epochs (`ts`, `lu`) exploitables
@@ -200,7 +201,7 @@ détections des cellules visibles forment la couche `circle`. Avancer dans le
 temps ne fait que réécrire trois expressions de peinture — couleur, rayon,
 opacité, toutes fonction de l'âge : le GeoJSON n'est jamais renvoyé au moteur.
 Il n'y a délibérément **pas de filtre** dans cette boucle, ce sont les bornes de
-la rampe d'opacité qui masquent le futur et l'au-delà de 5 jours ; un `setFilter`
+la rampe d'opacité qui masquent le futur et l'au-delà de 10 jours ; un `setFilter`
 réécrit à chaque frame invalide les tuiles et repasse les foyers visibles au
 parseur, ce qui doublait le coût mesuré de la frame. Le `circle-sort-key` sur la
 date fait passer les détections récentes au-dessus des anciennes sans tri manuel.

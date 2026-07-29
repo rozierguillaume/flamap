@@ -28,10 +28,57 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      LIVE_SITE: https://flamap.fr
     outputs:
       deploy: ${{ steps.collect.outputs.deploy }}
     steps:
       - uses: actions/checkout@v5
+
+      # Les CSV publics FIRMS s'arrêtent à sept jours. Reprendre les paquets de
+      # zones actuellement publiés permet au collecteur de conserver trois
+      # jours supplémentaires, sans clé d'API. Une première publication ou une
+      # indisponibilité du site dégrade simplement la fenêtre à sept jours.
+      - name: Reprendre l'historique FIRMS publié
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import pathlib
+          import urllib.parse
+          import urllib.request
+          from concurrent.futures import ThreadPoolExecutor
+
+          base = os.environ['LIVE_SITE'].rstrip('/')
+          root = pathlib.Path('data/zones')
+
+          try:
+              with urllib.request.urlopen(f"{base}/data/manifest.json",
+                                          timeout=60) as response:
+                  manifest = json.load(response)
+          except Exception as error:
+              print(f"::warning::Historique FIRMS indisponible : {error}")
+              raise SystemExit(0)
+
+          root.mkdir(parents=True, exist_ok=True)
+
+          def download(zone_id):
+              encoded = urllib.parse.quote(str(zone_id), safe='')
+              url = f"{base}/data/zones/{encoded}.json"
+              target = root / f"{zone_id}.json"
+              try:
+                  with urllib.request.urlopen(url, timeout=60) as response:
+                      payload = response.read()
+                  if payload:
+                      target.write_bytes(payload)
+              except Exception as error:
+                  print(f"::warning::Historique {zone_id} ignoré : {error}")
+
+          with ThreadPoolExecutor(max_workers=12) as pool:
+              for _ in pool.map(download, manifest.get('zones', [])):
+                  pass
+          PY
 
       # La génération nationale prend quelques minutes : quatre flux FIRMS
       # parallèles, deux requêtes EFFIS et les grilles Open-Meteo séquentielles.
