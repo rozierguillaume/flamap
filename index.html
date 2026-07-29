@@ -127,6 +127,9 @@
   #layers:not(.open) { display: none; }
   #layers label { display: flex; align-items: center; gap: 8px; margin: 3px 0;
                   cursor: pointer; white-space: nowrap; }
+  #layers .sub-layer { margin: 5px 0 4px; padding: 2px 0 2px 10px;
+                       border-left: 1px solid #3a3f47; }
+  #layers .sub-layer label { margin: 0; font-size: 11.5px; }
   #layers label[hidden] { display: none; }   /* `display:flex` gagnerait sinon */
   /* L'input est une cible a part entière : on peut cocher sa case, pas
      seulement cliquer sur le libellé. Sa taille reste compacte mais tactile. */
@@ -159,7 +162,7 @@
   #layers-btn:hover { color: var(--ink); }
   #layers-btn svg, #weather-btn svg { width: 16px; height: 16px; flex: none;
                                      stroke-width: 1.8; }
-  #layers-btn svg { margin-right: 5px; vertical-align: -3px; }
+  #layers-btn svg { margin-right: 5px; color: #fff; vertical-align: -3px; }
   #layers-btn::after { content: " ›"; }
   #layers-btn[aria-expanded="true"]::after { content: " ⌄"; }
 
@@ -276,6 +279,8 @@
   }
   #weather-btn:hover, #weather-btn[aria-expanded="true"] { color: var(--ink); }
   #weather-btn .weather-icon { margin-right: 5px; color: #fff; vertical-align: -3px; }
+  #weather-btn::after { content: " ›"; }
+  #weather-btn[aria-expanded="true"]::after { content: " ⌄"; }
   #weather-panel { display: none; }
   #weather-panel.open { display: block; }
   #weather-panel header { display: flex; align-items: center; justify-content: space-between;
@@ -338,7 +343,7 @@
   #clock {
     position: absolute; z-index: 499; pointer-events: none;
     transform: translateX(-50%); max-width: calc(100vw - 28px);
-    color: #fff; font-size: clamp(22px, 2vw, 30px); font-weight: 700;
+    color: #fff; font-size: clamp(20px, 1.8vw, 28px); font-weight: 700;
     line-height: 1.1; letter-spacing: -.02em; white-space: nowrap;
     font-variant-numeric: tabular-nums;
     text-shadow: 0 2px 5px rgba(0,0,0,.95), 0 0 18px rgba(0,0,0,.75);
@@ -425,6 +430,7 @@
                    height: 42px; padding: 0; font-size: 17px; }
     #weather-btn .weather-label { display: none; }
     #weather-btn .weather-icon { margin: 0; }
+    #weather-btn::after { content: none; }
     #layers.open ~ #weather-btn { display: none; }
 
     /* Le bas est compose de cartes flottantes distinctes : la legende explique
@@ -453,7 +459,7 @@
     #updates-btn { width: 42px; height: 38px; font-size: 17px; } /* cible tactile */
     #slider { height: 32px; }
     #timebar { grid-area: timeline; width: 100%; padding: 9px 12px; }
-    #clock { font-size: clamp(19px, 5.5vw, 24px); }
+    #clock { font-size: clamp(18px, 5vw, 22px); }
 
     #cr-btn {
       position: fixed; z-index: 501; top: 10px; right: 60px;
@@ -641,6 +647,12 @@
     <input type="checkbox" id="ck-aircraft"
            data-analytics-layer="aircraft"> moyens aériens
   </label>
+  <div class="sub-layer">
+    <label title="Afficher le matricule ou l'indicatif ADS-B à côté de chaque appareil">
+      <input type="checkbox" id="ck-aircraft-label"
+             data-analytics-layer="aircraft-labels"> matricules des appareils
+    </label>
+  </div>
   <div id="aircraft-status" hidden aria-live="polite"></div>
   <div class="hint">Masquées : EFFIS ne publie que le contour le plus récent,
   pas son évolution. Ramenez le curseur à droite pour les revoir.</div>
@@ -2536,9 +2548,11 @@ const HELICOPTER_TYPES = new Set([
   'R22', 'R44', 'R66', 'S76', 'S92', 'SA32', 'SA34', 'SA36', 'UH1', 'UH60',
 ]);
 const aircraftCheck = document.getElementById('ck-aircraft');
+const aircraftLabelsCheck = document.getElementById('ck-aircraft-label');
 const aircraftStatus = document.getElementById('aircraft-status');
 const A = {
   on: false, timer: null, controller: null, loading: false,
+  labels: false,
   tracks: new Map(), features: [], clockOffset: 0,
   historyLoaded: false, historyLoading: false,
   raf: null, lastFrame: 0, popup: null, popupTimer: null,
@@ -2557,6 +2571,13 @@ function aircraftSource(data = EMPTY) {
 function aircraftTrailsSource(data = EMPTY) {
   const source = map.getSource('aircraft-trails');
   if (source) source.setData(data);
+}
+
+function applyAircraftLabels() {
+  if (map.getLayer('aircraft-symbol')) {
+    map.setLayoutProperty('aircraft-symbol', 'text-field',
+      A.labels ? ['get', 'label'] : '');
+  }
 }
 
 function closeAircraftPopup() {
@@ -3088,11 +3109,18 @@ function addAircraftLayers() {
       'icon-image': ['case',
         ['==', ['get', 'aircraft_kind'], 'helicopter'],
         'fire-helicopter', 'fire-aircraft'],
-      'icon-size': 1,
+      // Les appareils restent visibles à petite échelle, sans devenir des
+      // repères démesurés quand la carte est dézoomée.
+      'icon-size': ['interpolate', ['linear'], ['zoom'],
+        2, .42,
+        5, .55,
+        8, .7,
+        11, .84,
+        14, .95],
       'icon-rotate': ['get', 'track'],
       'icon-rotation-alignment': 'map',
       'icon-allow-overlap': true,
-      'text-field': ['get', 'label'],
+      'text-field': '',
       'text-font': ['Noto Sans Bold'],
       'text-size': 10.5,
       'text-offset': [0, 2],
@@ -3105,6 +3133,7 @@ function addAircraftLayers() {
       'text-halo-width': 1.4,
     },
   });
+  applyAircraftLabels();
   map.on('click', 'aircraft-symbol', aircraftPopup);
   map.on('mouseenter', 'aircraft-symbol', () => map.getCanvas().style.cursor = 'pointer');
   map.on('mouseleave', 'aircraft-symbol', () => map.getCanvas().style.cursor = '');
@@ -3715,6 +3744,10 @@ document.getElementById('ck-smoke').addEventListener('change', e => {
 aircraftCheck.addEventListener('change', event => {
   A.on = event.target.checked;
   aircraftSync();
+});
+aircraftLabelsCheck.addEventListener('change', event => {
+  A.labels = event.target.checked;
+  applyAircraftLabels();
 });
 
 const playBtn = document.getElementById('play');
