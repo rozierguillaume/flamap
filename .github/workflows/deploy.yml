@@ -67,6 +67,7 @@ jobs:
           manifest = json.load(open('data/manifest.json'))
           timeline = json.load(open('data/timeline.json'))
           overview = json.load(open('data/overview_hotspots.geojson'))
+          weather = json.load(open('data/weather_forecast.json'))
           zone_paths = list(pathlib.Path('data/zones').glob('*.json'))
           expected = {f"{zone_id}.json" for zone_id in manifest['zones']}
           actual = {path.name for path in zone_paths}
@@ -80,6 +81,11 @@ jobs:
               or any(not isinstance(feature['properties'].get('frp'), (int, float))
                      for feature in overview['features'])):
               sys.exit("puissance radiative FIRMS absente des agrégats")
+          weather_rows = weather.get('nt', 0)
+          if (weather_rows < 2
+              or any(len(weather.get(name, [])) != weather_rows
+                     for name in ('u', 'v', 'gust', 'temperature'))):
+              sys.exit("export météo absent ou incomplet")
           fine = set(manifest['fine_wind_zones'])
           for path in zone_paths:
               zone = json.load(open(path))
@@ -98,7 +104,7 @@ jobs:
              site.webmanifest robots.txt sitemap.xml _site/
           cp data/manifest.json data/overview_hotspots.geojson \
              data/burnt_recent.geojson data/timeline.json \
-             data/wind_coarse.json _site/data/
+             data/wind_coarse.json data/weather_forecast.json _site/data/
           cp -r data/zones _site/data/
 
       # Pages accepte jusqu'à 1 Go, mais Flamap doit rester très en dessous.

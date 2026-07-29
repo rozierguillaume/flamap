@@ -108,7 +108,8 @@ jobs:
                                           'data/manifest.json')))
           files = []
           for name in ('overview_hotspots.geojson', 'burnt_recent.geojson',
-                       'timeline.json', 'wind_coarse.json'):
+                       'timeline.json', 'wind_coarse.json',
+                       'weather_forecast.json'):
               files.append((f'data/{name}', f'data/{name}'))
           for zone_id in manifest['zones']:
               name = f'{zone_id}.json'
@@ -135,6 +136,7 @@ jobs:
           root = pathlib.Path('_site')
           manifest = json.load(open(root / 'data/manifest.json'))
           timeline = json.load(open(root / 'data/timeline.json'))
+          weather = json.load(open(root / 'data/weather_forecast.json'))
           zone_paths = list((root / 'data/zones').glob('*.json'))
           expected = {f"{zone_id}.json" for zone_id in manifest['zones']}
           actual = {path.name for path in zone_paths}
@@ -142,6 +144,11 @@ jobs:
                 f"polygones datés, {len(zone_paths)} zones reprises")
           if not manifest['hotspot_count'] or not timeline or actual != expected:
               sys.exit('artefact publie incomplet, déploiement annulé')
+          weather_rows = weather.get('nt', 0)
+          if (weather_rows < 2
+              or any(len(weather.get(name, [])) != weather_rows
+                     for name in ('u', 'v', 'gust', 'temperature'))):
+              sys.exit('export météo absent ou incomplet')
           fine = set(manifest['fine_wind_zones'])
           for path in zone_paths:
               zone = json.load(open(path))
