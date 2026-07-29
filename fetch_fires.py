@@ -4,7 +4,7 @@ Produit les donnees statiques de Flamap pour la France metropolitaine.
 
 Le navigateur ne charge d'abord qu'un apercu national leger :
   - foyers FIRMS agreges spatialement et par heure ;
-  - perimetres EFFIS des sept derniers jours ;
+  - perimetres EFFIS mis a jour dans les sept derniers jours ;
   - vent national grossier ;
   - frise et manifest.
 
@@ -40,6 +40,9 @@ TILE_DEG = 1.0
 DETAIL_ZOOM = 7
 OVERVIEW_DEG = 0.25
 OVERVIEW_H = 1
+# Un perimetre EFFIS reste une confirmation utile tant que la source l'a mis a
+# jour recemment. C'est cette date, et non le debut du feu, qui determine sa
+# presence dans l'apercu national et l'eligibilite d'un incident important.
 RECENT_DAYS = 7
 
 FIRMS_BASE = "https://firms.modaps.eosdis.nasa.gov/data/active_fire"
@@ -359,10 +362,10 @@ def recent_burnt(dated, reference):
     threshold = reference - RECENT_DAYS * 86400
     return fc([
         feature for feature in dated["features"]
-        if (
-            feature["properties"].get("CLASS") in ("Today", "7DAYS")
-            or feature["properties"].get("ts", 0) >= threshold
-        )
+        # `lu` reprend LASTUPDATE ; EFFIS peut continuer a preciser le
+        # perimetre plusieurs jours apres FIREDATE. Les classes Today/7DAYS
+        # decrivent l'age du feu, pas la fraicheur de ce perimetre.
+        if feature["properties"].get("lu", feature["properties"].get("ts", 0)) >= threshold
     ])
 
 

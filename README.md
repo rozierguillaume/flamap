@@ -53,8 +53,9 @@ jour : heure, source et volume de données reçu.
 
 Sur la vue nationale, les détections des dernières 24 heures sont regroupées
 spatialement. Un groupe reçoit un halo et un raccourci lorsqu'il compte au
-moins 25 foyers près d'un périmètre EFFIS, ou lorsque quelques détections
-confirment encore une surface brûlée d'au moins 200 ha. Le voisinage EFFIS
+moins 25 foyers près d'un périmètre EFFIS mis à jour dans les 7 derniers jours,
+ou lorsque quelques détections confirment encore une surface brûlée d'au moins
+200 ha. Le voisinage EFFIS
 écarte notamment les anomalies thermiques industrielles et les groupes
 étrangers inclus dans le rectangle de collecte FIRMS. Il s'agit de seuils
 fixes, pas d'un classement limité à trois incendies. Cliquer sur un raccourci
@@ -151,7 +152,7 @@ température actuelle grâce à un seul instantané de 225 valeurs inclus dans
 
 - foyers FIRMS regroupés par cellule de 0,25°, heure et satellite, avec leur
   nombre et leur FRP totale ;
-- périmètres EFFIS français des sept derniers jours ;
+- périmètres EFFIS français mis à jour dans les sept derniers jours ;
 - vent national 15 × 15 ;
 - manifest et frise nationale.
 
