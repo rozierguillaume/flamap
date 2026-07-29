@@ -68,6 +68,22 @@
                   pointer-events: none; }
   #smoke { z-index: 399; }
   #wind  { z-index: 400; }
+  /* Repère du point réellement échantillonné par la légende et le volet météo.
+     Il reste assez fin pour ne pas donner l'impression d'un viseur. */
+  #center-probe {
+    position: absolute; z-index: 401; left: 50%; top: 50%;
+    width: 11px; height: 11px; transform: translate(-50%, -50%);
+    border: 1px solid rgba(191,227,255,.76); border-radius: 50%;
+    box-shadow: 0 0 0 1px rgba(13,15,18,.58);
+    pointer-events: none; opacity: .78;
+  }
+  #center-probe[hidden] { display: none; }
+  #center-probe::before, #center-probe::after {
+    content: ""; position: absolute; background: rgba(191,227,255,.76);
+    box-shadow: 0 0 0 1px rgba(13,15,18,.28);
+  }
+  #center-probe::before { width: 17px; height: 1px; left: -4px; top: 4px; }
+  #center-probe::after  { width: 1px; height: 17px; left: 4px; top: -4px; }
   .maplibregl-ctrl-attrib { display: none; }   /* credits en clair dans #credits */
 
   .glass {
@@ -134,9 +150,11 @@
     line-height: 1.45; cursor: pointer;
   }
   #layers-btn:hover { color: var(--ink); }
+  #layers-btn svg, #weather-btn svg { width: 16px; height: 16px; flex: none;
+                                     stroke-width: 1.8; }
+  #layers-btn svg { margin-right: 5px; vertical-align: -3px; }
   #layers-btn::after { content: " ›"; }
   #layers-btn[aria-expanded="true"]::after { content: " ⌄"; }
-  #layers-btn .compact { display: none; }
 
   /* ---- barre du bas ---- */
   #legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12.5px; }
@@ -168,6 +186,9 @@
   /* Couche decochee, en revanche : c'est un geste de l'utilisateur, la ligne
      s'en va pour de bon. */
   #windkey.off { display: none; }
+  #tempkey { color: #ffc19c; font-variant-numeric: tabular-nums; }
+  #tempkey svg { width: 13px; height: 13px; flex: none; }
+  #tempkey[hidden] { display: none; }
 
   #timerow { display: flex; align-items: center; gap: 12px; }
   #play { background: #21252b; color: var(--ink); border: 1px solid #363b43;
@@ -240,6 +261,64 @@
   #updates-list span { grid-column: 2; color: var(--ink-dim); font-size: 11px; }
   #updates-empty { color: var(--ink-dim); font-size: 12px; padding: 16px 0; }
 
+  /* ---- previsions meteo, repliees tant qu'elles ne sont pas demandees ---- */
+  #weather-btn {
+    position: absolute; z-index: 501; top: 14px; right: 165px;
+    height: 35px; padding: 0 12px; color: var(--ink-dim);
+    font: inherit; font-size: 11px; cursor: pointer;
+  }
+  #weather-btn:hover, #weather-btn[aria-expanded="true"] { color: var(--ink); }
+  #weather-btn .weather-icon { margin-right: 5px; color: var(--wind); vertical-align: -3px; }
+  #weather-panel { display: none; }
+  #weather-panel.open { display: block; }
+  #weather-panel header { display: flex; align-items: center; justify-content: space-between;
+                          gap: 12px; padding-bottom: 10px;
+                          border-bottom: 1px solid #343941; }
+  #weather-panel h2 { margin: 0; font-size: 16px; }
+  #weather-close { background: #21252b; color: var(--ink); border: 1px solid #363b43;
+                   border-radius: 8px; flex: none; width: 34px; height: 34px;
+                   cursor: pointer; padding: 0; font: 400 23px/1 system-ui, sans-serif; }
+  #weather-close:hover { background: #2c313a; }
+  #weather-place { margin: 12px 0 7px; font-size: 12px; color: var(--ink-dim);
+                   font-variant-numeric: tabular-nums; }
+  #weather-chart-wrap { position: relative; }
+  #weather-chart { display: block; width: 100%; height: auto; overflow: visible;
+                   cursor: crosshair; }
+  #weather-chart text { font: 11px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  #weather-chart .axis { fill: #9da3aa; }
+  #weather-chart .grid { stroke: rgba(255,255,255,.13); stroke-width: 1; }
+  #weather-chart .temp-area { fill: url("#temp-fill"); }
+  #weather-chart .temp-line { fill: none; stroke: var(--hot); stroke-width: 3.5;
+                              stroke-linecap: round; stroke-linejoin: round; }
+  #weather-chart .temp-dot { fill: var(--hot); stroke: #171a1f; stroke-width: 2; }
+  #weather-chart .temp-value { fill: #ffc19c; font-weight: 700; }
+  #weather-chart .wind-line { fill: none; stroke: var(--wind); stroke-width: 3;
+                              stroke-linecap: round; stroke-linejoin: round; }
+  #weather-chart .gust-line { fill: none; stroke: #dceeff; stroke-width: 1.6;
+                              stroke-dasharray: 4 4; opacity: .65; }
+  #weather-chart .wind-arrow { fill: var(--wind); }
+  #weather-chart .now-line { stroke: var(--front); stroke-width: 1.5; }
+  #weather-chart .update-line { stroke: #d3d7dc; stroke-width: 1.2;
+                                stroke-dasharray: 3 4; opacity: .8; }
+  #weather-chart .now-label { fill: var(--front); font-weight: 700; }
+  #weather-chart .update-label { fill: #c1c5ca; }
+  #weather-chart .hover-line { stroke: #fff; stroke-width: 1; opacity: .55;
+                               pointer-events: none; }
+  #weather-tip { position: absolute; z-index: 2; display: none; pointer-events: none;
+                 top: 31px; min-width: 154px; padding: 8px 10px;
+                 border: 1px solid #444a52; border-radius: 8px;
+                 background: rgba(18,21,25,.97); color: var(--ink);
+                 box-shadow: 0 5px 18px rgba(0,0,0,.32);
+                 font-size: 11px; line-height: 1.4; white-space: nowrap; }
+  #weather-tip.open { display: block; transform: translateX(7px); }
+  #weather-tip.open.right { transform: translateX(calc(-100% - 7px)); }
+  #weather-tip strong, #weather-tip span { display: block; }
+  #weather-tip .temperature { margin: 2px 0; color: #ffc19c; font-size: 14px; }
+  #weather-tip span:not(.temperature) { color: #c7cbd0; }
+  #weather-status { margin: 8px 0 0; color: var(--ink-dim); font-size: 11px; }
+  #weather-status:empty { display: none; }
+  #weather-status.error { color: #efb09f; }
+
   #probe { position: absolute; visibility: hidden; white-space: nowrap;
            top: -9999px; left: -9999px; }
   #clock {
@@ -302,6 +381,8 @@
     #updates-list { max-height: min(470px, calc(100vh - 220px)); }
     #activity-panel { position: fixed; z-index: 503; top: 88px; right: 14px;
                       width: min(450px, calc(100vw - 28px)); padding: 17px 19px; }
+    #weather-panel { position: fixed; z-index: 504; top: 64px; right: 14px;
+                     width: min(470px, calc(100vw - 28px)); padding: 16px 18px; }
   }
 
   /* =======================  MOBILE  ======================== */
@@ -315,7 +396,8 @@
                  overflow-x: auto; scrollbar-width: none; }
     #incidents::-webkit-scrollbar { display: none; }
     #incidents button { flex: none; max-width: 220px; font-size: 11px; }
-    #incidents.layers-open, #incidents.credits-open, #incidents.activity-open { display: none; }
+    #incidents.layers-open, #incidents.credits-open, #incidents.activity-open,
+    #incidents.weather-open { display: none; }
 
     /* les calques repliés derrière un bouton : sur 375 px de large, le panneau
        ouvert en permanence mangeait le quart supérieur de l'écran */
@@ -323,8 +405,13 @@
                   color: var(--ink); font-size: 17px; line-height: 1; }
     #layers-btn::after { content: none; }
     #layers-btn .wide { display: none; }
-    #layers-btn .compact { display: inline; }
+    #layers-btn svg { width: 19px; height: 19px; margin: 0; vertical-align: 0; }
     #layers { top: 60px; right: 10px; padding: 10px 13px; font-size: 12px; }
+    #weather-btn { position: fixed; top: 60px; right: 10px; width: 42px;
+                   height: 42px; padding: 0; font-size: 17px; }
+    #weather-btn .weather-label { display: none; }
+    #weather-btn .weather-icon { margin: 0; }
+    #layers.open ~ #weather-btn { display: none; }
 
     /* Le bas est compose de cartes flottantes distinctes : la legende explique
        la carte, la frise la pilote. Les fondre dans une seule feuille donnait
@@ -345,7 +432,8 @@
     #legend .burnt-key { grid-column: 1; }
     #agekey { grid-column: 2; min-width: 0; }
     #ageramp { width: 100%; }
-    #windkey { grid-column: 1 / -1; }
+    #tempkey { grid-column: 1; }
+    #windkey { grid-column: 2; }
     #legend i { width: 10px; height: 10px; }
     #play { width: 42px; height: 38px; }   /* cible tactile */
     #updates-btn { width: 42px; height: 38px; font-size: 17px; } /* cible tactile */
@@ -382,13 +470,18 @@
     #activity-panel-close { width: 38px; height: 38px; font-size: 25px; }
     #activity-large { flex: 1; min-height: 220px; height: auto; }
     #activity-large b { width: 5px; margin-left: -2.5px; }
+    #weather-panel { position: fixed; z-index: 504; top: 110px; right: 10px;
+                     left: 10px; max-height: calc(100vh - 280px);
+                     overflow: auto; padding: 15px; }
+    #weather-panel h2 { font-size: 17px; }
+    #weather-close { width: 38px; height: 38px; font-size: 25px; }
   }
 
   @media (max-width: 360px) {
     /* A 320 px, la legende repasse sur trois lignes plutôt que de comprimer le
        degrade. */
     #legend { grid-template-columns: 1fr; }
-    #legend .burnt-key, #agekey, #windkey { grid-column: 1; }
+    #legend .burnt-key, #agekey, #tempkey, #windkey { grid-column: 1; }
   }
 </style>
 
@@ -434,6 +527,7 @@
      aria-label="Carte satellite des surfaces brûlées et des foyers d'incendie détectés"></div>
 <canvas id="smoke" aria-hidden="true"></canvas>
 <canvas id="wind" aria-hidden="true"></canvas>
+<div id="center-probe" hidden aria-hidden="true"></div>
 
 <div id="head" class="glass">
   <div class="brand">
@@ -471,7 +565,14 @@
 </noscript>
 
 <button id="layers-btn" class="glass" aria-label="Calques" aria-expanded="false"
-        aria-controls="layers"><span class="wide">Calques</span><span class="compact" aria-hidden="true">≡</span></button>
+        aria-controls="layers">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+       stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z"/>
+    <path d="M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12"/>
+    <path d="M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17"/>
+  </svg><span class="wide">Calques</span>
+</button>
 <div id="layers" class="glass">
   <label><input type="checkbox" id="ck-hotspots" checked> foyers détectés</label>
   <fieldset>
@@ -498,6 +599,29 @@
   pas son évolution. Ramenez le curseur à droite pour les revoir.</div>
 </div>
 
+<button id="weather-btn" class="glass" aria-expanded="false"
+        aria-controls="weather-panel" aria-label="Prévisions météo au centre de la carte">
+  <svg class="weather-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+       stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <path d="M12 2v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="M20 12h2"/>
+    <path d="m19.07 4.93-1.41 1.41"/><path d="M15.947 12.65a4 4 0 0 0-5.925-4.128"/>
+    <path d="M13 22H7a5 5 0 1 1 4.9-6H13a3 3 0 0 1 0 6Z"/>
+  </svg><span class="weather-label">Météo</span>
+</button>
+<aside id="weather-panel" class="glass" role="dialog" aria-labelledby="weather-title">
+  <header>
+    <h2 id="weather-title">Météo au centre de la carte</h2>
+    <button id="weather-close" aria-label="Fermer">×</button>
+  </header>
+  <p id="weather-place">—</p>
+  <div id="weather-chart-wrap">
+    <svg id="weather-chart" viewBox="0 0 430 270" role="img"
+         aria-label="Évolution de la température et du vent"></svg>
+    <div id="weather-tip" role="tooltip"></div>
+  </div>
+  <p id="weather-status" aria-live="polite"></p>
+</aside>
+
 <div id="clock" aria-live="off">—</div>
 
 <div id="dock">
@@ -509,6 +633,13 @@
       <span id="ageramp">
         <b data-age="432000">5 j</b><b data-age="86400">24 h</b><b data-age="0">à l'instant</b>
       </span>
+    </span>
+    <span id="tempkey" hidden>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M14 4v10.54a4 4 0 1 1-4 0V4a2 2 0 0 1 4 0Z"/>
+      </svg>
+      <span id="tempval">—</span>
     </span>
     <span id="windkey" hidden>
       <svg viewBox="0 0 12 12" aria-hidden="true" focusable="false">
@@ -558,7 +689,9 @@
     toponymes <a href="https://openfreemap.org/" target="_blank" rel="noopener">OpenFreeMap</a> /
     <a href="https://openmaptiles.org/" target="_blank" rel="noopener">OpenMapTiles</a> /
     <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>.
+    Communes : <a href="https://data.geopf.fr/geocodage/" target="_blank" rel="noopener">Géoplateforme / BAN</a>.
     Rendu <a href="https://maplibre.org/" target="_blank" rel="noopener">MapLibre GL</a>.
+    Icônes <a href="https://lucide.dev/" target="_blank" rel="noopener">Lucide</a> (ISC).
     <span id="updated"></span>
   </div>
 </div>
@@ -815,6 +948,7 @@ document.getElementById('cr-btn').addEventListener('click', e => {
   if (open) {
     setUpdatesOpen(false);
     setActivityOpen(false);
+    setWeatherOpen(false);
     document.getElementById('layers').classList.remove('open');
     document.getElementById('layers-btn').setAttribute('aria-expanded', 'false');
     document.getElementById('incidents').classList.remove('layers-open');
@@ -828,6 +962,7 @@ document.getElementById('layers-btn').addEventListener('click', e => {
   if (open) {
     setUpdatesOpen(false);
     setActivityOpen(false);
+    setWeatherOpen(false);
     document.getElementById('credits').classList.remove('open');
     document.getElementById('cr-btn').setAttribute('aria-expanded', 'false');
     document.getElementById('incidents').classList.remove('credits-open');
@@ -845,6 +980,54 @@ const powerMetricInput = activityMetricInputs.find(input => input.value === 'frp
 const clockEl = document.getElementById('clock');
 const updatesPanel = document.getElementById('updates-panel');
 const updatesBtn = document.getElementById('updates-btn');
+const weatherPanel = document.getElementById('weather-panel');
+const weatherBtn = document.getElementById('weather-btn');
+const weatherChart = document.getElementById('weather-chart');
+const weatherTip = document.getElementById('weather-tip');
+const weatherPlace = document.getElementById('weather-place');
+const weatherStatus = document.getElementById('weather-status');
+let weatherData = null, weatherPromise = null, weatherRows = [];
+let weatherCommune = '', weatherPlaceRequest = 0;
+const weatherPlaceCache = new Map();
+
+function weatherCoordinates(center) {
+  return `${Math.abs(center.lat).toFixed(3)}° ${center.lat >= 0 ? 'N' : 'S'}`
+       + ` · ${Math.abs(center.lng).toFixed(3)}° ${center.lng >= 0 ? 'E' : 'O'}`;
+}
+
+function renderWeatherPlace(center = map.getCenter()) {
+  weatherPlace.textContent = (weatherCommune ? `${weatherCommune} · ` : '')
+                           + weatherCoordinates(center);
+}
+
+async function updateWeatherPlace() {
+  const center = map.getCenter();
+  const key = `${center.lng.toFixed(4)},${center.lat.toFixed(4)}`;
+  const request = ++weatherPlaceRequest;
+  weatherCommune = weatherPlaceCache.get(key) || '';
+  renderWeatherPlace(center);
+  if (weatherCommune) return;
+  try {
+    const url = new URL('https://data.geopf.fr/geocodage/reverse/');
+    url.searchParams.set('lon', center.lng.toFixed(6));
+    url.searchParams.set('lat', center.lat.toFixed(6));
+    url.searchParams.set('limit', '1');
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`Géocodage HTTP ${response.status}`);
+    const result = await response.json();
+    if (request !== weatherPlaceRequest || !weatherPanel.classList.contains('open')) return;
+    const properties = result.features?.[0]?.properties || {};
+    weatherCommune = properties.city || properties.municipality || '';
+    if (weatherCommune) {
+      if (weatherPlaceCache.size >= 40) weatherPlaceCache.delete(weatherPlaceCache.keys().next().value);
+      weatherPlaceCache.set(key, weatherCommune);
+    }
+    renderWeatherPlace(center);
+  } catch (_) {
+    // Le nom est un enrichissement : les coordonnées restent disponibles si
+    // le service est momentanément inaccessible ou hors de France.
+  }
+}
 
 function setUpdatesOpen(open) {
   updatesPanel.classList.toggle('open', open);
@@ -852,6 +1035,7 @@ function setUpdatesOpen(open) {
   if (open) {
     activityPanel.classList.remove('open');
     document.getElementById('incidents').classList.remove('activity-open');
+    setWeatherOpen(false);
     document.getElementById('credits').classList.remove('open');
     document.getElementById('cr-btn').setAttribute('aria-expanded', 'false');
     document.getElementById('layers').classList.remove('open');
@@ -868,6 +1052,7 @@ function setActivityOpen(open, selected = null) {
   document.getElementById('incidents').classList.toggle('activity-open', open);
   activityTip.classList.remove('open');
   if (open) {
+    setWeatherOpen(false);
     updatesPanel.classList.remove('open');
     updatesBtn.setAttribute('aria-expanded', 'false');
     document.getElementById('credits').classList.remove('open');
@@ -882,10 +1067,227 @@ function setActivityOpen(open, selected = null) {
   }
 }
 document.getElementById('activity-panel-close').addEventListener('click', () => setActivityOpen(false));
+
+function weatherValue(data, row, lon, lat) {
+  const gx = (lon - data.bbox[0]) / (data.bbox[2] - data.bbox[0]) * (data.nx - 1);
+  const gy = (lat - data.bbox[1]) / (data.bbox[3] - data.bbox[1]) * (data.ny - 1);
+  if (!(gx >= 0 && gy >= 0 && gx <= data.nx - 1 && gy <= data.ny - 1)) return null;
+  const ix = Math.min(gx | 0, data.nx - 2), iy = Math.min(gy | 0, data.ny - 2);
+  const fx = gx - ix, fy = gy - iy, k = iy * data.nx + ix;
+  const bil = values => {
+    const cells = [values[k], values[k + 1], values[k + data.nx], values[k + data.nx + 1]];
+    if (!cells.every(Number.isFinite)) return null;
+    return (cells[0] * (1 - fx) + cells[1] * fx) * (1 - fy)
+         + (cells[2] * (1 - fx) + cells[3] * fx) * fy;
+  };
+  const u = bil(data.u[row]), v = bil(data.v[row]);
+  const gust = bil(data.gust[row]), temperature = bil(data.temperature[row]);
+  if (![u, v, gust, temperature].every(Number.isFinite)) return null;
+  return { u, v, gust, temperature, speed: Math.hypot(u, v) * 3.6 };
+}
+
+const svgText = (x, y, text, cls = 'axis', anchor = 'middle') =>
+  `<text x="${x}" y="${y}" class="${cls}" text-anchor="${anchor}">${text}</text>`;
+
+function drawWeather() {
+  if (!weatherData) return;
+  hideWeatherTip();
+  const center = map.getCenter();
+  const rows = [];
+  for (let index = 0; index < weatherData.nt; index++) {
+    const value = weatherValue(weatherData, index, center.lng, center.lat);
+    if (value) rows.push({ ...value, ts: weatherData.t0 + index * weatherData.dt });
+  }
+  weatherRows = rows;
+  renderWeatherPlace(center);
+  if (rows.length < 2) {
+    weatherChart.innerHTML = '';
+    weatherStatus.textContent = "Prévisions indisponibles à cette localisation.";
+    weatherStatus.className = 'error';
+    return;
+  }
+
+  const left = 40, right = 416, tempTop = 28, tempBottom = 105;
+  const windTop = 160, windBottom = 232;
+  const x = index => left + index * (right - left) / (rows.length - 1);
+  const temperatures = rows.map(row => row.temperature);
+  let tempMin = Math.floor(Math.min(...temperatures) - 1);
+  let tempMax = Math.ceil(Math.max(...temperatures) + 1);
+  if (tempMax - tempMin < 4) { tempMin -= 1; tempMax += 1; }
+  const windMax = Math.max(10, Math.ceil(Math.max(...rows.map(row => row.gust)) / 10) * 10);
+  const tempY = value => tempBottom - (value - tempMin) / (tempMax - tempMin) * (tempBottom - tempTop);
+  const windY = value => windBottom - value / windMax * (windBottom - windTop);
+  const path = (values, y) => values.map((value, index) =>
+    `${index ? 'L' : 'M'}${x(index).toFixed(1)},${y(value).toFixed(1)}`).join(' ');
+  const smoothPath = (values, y) => {
+    let result = `M${x(0).toFixed(1)},${y(values[0]).toFixed(1)}`;
+    for (let index = 1; index < values.length; index++) {
+      const middle = (x(index - 1) + x(index)) / 2;
+      result += ` C${middle.toFixed(1)},${y(values[index - 1]).toFixed(1)}`
+              + ` ${middle.toFixed(1)},${y(values[index]).toFixed(1)}`
+              + ` ${x(index).toFixed(1)},${y(values[index]).toFixed(1)}`;
+    }
+    return result;
+  };
+  const tickEvery = rows.length > 18 ? 4 : rows.length > 8 ? 2 : 1;
+  const timeX = ts => left + (ts - rows[0].ts) / (rows[rows.length - 1].ts - rows[0].ts)
+                           * (right - left);
+  let svg = '<defs><linearGradient id="temp-fill" x1="0" y1="0" x2="0" y2="1">'
+          + '<stop offset="0" stop-color="#ff6b1a" stop-opacity=".27"/>'
+          + '<stop offset="1" stop-color="#ff6b1a" stop-opacity="0"/></linearGradient></defs>';
+  for (const y of [tempTop, tempBottom, windTop, windBottom])
+    svg += `<line x1="${left}" y1="${y}" x2="${right}" y2="${y}" class="grid"/>`;
+  const now = Date.now() / 1000;
+  const updated = Z.manifest && Z.manifest.generated_at
+    ? Date.parse(Z.manifest.generated_at) / 1000 : NaN;
+  if (updated >= rows[0].ts && updated <= rows[rows.length - 1].ts) {
+    const markerX = timeX(updated);
+    const hour = new Date(updated * 1000).toLocaleTimeString('fr-FR',
+      { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Paris' }).replace(':', 'h');
+    const anchor = markerX < (left + right) / 2 ? 'start' : 'end';
+    const offset = anchor === 'start' ? 5 : -5;
+    svg += `<line x1="${markerX.toFixed(1)}" y1="${tempTop}" x2="${markerX.toFixed(1)}"`
+         + ` y2="${windBottom}" class="update-line"/>`;
+    svg += svgText((markerX + offset).toFixed(1), 126, `carte ${hour}`, 'update-label', anchor);
+  }
+  if (now >= rows[0].ts && now <= rows[rows.length - 1].ts) {
+    const markerX = timeX(now);
+    const anchor = markerX < (left + right) / 2 ? 'start' : 'end';
+    const offset = anchor === 'start' ? 5 : -5;
+    svg += `<line x1="${markerX.toFixed(1)}" y1="${tempTop}" x2="${markerX.toFixed(1)}"`
+         + ` y2="${windBottom}" class="now-line"/>`;
+    svg += svgText((markerX + offset).toFixed(1), 16, 'maintenant', 'now-label', anchor);
+  }
+  svg += svgText(left, 16, 'Température', 'axis', 'start');
+  svg += svgText(4, tempTop + 4, `${tempMax}°`, 'axis', 'start');
+  svg += svgText(4, tempBottom + 4, `${tempMin}°`, 'axis', 'start');
+  const temperaturePath = smoothPath(temperatures, tempY);
+  svg += `<path d="${temperaturePath} L${right},${tempBottom} L${left},${tempBottom} Z"`
+       + ` class="temp-area"/>`;
+  svg += `<path d="${temperaturePath}" class="temp-line"/>`;
+  const peak = temperatures.indexOf(Math.max(...temperatures));
+  svg += `<circle cx="${x(peak).toFixed(1)}" cy="${tempY(temperatures[peak]).toFixed(1)}"`
+       + ` r="4.5" class="temp-dot"/>`;
+  svg += svgText(x(peak).toFixed(1), Math.max(12, tempY(temperatures[peak]) - 10).toFixed(1),
+    `${Math.round(temperatures[peak])}°`, 'temp-value');
+  svg += svgText(left, 144, 'Vent moyen · rafales', 'axis', 'start');
+  svg += svgText(4, windTop + 4, `${windMax}`, 'axis', 'start');
+  svg += svgText(4, windBottom + 4, '0', 'axis', 'start');
+  svg += `<path d="${path(rows.map(row => row.gust), windY)}" class="gust-line"/>`;
+  svg += `<path d="${path(rows.map(row => row.speed), windY)}" class="wind-line"/>`;
+  const arrowEvery = rows.length > 18 ? 2 : 1;
+  rows.forEach((row, index) => {
+    const to = (Math.atan2(row.u, row.v) * 180 / Math.PI + 360) % 360;
+    if (index % arrowEvery === 0 || index === rows.length - 1)
+      svg += `<path d="M0,-8 L4.5,3 L0,1 L-4.5,3 Z" class="wind-arrow"`
+           + ` transform="translate(${x(index).toFixed(1)} 151) rotate(${to.toFixed(0)})"/>`;
+    if (index % tickEvery === 0 || index === rows.length - 1) {
+      const hour = new Date(row.ts * 1000).toLocaleTimeString('fr-FR',
+        { hour: '2-digit', timeZone: 'Europe/Paris' }).replace(' h', 'h');
+      svg += svgText(x(index).toFixed(1), 255, hour);
+    }
+  });
+  svg += svgText(right, 269, 'km/h', 'axis', 'end');
+  svg += '<line class="hover-line" x1="0" y1="28" x2="0" y2="232" visibility="hidden"/>';
+  weatherChart.innerHTML = svg;
+  const first = rows[0], last = rows[rows.length - 1];
+  weatherChart.setAttribute('aria-label',
+    `Historique et prévisions météo sur 24 heures. Température de `
+    + `${first.temperature.toFixed(1)} à ${last.temperature.toFixed(1)} degrés. `
+    + `Vent initial ${Math.round(first.speed)} kilomètres heure, `
+    + `rafales ${Math.round(first.gust)} kilomètres heure.`);
+  weatherStatus.textContent = '';
+  weatherStatus.className = '';
+}
+
+function showWeatherTip(event) {
+  if (!weatherRows.length) return;
+  const rect = weatherChart.getBoundingClientRect();
+  const viewX = (event.clientX - rect.left) / rect.width * 430;
+  const index = Math.min(weatherRows.length - 1, Math.max(0,
+    Math.round((viewX - 40) / (416 - 40) * (weatherRows.length - 1))));
+  const row = weatherRows[index];
+  const x = 40 + index * (416 - 40) / (weatherRows.length - 1);
+  const line = weatherChart.querySelector('.hover-line');
+  line.setAttribute('x1', x.toFixed(1));
+  line.setAttribute('x2', x.toFixed(1));
+  line.setAttribute('visibility', 'visible');
+
+  const to = (Math.atan2(row.u, row.v) * 180 / Math.PI + 360) % 360;
+  const from = CARD[Math.round(((to + 180) % 360) / 22.5) % 16];
+  const hour = new Date(row.ts * 1000).toLocaleString('fr-FR', {
+    weekday: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Paris',
+  }).replace(':', 'h');
+  const kind = row.ts <= Date.now() / 1000 ? 'historique' : 'prévision';
+  weatherTip.innerHTML = `<strong>${hour} · ${kind}</strong>`
+    + `<span class="temperature">${row.temperature.toLocaleString('fr-FR',
+      { minimumFractionDigits: 1, maximumFractionDigits: 1 })} °C</span>`
+    + `<span>Vent de ${from} · ${Math.round(row.speed)} km/h</span>`
+    + `<span>Rafales · ${Math.round(row.gust)} km/h</span>`;
+  weatherTip.style.left = `${x / 430 * rect.width}px`;
+  weatherTip.style.top = (event.clientY - rect.top) < rect.height / 2
+    ? `${rect.height * .44}px` : '28px';
+  weatherTip.classList.toggle('right', x > 260);
+  weatherTip.classList.add('open');
+}
+
+function hideWeatherTip() {
+  weatherTip.classList.remove('open', 'right');
+  const line = weatherChart.querySelector('.hover-line');
+  if (line) line.setAttribute('visibility', 'hidden');
+}
+weatherChart.addEventListener('pointermove', showWeatherTip);
+weatherChart.addEventListener('pointerdown', showWeatherTip);
+weatherChart.addEventListener('pointerleave', hideWeatherTip);
+
+async function loadWeather() {
+  weatherStatus.textContent = 'Chargement des prévisions…';
+  weatherStatus.className = '';
+  try {
+    if (!weatherPromise) weatherPromise = json('data/weather_forecast.json');
+    weatherData = await weatherPromise;
+    if (weatherPanel.classList.contains('open')) drawWeather();
+  } catch (error) {
+    weatherPromise = null;
+    weatherStatus.textContent = 'Prévisions momentanément indisponibles.';
+    weatherStatus.className = 'error';
+  }
+}
+
+function setWeatherOpen(open) {
+  const wasOpen = weatherPanel.classList.contains('open');
+  weatherPanel.classList.toggle('open', open);
+  weatherBtn.setAttribute('aria-expanded', open);
+  document.getElementById('incidents').classList.toggle('weather-open', open);
+  if (open) {
+    setUpdatesOpen(false);
+    if (activityPanel.classList.contains('open')) setActivityOpen(false);
+    document.getElementById('credits').classList.remove('open');
+    document.getElementById('cr-btn').setAttribute('aria-expanded', 'false');
+    document.getElementById('layers').classList.remove('open');
+    document.getElementById('layers-btn').setAttribute('aria-expanded', 'false');
+    document.getElementById('incidents').classList.remove('credits-open', 'layers-open');
+    updateWeatherPlace();
+    if (weatherData) drawWeather(); else loadWeather();
+    document.getElementById('weather-close').focus();
+  } else if (wasOpen) {
+    weatherPlaceRequest++;
+    weatherBtn.focus({ preventScroll: true });
+  }
+}
+weatherBtn.addEventListener('click', () => setWeatherOpen(!weatherPanel.classList.contains('open')));
+document.getElementById('weather-close').addEventListener('click', () => setWeatherOpen(false));
+map.on('moveend', () => {
+  if (!weatherPanel.classList.contains('open')) return;
+  updateWeatherPlace();
+  if (weatherData) drawWeather();
+});
+
 addEventListener('keydown', event => {
   if (event.key === 'Escape') {
     setUpdatesOpen(false);
     if (activityPanel.classList.contains('open')) setActivityOpen(false);
+    setWeatherOpen(false);
   }
 });
 
@@ -993,6 +1395,9 @@ const windCv  = document.getElementById('wind');
 const wctx    = windCv.getContext('2d');
 const windKey = document.getElementById('windkey');
 const windVal = document.getElementById('windval');
+const tempKey = document.getElementById('tempkey');
+const tempVal = document.getElementById('tempval');
+const centerProbe = document.getElementById('center-probe');
 
 const WIND_K    = 5;                    // px/s pour 1 m/s de vent
 const WIND_N    = MOBILE ? 550 : 1700;  // particules
@@ -1304,6 +1709,20 @@ function windAtGrid(d, g, lon, lat, out) {
   return true;
 }
 
+function temperatureAt(lon, lat) {
+  const d = W.data, values = d && d.temperature_2m;
+  if (!values) return null;
+  const gx = (lon - d.bbox[0]) / (d.bbox[2] - d.bbox[0]) * (d.nx - 1);
+  const gy = (lat - d.bbox[1]) / (d.bbox[3] - d.bbox[1]) * (d.ny - 1);
+  if (!(gx >= 0 && gy >= 0 && gx <= d.nx - 1 && gy <= d.ny - 1)) return null;
+  const i = Math.min(gx | 0, d.nx - 2), j = Math.min(gy | 0, d.ny - 2);
+  const fx = gx - i, fy = gy - j, k = j * d.nx + i;
+  const cells = [values[k], values[k + 1], values[k + d.nx], values[k + d.nx + 1]];
+  if (!cells.every(Number.isFinite)) return null;
+  return (cells[0] * (1 - fx) + cells[1] * fx) * (1 - fy)
+       + (cells[2] * (1 - fx) + cells[3] * fx) * fy;
+}
+
 // Au zoom de détail, la grille fine se fond dans le champ national sur les
 // 35 derniers kilometres de sa marge. Sans ce raccord, la différence de
 // résolution dessinait le carré exact de la cellule active dans les particules.
@@ -1395,6 +1814,17 @@ function windBadge() {
   windVal.textContent = `${Math.round(kmh)} km/h (raf. ${Math.round(o.g)} km/h)`;
   windKey.title = `Vent de ${from}, ${Math.round(kmh)} km/h au centre de la carte,`
                 + ` rafales à ${Math.round(o.g)} km/h`;
+}
+
+function temperatureBadge() {
+  const center = map.getCenter();
+  const value = temperatureAt(center.lng, center.lat);
+  tempKey.hidden = !Number.isFinite(value);
+  if (tempKey.hidden) return;
+  tempVal.textContent = `${Math.round(value)} °C`;
+  const stamp = W.data.temperature_ts;
+  tempKey.title = 'Température à 2 m au centre de la carte'
+                + (stamp ? `, modèle du ${fmt(stamp)}` : '');
 }
 
 function windSpawn(p) {
@@ -2249,7 +2679,7 @@ const dataP = Promise.all([
   json('data/overview_hotspots.geojson'),
   json('data/burnt_recent.geojson'),
   json('data/timeline.json'),
-  json('data/wind_coarse.json'),
+  json('data/wind_coarse.json?v=2'),
 ]).then(([manifest, overview, recent, timeline, wind]) => ({
   manifest, overview, recent, timeline, wind, detail: null,
 })).catch(async () => {
@@ -2358,12 +2788,15 @@ async function init() {
 
   if (windData && windData.nt > 1) {
     W.data = windData;
+    centerProbe.hidden = false;
+    temperatureBadge();
     windResize();
     smokeResize();
     map.on('move', () => {
       windSync();
       wctx.clearRect(0, 0, W.w, W.h);
       windBadge();
+      temperatureBadge();
     });
     map.on('resize', () => { windResize(); smokeResize(); });
   } else {
@@ -2372,6 +2805,8 @@ async function init() {
     document.getElementById('ck-wind').closest('label').hidden = true;
     document.getElementById('ck-smoke').closest('label').hidden = true;
     windKey.remove();
+    tempKey.remove();
+    centerProbe.remove();
     smokeCv.remove();
   }
   if (!manifest.legacy) {

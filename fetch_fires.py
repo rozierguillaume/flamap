@@ -458,12 +458,15 @@ def wind_grid(box, spacing_km):
     return nx, ny, points
 
 
-def wind_request(points, model):
+def wind_request(points, model, temperature=False):
     lat = ",".join(str(point[0]) for point in points)
     lon = ",".join(str(point[1]) for point in points)
+    variables = "wind_speed_10m,wind_direction_10m,wind_gusts_10m"
+    if temperature:
+        variables += ",temperature_2m"
     url = (
         f"{OPEN_METEO}?latitude={lat}&longitude={lon}"
-        "&hourly=wind_speed_10m,wind_direction_10m,wind_gusts_10m"
+        f"&hourly={variables}"
         f"&past_days={WIND_PAST_DAYS}&forecast_days=2"
         "&wind_speed_unit=ms&timezone=UTC"
     )
@@ -482,7 +485,7 @@ def wind_request(points, model):
             time.sleep(delay)
 
 
-def request_wind_batches(points, model):
+def request_wind_batches(points, model, temperature=False):
     batches = [
         points[index:index + WIND_BATCH]
         for index in range(0, len(points), WIND_BATCH)
@@ -490,7 +493,7 @@ def request_wind_batches(points, model):
     print(f"  {len(batches)} lots de {WIND_BATCH} points au plus")
     chunks = []
     for batch in batches:
-        chunks.append(wind_request(batch, model))
+        chunks.append(wind_request(batch, model, temperature))
         # Les runners GitHub partagent leurs IP avec beaucoup de jobs. Espacer
         # franchement les requêtes évite qu'une série de grilles fines soit
         # prise pour une rafale, même loin du quota journalier.
@@ -498,12 +501,12 @@ def request_wind_batches(points, model):
     return [series for chunk in chunks for series in chunk]
 
 
-def fetch_wind(box, spacing_km, label):
+def fetch_wind(box, spacing_km, label, temperature=False):
     nx, ny, points = wind_grid(box, spacing_km)
     dx = (box[2] - box[0]) * 111 * math.cos(math.radians((box[1] + box[3]) / 2))
     print(f"  {label} {nx}x{ny} = {len(points)} points, pas ~{dx / (nx - 1):.0f} km")
 
-    series = request_wind_batches(points, WIND_MODEL)
+    series = request_wind_batches(points, WIND_MODEL, temperature)
     holes = sum(
         value is None
         for location in series
@@ -516,7 +519,7 @@ def fetch_wind(box, spacing_km, label):
             f"  ! AROME HD : {holes}/{total} valeurs manquantes, bascule best_match",
             file=sys.stderr,
         )
-        series = request_wind_batches(points, None)
+        series = request_wind_batches(points, None, temperature)
         model = "best_match"
 
     times = series[0]["hourly"]["time"]
@@ -531,6 +534,7 @@ def fetch_wind(box, spacing_km, label):
     u = [[0.0] * len(points) for _ in timestamps]
     v = [[0.0] * len(points) for _ in timestamps]
     gust = [[0] * len(points) for _ in timestamps]
+    temp = [[None] * len(points) for _ in timestamps] if temperature else None
     for column, location in enumerate(series):
         hourly = location["hourly"]
         for row, index in enumerate(keep):
@@ -543,9 +547,12 @@ def fetch_wind(box, spacing_km, label):
             v[row][column] = round(-speed * math.cos(angle), 1)
             value = hourly["wind_gusts_10m"][index]
             gust[row][column] = round(value * 3.6) if value is not None else 0
+            if temperature:
+                value = hourly["temperature_2m"][index]
+                temp[row][column] = round(value, 1) if value is not None else None
 
     print(f"  {len(timestamps)} heures, modele {model}")
-    return {
+    result = {
         "model": model,
         "box": box,
         "nx": nx,
@@ -556,6 +563,9 @@ def fetch_wind(box, spacing_km, label):
         "v": v,
         "gust": gust,
     }
+    if temperature:
+        result["temperature"] = temp
+    return result
 
 
 def wind_subset(wind, xs, ys, time_stride=1):
@@ -593,6 +603,43 @@ def whole_wind(wind, time_stride=1):
         list(range(wind["ny"])),
         time_stride,
     )
+
+
+def weather_forecast(wind, now, hours=12):
+    """Extrait 12 h passees et 12 h futures pour le volet meteo."""
+    pivot = next(
+        (index for index in range(len(wind["u"]))
+         if wind["t0"] + index * wind["dt"] >= now),
+        len(wind["u"]),
+    )
+    start = max(0, pivot - hours)
+    stop = min(pivot + hours + 1, len(wind["u"]))
+    rows = range(start, stop)
+    return {
+        "model": wind["model"],
+        "bbox": [round(value, 4) for value in wind["box"]],
+        "nx": wind["nx"],
+        "ny": wind["ny"],
+        "t0": wind["t0"] + start * wind["dt"],
+        "dt": wind["dt"],
+        "nt": stop - start,
+        "u": [wind["u"][row] for row in rows],
+        "v": [wind["v"][row] for row in rows],
+        "gust": [wind["gust"][row] for row in rows],
+        "temperature": [wind["temperature"][row] for row in rows],
+    }
+
+
+def temperature_snapshot(wind, now):
+    """Temperature de la maille horaire la plus proche pour la legende."""
+    row = min(
+        range(len(wind["temperature"])),
+        key=lambda index: abs(wind["t0"] + index * wind["dt"] - now),
+    )
+    return {
+        "temperature_ts": wind["t0"] + row * wind["dt"],
+        "temperature_2m": wind["temperature"][row],
+    }
 
 
 def fine_wind_tiles(recent, hotspots, latest):
@@ -645,7 +692,9 @@ def main():
         * math.cos(math.radians((coarse_box[1] + coarse_box[3]) / 2))
     )
     coarse_spacing = coarse_span / (WIND_COARSE_N - 1)
-    coarse_wind = fetch_wind(coarse_box, coarse_spacing, "grille nationale")
+    coarse_wind = fetch_wind(
+        coarse_box, coarse_spacing, "grille nationale", temperature=True
+    )
 
     fine_keys = fine_wind_tiles(recent, hotspots, latest)
     fine_wind = {}
@@ -700,6 +749,9 @@ def main():
     timeline = build_timeline(hotspots, burnt["burnt_dated"])
     overview = aggregate_hotspots(hotspots)
     coarse = whole_wind(coarse_wind)
+    now = datetime.now(timezone.utc).timestamp()
+    coarse.update(temperature_snapshot(coarse_wind, now))
+    weather = weather_forecast(coarse_wind, now)
     manifest = {
         "version": 1,
         "generated_at": generated,
@@ -720,6 +772,7 @@ def main():
     write_json(os.path.join(OUT, "burnt_recent.geojson"), recent)
     write_json(os.path.join(OUT, "timeline.json"), timeline)
     write_json(os.path.join(OUT, "wind_coarse.json"), coarse)
+    write_json(os.path.join(OUT, "weather_forecast.json"), weather)
     write_json(os.path.join(OUT, "manifest.json"), manifest, compact=False)
 
     print(

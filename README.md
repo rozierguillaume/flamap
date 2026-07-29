@@ -113,6 +113,17 @@ dernier état observé — le vieillir jusqu'à demain le ferait s'éteindre à
 l'écran alors qu'on n'en sait rien. Désactivé pour l'instant : la constante
 `FORECAST_H` d'`index.html` vaut 0, la remonter à 24 rouvre ces crans.
 
+Le bouton discret **Météo** ouvre un graphique pour le centre courant de la
+carte : température, vent moyen, direction et rafales sur les 12 dernières et
+les 12 prochaines heures. Deux traits situent l'heure actuelle et l'extraction
+des données affichées sur la carte. Ces séries sont isolées dans
+`data/weather_forecast.json` et ne sont téléchargées qu'à la première ouverture
+du volet. Un déplacement de la carte ouverte réinterpole ensuite la même grille,
+sans requête réseau supplémentaire. Le survol donne, heure par heure, la
+température, le vent moyen, sa direction et les rafales. La légende principale
+affiche aussi la température actuelle grâce à un seul instantané de 225 valeurs
+inclus dans `data/wind_coarse.json`, sans charger toute la série météo.
+
 ## Chargement progressif
 
 À l'ouverture, la page ne télécharge qu'environ 230 ko compressés :
@@ -268,6 +279,9 @@ En trois lignes : **NASA FIRMS** pour les foyers actifs (VIIRS 375 m, ~6
 passages par jour, latence ~3 h), **Copernicus EFFIS** pour les surfaces
 brûlées (polygones datés, mis à jour 1 à 2 fois par jour) et **Open-Meteo**
 pour le vent (AROME HD de Météo-France, maille 1,5 km, pas horaire).
+Le nom de la commune au centre de la carte est résolu à la demande par l'API
+de géocodage inverse de la Géoplateforme (BAN), uniquement à l'ouverture du
+volet météo.
 
 ## Fichiers
 
@@ -323,6 +337,7 @@ les sources sont libres d'usage mais demandent d'être citées.
 - Fond : ortho-photo **IGN-F/Géoplateforme** (France), **Sentinel-2 cloudless**
   par EOX ailleurs (données Copernicus Sentinel modifiées 2020) ; toponymes
   **CARTO** / **OpenStreetMap**
+- Commune au centre : géocodage inverse **Géoplateforme / BAN**
 - Rendu : **MapLibre GL JS**
 
 Aucune licence n'est déclarée pour l'instant : le code est donc, par défaut,

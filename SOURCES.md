@@ -20,6 +20,16 @@ Les deux premières lignes et la dernière sont celles implémentées dans
 envoyées : la 1re, c'est FIRMS ; la 2e, c'est le *Current Situation Viewer*
 d'EFFIS.
 
+Le volet météo complète les valeurs par un nom de commune obtenu à l'ouverture
+avec le géocodage inverse public de la Géoplateforme :
+
+```
+https://data.geopf.fr/geocodage/reverse/?lon={lon}&lat={lat}&limit=1
+```
+
+Cet enrichissement reste côté navigateur et à la demande ; son indisponibilité
+n'empêche pas l'affichage des coordonnées ni des données météo.
+
 ---
 
 ## 1. Foyers actifs — NASA FIRMS
@@ -125,7 +135,7 @@ contraintes du dépôt : **JSON, pas de clé, pas de dépendance**.
 ```
 https://api.open-meteo.com/v1/forecast
   ?latitude=44.2,44.29,…&longitude=-1.6,-1.47,…
-  &hourly=wind_speed_10m,wind_direction_10m,wind_gusts_10m
+  &hourly=wind_speed_10m,wind_direction_10m,wind_gusts_10m,temperature_2m
   &past_days=7&forecast_days=2
   &models=meteofrance_arome_france_hd
   &wind_speed_unit=ms&timezone=UTC
@@ -151,8 +161,14 @@ réanalyse ERA5, 25 km, latence 5 jours).
    Les composantes sont donc à l'opposé : `u = -v·sin(θ)`, `v = -v·cos(θ)`.
 3. **Ne jamais interpoler la direction en degrés** : entre 350° et 10° la
    moyenne naïve donne 180°, soit le vent exactement à l'envers. On stocke u/v.
-4. Licence CC BY 4.0, gratuit sans clé pour l'usage non commercial, ~10 000
-   requêtes/jour. La carte n'en fait aucune : tout passe par `data/wind.json`.
+4. La température à 2 m est conservée uniquement dans l'export météo national
+   `weather_forecast.json`. Ce fichier couvre les 12 dernières et les 12
+   prochaines heures ; le navigateur ne le charge qu'à l'ouverture du volet.
+   `wind_coarse.json` ne reprend qu'une seule maille horaire de température pour
+   la lecture instantanée de la légende.
+5. Licence CC BY 4.0, gratuit sans clé pour l'usage non commercial, ~10 000
+   requêtes/jour. La carte n'en fait aucune : tout passe par les exports
+   `data/wind_coarse.json`, `data/zones/` et `data/weather_forecast.json`.
 
 ### Les autres pistes de vent, écartées
 

@@ -12,6 +12,7 @@ data/overview_hotspots.geojson
 data/burnt_recent.geojson
 data/timeline.json
 data/wind_coarse.json
+data/weather_forecast.json
 data/zones/
 
 # macOS
