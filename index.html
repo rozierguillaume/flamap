@@ -1462,10 +1462,12 @@ function applyBurnt() {
   const vis = k => shown[k] ? 'visible' : 'none';
   for (const id of ['recent-fill', 'recent-line', 'burnt-fill', 'burnt-line'])
     if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', vis('dated'));
-  if (map.getLayer('nrt-line')) map.setLayoutProperty('nrt-line', 'visibility', vis('nrt'));
+  for (const id of ['nrt-fill', 'nrt-line'])
+    if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', vis('nrt'));
   const k = atLatest ? 1 : 0;
   for (const id of ['recent-fill', 'burnt-fill'])
     if (map.getLayer(id)) map.setPaintProperty(id, 'fill-opacity', .70 * k);
+  if (map.getLayer('nrt-fill')) map.setPaintProperty('nrt-fill', 'fill-opacity', .14 * k);
   for (const id of ['recent-line', 'burnt-line'])
     if (map.getLayer(id)) map.setPaintProperty(id, 'line-opacity', .95 * k);
   if (map.getLayer('nrt-line')) map.setPaintProperty('nrt-line', 'line-opacity', .55 * k);
@@ -3523,6 +3525,13 @@ async function init() {
 
   // surfaces brûlées datées : la « terre brûlée » de référence
   const FADE = { duration: 450, delay: 0 };
+  // NRT est une emprise de travail, sans date ni surface : voile discret sous
+  // le périmètre daté, assez visible pour le distinguer de l'imagerie mais sans
+  // suggérer le même niveau de confirmation.
+  map.addLayer({ id: 'nrt-fill', type: 'fill', source: 'nrt',
+    minzoom: manifest.legacy ? 0 : manifest.detail_zoom,
+    paint: { 'fill-color': '#5c4a42', 'fill-opacity': .14,
+             'fill-opacity-transition': FADE } });
   map.addLayer({ id: 'recent-fill', type: 'fill', source: 'recent',
     maxzoom: manifest.detail_zoom,
     paint: { 'fill-color': V('--burnt'), 'fill-opacity': .70, 'fill-opacity-transition': FADE } });
@@ -3538,8 +3547,8 @@ async function init() {
     paint: { 'line-color': V('--burnt-edge'), 'line-width': 1.2,
              'line-opacity': .95, 'line-opacity-transition': FADE } });
 
-  // produit NRT : contour plus frais, mais sans date ni surface, et qui contient
-  // aussi d'anciennes cicatrices -> simple trait de référence, non animé
+  // Le contour NRT garde une lecture distincte, mais son absence de date et la
+  // présence possible d'anciennes cicatrices interdisent de le dater.
   map.addLayer({ id: 'nrt-line', type: 'line', source: 'nrt',
     minzoom: manifest.legacy ? 0 : manifest.detail_zoom,
     paint: { 'line-color': '#8d7a6b', 'line-width': 1,
