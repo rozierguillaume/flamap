@@ -38,6 +38,8 @@
   :root {
     --burnt:      #2a2320;   /* terre brulee, feu eteint     */
     --burnt-edge: #6b5a4e;
+    --nrt:        #5c4a42;   /* emprise NRT, sans date       */
+    --nrt-edge:   #8d7a6b;
     --old:        #7d3b28;   /* brule il y a plus de 72 h    */
     --recent:     #b1341f;   /* brule il y a 24-72 h         */
     --hot:        #ff6b1a;   /* brule il y a 6-24 h          */
@@ -449,8 +451,10 @@
       grid-template-columns: auto minmax(110px, 1fr);
       gap: 7px 12px; padding: 10px 12px; font-size: 11.5px;
     }
+    /* Les deux emprises s'empilent dans la colonne etroite, le degrade tient
+       la colonne large sur leurs deux rangs plutot que de laisser un trou. */
     #legend .burnt-key { grid-column: 1; }
-    #agekey { grid-column: 2; min-width: 0; }
+    #agekey { grid-column: 2; grid-row: 1 / span 2; min-width: 0; }
     #ageramp { width: 100%; }
     #tempkey { grid-column: 1; }
     #windkey { grid-column: 2; }
@@ -501,7 +505,7 @@
     /* A 320 px, la legende repasse sur trois lignes plutôt que de comprimer le
        degrade. */
     #legend { grid-template-columns: 1fr; }
-    #legend .burnt-key, #agekey, #tempkey, #windkey { grid-column: 1; }
+    #legend .burnt-key, #agekey, #tempkey, #windkey { grid-column: 1; grid-row: auto; }
   }
 </style>
 
@@ -685,7 +689,12 @@
 
 <div id="dock">
   <div id="legend" class="glass">
-    <span class="burnt-key"><i class="poly" style="background:var(--burnt);border:1px solid var(--burnt-edge)"></i>terre brûlée</span>
+    <span class="burnt-key" title="Périmètre EFFIS daté : la surface brûlée telle qu'elle était au cran affiché"><i class="poly" style="background:var(--burnt);border:1px solid var(--burnt-edge)"></i>terre brûlée (datée)</span>
+    <!-- Même famille de bruns, deux crans plus clair : l'emprise NRT est
+         assombrie assez pour se lire, pas assez pour passer pour un périmètre
+         confirmé. Le voile de la carte reste bien plus discret (30 %) qu'un
+         aplat de 12 px ne peut le montrer. -->
+    <span class="burnt-key" title="Emprise EFFIS quasi temps réel, sans date ni surface : elle peut aussi contenir d'anciennes cicatrices"><i class="poly" style="background:var(--nrt);border:1px solid var(--nrt-edge)"></i>emprise NRT</span>
     <!-- l'échelle d'ancienneté : le dégradé et la position des repères sont
          posés par le script, à partir de la rampe qui peint la carte -->
     <span id="agekey" title="Couleur d'un foyer selon son ancienneté, de dix jours à l'instant de la détection">
@@ -1467,7 +1476,7 @@ function applyBurnt() {
   const k = atLatest ? 1 : 0;
   for (const id of ['recent-fill', 'burnt-fill'])
     if (map.getLayer(id)) map.setPaintProperty(id, 'fill-opacity', .70 * k);
-  if (map.getLayer('nrt-fill')) map.setPaintProperty('nrt-fill', 'fill-opacity', .14 * k);
+  if (map.getLayer('nrt-fill')) map.setPaintProperty('nrt-fill', 'fill-opacity', .30 * k);
   for (const id of ['recent-line', 'burnt-line'])
     if (map.getLayer(id)) map.setPaintProperty(id, 'line-opacity', .95 * k);
   if (map.getLayer('nrt-line')) map.setPaintProperty('nrt-line', 'line-opacity', .55 * k);
@@ -3530,7 +3539,7 @@ async function init() {
   // suggérer le même niveau de confirmation.
   map.addLayer({ id: 'nrt-fill', type: 'fill', source: 'nrt',
     minzoom: manifest.legacy ? 0 : manifest.detail_zoom,
-    paint: { 'fill-color': '#5c4a42', 'fill-opacity': .14,
+    paint: { 'fill-color': V('--nrt'), 'fill-opacity': .30,
              'fill-opacity-transition': FADE } });
   map.addLayer({ id: 'recent-fill', type: 'fill', source: 'recent',
     maxzoom: manifest.detail_zoom,
@@ -3551,7 +3560,7 @@ async function init() {
   // présence possible d'anciennes cicatrices interdisent de le dater.
   map.addLayer({ id: 'nrt-line', type: 'line', source: 'nrt',
     minzoom: manifest.legacy ? 0 : manifest.detail_zoom,
-    paint: { 'line-color': '#8d7a6b', 'line-width': 1,
+    paint: { 'line-color': V('--nrt-edge'), 'line-width': 1,
              'line-opacity': .55, 'line-opacity-transition': FADE } });
 
   // Lecture nationale : halo franc autour des seules concentrations majeures.
