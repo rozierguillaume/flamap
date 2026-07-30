@@ -460,7 +460,7 @@
     #head .mark { width: 29px; }
     #head h1 { font-size: 19px; }
     #incidents { top: 66px; left: 10px; flex-wrap: nowrap;
-                 max-width: calc(100vw - 20px);
+                 max-width: calc(100vw - 72px);
                  overflow-x: auto; scrollbar-width: none; }
     #incidents::-webkit-scrollbar { display: none; }
     #incidents button { flex: none; max-width: 220px; font-size: 11px; }
@@ -3289,14 +3289,13 @@ function addAircraftLayers() {
 /*
  * Sur la vue nationale, les points d'une meme zone active restent difficiles
  * a distinguer du bruit de fond. On regroupe donc les detections des dernieres
- * 24 heures distantes de moins de 30 km. Un groupe devient important s'il
- * porte au moins 25 foyers pres d'un perimetre EFFIS, ou si quelques foyers
- * confirment encore une surface brulee d'au moins 200 ha.
+ * 72 heures distantes de moins de 30 km. Un groupe devient important s'il
+ * porte au moins 25 foyers pres d'un perimetre EFFIS mis a jour depuis moins
+ * de 30 jours.
  * Le voisinage EFFIS ecarte les anomalies thermiques fixes et les groupes
  * etrangers presents dans le grand rectangle de collecte FIRMS.
  */
-const MAJOR_WINDOW = 24 * H, MAJOR_KM = 30, MAJOR_MIN = 25;
-const MAJOR_BURNT_HA = 200, MAJOR_SUPPORT = 5;
+const MAJOR_WINDOW = 72 * H, MAJOR_KM = 30, MAJOR_MIN = 25;
 const MAJOR = { overview: [], places: [], features: [], bucket: null };
 const incidentsEl = document.getElementById('incidents');
 
@@ -3347,7 +3346,7 @@ function renderIncidentButtons(features) {
       ? `${Math.round(maxArea).toLocaleString('fr-FR')} ha`
       : `${n} foyers`;
     button.textContent = `${name ? name + ' · ' : ''}${metric}`;
-    button.title = `${n} foyers détectés en 24 h`
+    button.title = `${n} foyers détectés en 72 h`
       + `${area ? `, ${Math.round(area).toLocaleString('fr-FR')} ha EFFIS à proximité` : ''}`
       + ' — zoomer sur cette zone';
     button.setAttribute('aria-label', `Zoomer sur ${name || 'un incendie important'}, ${metric}`);
@@ -3418,14 +3417,13 @@ function updateMajorFires(now) {
       group.reduce((sum, point) => sum + point.center[1] * point.n, 0) / n,
     ];
     const { name, area, maxArea } = fireContext(center);
-    const confirmed = name && (n >= MAJOR_MIN
-      || (n >= MAJOR_SUPPORT && area >= MAJOR_BURNT_HA));
+    const confirmed = name && n >= MAJOR_MIN;
     return {
       type: 'Feature',
       geometry: { type: 'Point', coordinates: center },
       properties: {
         center, n, name, area, maxArea, major: !!confirmed,
-        score: Math.max(n, area >= MAJOR_BURNT_HA ? MAJOR_MIN + Math.sqrt(area) : 0),
+        score: Math.max(n, maxArea ? MAJOR_MIN + Math.sqrt(maxArea) : 0),
       },
     };
   }).filter(feature => feature.properties.major)
@@ -3927,10 +3925,11 @@ const dataP = Promise.all([
   json('data/manifest.json'),
   json('data/overview_hotspots.geojson'),
   json('data/burnt_recent.geojson'),
+  json('data/burnt_major.geojson'),
   json('data/timeline.json'),
   json('data/wind_coarse.json?v=2'),
-]).then(([manifest, overview, recent, timeline, wind]) => ({
-  manifest, overview, recent, timeline, wind, detail: null,
+]).then(([manifest, overview, recent, major, timeline, wind]) => ({
+  manifest, overview, recent, major, timeline, wind, detail: null,
 })).catch(async () => {
   // Le clone conserve les anciens exemples Gironde : il reste affichable avant
   // le premier `python3 fetch_fires.py`, sans simuler le chargement national.
@@ -3944,7 +3943,8 @@ const dataP = Promise.all([
       bbox: meta.bbox, generated_at: meta.generated_at, detail_zoom: 99,
       zones: [], zone_template: '', legacy: true,
     },
-    overview: EMPTY, recent: EMPTY, timeline: buildSteps(hotspots, dated),
+    overview: EMPTY, recent: EMPTY, major: dated,
+    timeline: buildSteps(hotspots, dated),
     wind, detail: { nrt, dated, hotspots },
   };
 });
@@ -3982,7 +3982,7 @@ poll = setInterval(start, 80);
 
 async function init() {
   const data = await dataP;
-  const { manifest, overview, recent, timeline, wind: windData, detail } = data;
+  const { manifest, overview, recent, major, timeline, wind: windData, detail } = data;
   Z.manifest = manifest;
   Z.available = new Set(manifest.zones);
   Z.disabled = !!manifest.legacy;
@@ -4104,7 +4104,7 @@ async function init() {
   S.overview = overview.features.length ? overview.features
     : (detail ? detail.hotspots.features : []);
   S.sources = S.overview;
-  MAJOR.places = recent.features.map(feature => ({
+  MAJOR.places = major.features.map(feature => ({
     center: geometryCenter(feature.geometry),
     name: feature.properties.PROVINCE || feature.properties.COMMUNE || '',
     area: +feature.properties.AREA_HA || 0,

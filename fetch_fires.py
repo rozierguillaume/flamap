@@ -45,10 +45,11 @@ TILE_DEG = 1.0
 DETAIL_ZOOM = 7
 OVERVIEW_DEG = 0.25
 OVERVIEW_H = 1
-# Un perimetre EFFIS reste une confirmation utile tant que la source l'a mis a
-# jour recemment. C'est cette date, et non le debut du feu, qui determine sa
-# presence dans l'apercu national et l'eligibilite d'un incident important.
+# Les contours affiches dans l'apercu national restent bornes a sept jours.
+# Pour confirmer un incendie important, leur contexte reste utile trente jours :
+# l'activite FIRMS des 72 dernieres heures garantit que le feu est encore suivi.
 RECENT_DAYS = 7
+MAJOR_EFFIS_DAYS = 30
 HOTSPOT_DAYS = 10
 
 FIRMS_BASE = "https://firms.modaps.eosdis.nasa.gov/data/active_fire"
@@ -444,8 +445,8 @@ def fetch_burnt(bbox):
     return {"burnt_dated": dated, "burnt_nrt": nrt}
 
 
-def recent_burnt(dated, reference):
-    threshold = reference - RECENT_DAYS * 86400
+def burnt_since(dated, reference, days):
+    threshold = reference - days * 86400
     return fc([
         feature for feature in dated["features"]
         # `lu` reprend LASTUPDATE ; EFFIS peut continuer a preciser le
@@ -1023,7 +1024,10 @@ def main():
 
     print("\nCopernicus EFFIS - surfaces brulees")
     burnt = fetch_burnt(bbox)
-    recent = recent_burnt(burnt["burnt_dated"], latest)
+    recent = burnt_since(burnt["burnt_dated"], latest, RECENT_DAYS)
+    major_burnt = burnt_since(
+        burnt["burnt_dated"], latest, MAJOR_EFFIS_DAYS
+    )
 
     print("\nOpen-Meteo / AROME HD - vent a 10 m")
     coarse_box = wind_box(bbox)
@@ -1110,6 +1114,7 @@ def main():
 
     write_json(os.path.join(OUT, "overview_hotspots.geojson"), overview)
     write_json(os.path.join(OUT, "burnt_recent.geojson"), recent)
+    write_json(os.path.join(OUT, "burnt_major.geojson"), major_burnt)
     write_json(os.path.join(OUT, "timeline.json"), timeline)
     write_json(os.path.join(OUT, "wind_coarse.json"), coarse)
     write_json(os.path.join(OUT, "weather_forecast.json"), weather)

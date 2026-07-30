@@ -250,7 +250,8 @@ jobs:
              apple-touch-icon.png icon-192.png icon-512.png \
              site.webmanifest robots.txt sitemap.xml _site/
           cp data/manifest.json data/overview_hotspots.geojson \
-             data/burnt_recent.geojson data/timeline.json \
+             data/burnt_recent.geojson data/burnt_major.geojson \
+             data/timeline.json \
              data/wind_coarse.json data/weather_forecast.json _site/data/
           # Repris du site publié, pas produit ici : absent avant la première
           # collecte météo.
