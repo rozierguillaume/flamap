@@ -140,9 +140,9 @@ def main():
     reg = ImageFont.truetype(FONTS + 'Arial.ttf', 27)
     small = ImageFont.truetype(FONTS + 'Arial.ttf', 20)
 
-    d.text((56, H - 172), 'Fla', font=bold, fill=INK)
+    d.text((56, H - 172), 'Fla', font=bold, fill=(0xff, 0x6b, 0x1a))
     d.text((56 + d.textlength('Fla', font=bold), H - 172), 'map',
-           font=bold, fill=(0xff, 0x6b, 0x1a))
+           font=bold, fill=(0xff, 0xd8, 0x4d))
     d.text((56, H - 90), 'Les incendies vus par satellite, en quasi temps réel',
            font=reg, fill=INK)
     d.text((56, H - 48), 'foyers actifs NASA FIRMS · surfaces brûlées Copernicus EFFIS',
