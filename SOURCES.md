@@ -193,8 +193,23 @@ réanalyse ERA5, 25 km, latence 5 jours).
    légende retombe sur la maille horaire de température grossière que
    `wind_coarse.json` continue de transporter.
 5. Licence CC BY 4.0, gratuit sans clé pour l'usage non commercial, ~10 000
-   requêtes/jour. La carte n'en fait aucune : tout passe par les exports
-   `data/wind_coarse.json`, `data/zones/` et `data/weather_forecast.json`.
+   requêtes/jour, 600/min. La carte n'en fait aucune : tout passe par les
+   exports `data/wind_coarse.json`, `data/zones/` et
+   `data/weather_forecast.json`.
+6. **Le quota se compte par variables et par durée, pas par point.** Au-delà de
+   10 variables ou de 2 semaines, une requête vaut plusieurs appels ; le nombre
+   de localisations, lui, ne multiplie rien. Un lot de 430 points coûte donc un
+   appel, comme un lot d'un seul.
+
+   La contrainte réelle est ailleurs : le **nombre d'aller-retours** depuis l'IP
+   partagée d'un runner GitHub. Vérifié le 30/07/2026, en passant de 15 à 33
+   requêtes par collecte — HTTP 429 sur quatre requêtes, et surtout cinq
+   poignées de main TLS laissées pendantes jusqu'au timeout. À 180 s chacune,
+   ces cinq incidents ont consommé 15 minutes et fait échouer la collecte sur
+   les 25 minutes de l'étape. D'où les trois garde-fous : lots de 430 points
+   (le plafond est la longueur d'URL — 1 000 points renvoient un `HTTP 414`),
+   timeout de 30 s, et budget de 6 min sur la grille de température, collectée
+   en dernier parce que c'est la seule série qui sache se replier entièrement.
 
 ### Les autres pistes de vent, écartées
 
