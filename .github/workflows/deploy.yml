@@ -172,11 +172,18 @@ jobs:
                      for feature in overview['features'])):
               sys.exit("puissance radiative FIRMS absente des agrégats")
           weather_rows = weather.get('nt', 0)
+          thermal = weather.get('thermal') or {}
           if (weather_rows < 2
               or any(len(weather.get(name, [])) != weather_rows
-                     for name in ('u', 'v', 'gust', 'temperature',
-                                  'precipitation'))):
+                     for name in ('u', 'v', 'gust'))
+              or any(len(thermal.get(name, [])) != weather_rows
+                     for name in ('temperature', 'precipitation'))):
               sys.exit("export météo absent ou incomplet")
+          # La grille thermique n'a d'intérêt que si elle reste bien plus fine
+          # que celle du vent : sans ce seuil, une régression silencieuse du
+          # pas ramènerait les 33 °C sur un Lyon à 39.
+          if thermal.get('nx', 0) < weather.get('nx', 0) * 3:
+              sys.exit("grille de température trop grossière")
           fine = set(manifest['fine_wind_zones'])
           for path in zone_paths:
               zone = json.load(open(path))

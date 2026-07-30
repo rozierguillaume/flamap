@@ -1125,6 +1125,9 @@ const weatherPlace = document.getElementById('weather-place');
 const weatherStatus = document.getElementById('weather-status');
 const weatherTitle = document.getElementById('weather-title');
 const weatherFollow = document.getElementById('weather-follow');
+// v3 : le fichier porte désormais un bloc `thermal` à part, sur une grille bien
+// plus fine que celle du vent.
+const WEATHER_URL = 'data/weather_forecast.json?v=3';
 let weatherData = null, weatherPromise = null, weatherRows = [];
 let weatherCommune = '', weatherPlaceRequest = 0;
 const weatherPlaceCache = new Map();
@@ -1254,21 +1257,31 @@ function setActivityOpen(open, selected = null) {
 }
 document.getElementById('activity-panel-close').addEventListener('click', () => setActivityOpen(false));
 
+/* Interpolation bilinéaire sur une grille régulière. La géométrie (`bbox`,
+ * `nx`, `ny`) est passée à part de la nappe lue : depuis que la température a
+ * sa propre grille, bien plus fine que celle du vent, un même point de la carte
+ * ne tombe plus sur les mêmes mailles selon le champ interrogé. */
+function gridBilinear(grid, values, lon, lat) {
+  if (!grid || !values) return null;
+  const gx = (lon - grid.bbox[0]) / (grid.bbox[2] - grid.bbox[0]) * (grid.nx - 1);
+  const gy = (lat - grid.bbox[1]) / (grid.bbox[3] - grid.bbox[1]) * (grid.ny - 1);
+  if (!(gx >= 0 && gy >= 0 && gx <= grid.nx - 1 && gy <= grid.ny - 1)) return null;
+  const ix = Math.min(gx | 0, grid.nx - 2), iy = Math.min(gy | 0, grid.ny - 2);
+  const fx = gx - ix, fy = gy - iy, k = iy * grid.nx + ix;
+  const cells = [values[k], values[k + 1], values[k + grid.nx], values[k + grid.nx + 1]];
+  if (!cells.every(Number.isFinite)) return null;
+  return (cells[0] * (1 - fx) + cells[1] * fx) * (1 - fy)
+       + (cells[2] * (1 - fx) + cells[3] * fx) * fy;
+}
+
 function weatherValue(data, row, lon, lat) {
-  const gx = (lon - data.bbox[0]) / (data.bbox[2] - data.bbox[0]) * (data.nx - 1);
-  const gy = (lat - data.bbox[1]) / (data.bbox[3] - data.bbox[1]) * (data.ny - 1);
-  if (!(gx >= 0 && gy >= 0 && gx <= data.nx - 1 && gy <= data.ny - 1)) return null;
-  const ix = Math.min(gx | 0, data.nx - 2), iy = Math.min(gy | 0, data.ny - 2);
-  const fx = gx - ix, fy = gy - iy, k = iy * data.nx + ix;
-  const bil = values => {
-    const cells = [values[k], values[k + 1], values[k + data.nx], values[k + data.nx + 1]];
-    if (!cells.every(Number.isFinite)) return null;
-    return (cells[0] * (1 - fx) + cells[1] * fx) * (1 - fy)
-         + (cells[2] * (1 - fx) + cells[3] * fx) * fy;
-  };
-  const u = bil(data.u[row]), v = bil(data.v[row]);
-  const gust = bil(data.gust[row]), temperature = bil(data.temperature[row]);
-  const precipitation = bil(data.precipitation[row]);
+  // Exports antérieurs au champ thermique fin : tout tenait sur une grille.
+  const thermal = data.thermal || data;
+  const u = gridBilinear(data, data.u[row], lon, lat);
+  const v = gridBilinear(data, data.v[row], lon, lat);
+  const gust = gridBilinear(data, data.gust[row], lon, lat);
+  const temperature = gridBilinear(thermal, thermal.temperature[row], lon, lat);
+  const precipitation = gridBilinear(thermal, thermal.precipitation[row], lon, lat);
   if (![u, v, gust, temperature, precipitation].every(Number.isFinite)) return null;
   return { u, v, gust, temperature, precipitation, speed: Math.hypot(u, v) * 3.6 };
 }
@@ -1462,7 +1475,7 @@ async function loadWeather() {
   weatherStatus.textContent = 'Chargement des prévisions…';
   weatherStatus.className = '';
   try {
-    if (!weatherPromise) weatherPromise = json('data/weather_forecast.json');
+    if (!weatherPromise) weatherPromise = json(WEATHER_URL);
     weatherData = await weatherPromise;
     if (weatherPanel.classList.contains('open')) drawWeather();
   } catch (error) {
@@ -1944,21 +1957,33 @@ function windAtGrid(d, g, lon, lat, out) {
   return true;
 }
 
+/* Température au pas de 20 km, interpolée entre les deux heures encadrantes.
+ * Ne couvre que ±12 h autour de l'export : au-delà, `temperatureAt` retombe
+ * sur la grille du vent. */
+function fineTemperatureAt(lon, lat, ts) {
+  const w = weatherData, thermal = w?.thermal;
+  if (!thermal) return null;
+  const x = (ts - w.t0) / w.dt;
+  if (!(x >= 0 && x <= w.nt - 1)) return null;
+  const k = Math.min(x | 0, w.nt - 2), f = x - k;
+  const a = gridBilinear(thermal, thermal.temperature[k], lon, lat);
+  const b = gridBilinear(thermal, thermal.temperature[k + 1], lon, lat);
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
+  return a + (b - a) * f;
+}
+
 function temperatureAt(lon, lat) {
   const d = W.data;
+  // Le champ fin ne porte que la fenêtre de prévision. La frise, elle, remonte
+  // dix jours : le champ large — plus grossier, mais complet — prend le relais
+  // dès que le curseur sort de cette fenêtre.
+  const fine = fineTemperatureAt(lon, lat, W.ts);
+  if (Number.isFinite(fine)) return fine;
   // Format courant : la température suit la même interpolation temporelle que
   // le vent. L'instantané reste accepté pour les anciens exports locaux.
   const values = W.cur?.temperature || d?.temperature_2m;
   if (!values) return null;
-  const gx = (lon - d.bbox[0]) / (d.bbox[2] - d.bbox[0]) * (d.nx - 1);
-  const gy = (lat - d.bbox[1]) / (d.bbox[3] - d.bbox[1]) * (d.ny - 1);
-  if (!(gx >= 0 && gy >= 0 && gx <= d.nx - 1 && gy <= d.ny - 1)) return null;
-  const i = Math.min(gx | 0, d.nx - 2), j = Math.min(gy | 0, d.ny - 2);
-  const fx = gx - i, fy = gy - j, k = j * d.nx + i;
-  const cells = [values[k], values[k + 1], values[k + d.nx], values[k + d.nx + 1]];
-  if (!cells.every(Number.isFinite)) return null;
-  return (cells[0] * (1 - fx) + cells[1] * fx) * (1 - fy)
-       + (cells[2] * (1 - fx) + cells[3] * fx) * fy;
+  return gridBilinear(d, values, lon, lat);
 }
 
 // Au zoom de détail, la grille fine se fond dans le champ national sur les
@@ -3908,6 +3933,16 @@ const dataP = Promise.all([
     wind, detail: { nrt, dated, hotspots },
   };
 });
+
+/* Le badge de température lit le champ fin du volet météo : il ne peut plus
+ * attendre l'ouverture du panneau. La requête part en parallèle des données
+ * nationales sans les retarder, et son échec reste sans conséquence —
+ * `temperatureAt` retombe alors sur la grille du vent. */
+weatherPromise = json(WEATHER_URL);
+weatherPromise.then(data => {
+  weatherData = data;
+  temperatureBadge();
+}, () => { weatherPromise = null; });
 
 /*
  * On ne s'accroche pas au seul événement 'load' : il n'est émis qu'après la

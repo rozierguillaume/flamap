@@ -14,6 +14,7 @@ Notes de repérage + ce que j'ai testé pour de vrai le 28/07/2026 sur le feu du
 | **Périmètre haute résolution** | Copernicus EMS Rapid Mapping | heures à jours, seulement si activation | ~10 m et mieux |
 | **Périmètre haute résolution, en autonomie** | Sentinel-2 dNBR | revisite 5 jours | 10–20 m |
 | **Vent (passé + 24 h à venir)** | Open-Meteo / AROME HD | horaire, 7 j en arrière | maille 1,5 km |
+| **Température à 2 m et pluie** | Open-Meteo / AROME HD | horaire, ±12 h | maille 1,5 km, rééchantillonnée à 20 km |
 | **Moyens aériens** | Airplanes.live / ADS-B | quelques secondes | position transpondeur |
 
 Les deux premières lignes et la dernière sont celles implémentées dans
@@ -162,12 +163,35 @@ réanalyse ERA5, 25 km, latence 5 jours).
    Les composantes sont donc à l'opposé : `u = -v·sin(θ)`, `v = -v·cos(θ)`.
 3. **Ne jamais interpoler la direction en degrés** : entre 350° et 10° la
    moyenne naïve donne 180°, soit le vent exactement à l'envers. On stocke u/v.
-4. La température à 2 m et le cumul de précipitations de l'heure précédente
-   sont conservés uniquement dans l'export météo national
-   `weather_forecast.json`. Ce fichier couvre les 12 dernières et les 12
-   prochaines heures ; le navigateur ne le charge qu'à l'ouverture du volet.
-   `wind_coarse.json` ne reprend qu'une seule maille horaire de température pour
-   la lecture instantanée de la légende.
+4. **La température à 2 m ne supporte pas la maille du vent.** Elle perd
+   ~0,65 °C par 100 m d'altitude : sur la grille nationale à ~94 km, un point
+   tombé en montagne tire toute la plaine voisine vers le bas par
+   interpolation. Mesuré le 30/07/2026 : Lyon (179 m) ressortait à 33 °C quand
+   AROME prévoyait 38,7 °C au point, parce que la maille voisine tombait à
+   1 815 m dans le Vercors et une autre à 2 844 m dans les Alpes. La
+   température et les précipitations ont donc leur **propre grille à 20 km**,
+   exportée dans le bloc `thermal` de `weather_forecast.json` : Lyon y remonte
+   à 37,8 °C. Le vent, lui, reste sur la grille large — il varie assez
+   lentement dans l'espace, et le raffiner coûterait cinq fois plus de requêtes
+   sans rien corriger.
+
+   Le pas de 20 km est un compromis mesuré : à 10 km Lyon donne 39,0 °C, soit
+   ~1 °C de mieux, mais le fichier pèse 3,4 fois plus (596 Ko gzip contre
+   169 Ko) pour 62 requêtes au lieu de 18.
+
+   **Ce que ça ne corrige pas** : les vallées alpines encaissées. Un point à
+   509 m en Savoie entouré de mailles à 1 800–2 800 m reste sous-estimé de
+   plusieurs degrés, parce qu'aucun pas de grille raisonnable ne place un
+   voisin au fond de la vallée. Seule une correction par altitude — ramener
+   chaque maille au niveau de la mer, interpoler, puis redescendre à l'altitude
+   réelle du point cliqué — traiterait ce cas, et elle demande un modèle
+   d'élévation côté navigateur, que la carte n'embarque pas.
+
+   `weather_forecast.json` couvre les 12 dernières et les 12 prochaines heures,
+   et le navigateur le charge au démarrage puisque la légende y lit la
+   température. Au-delà de cette fenêtre, la frise remontant dix jours, la
+   légende retombe sur la maille horaire de température grossière que
+   `wind_coarse.json` continue de transporter.
 5. Licence CC BY 4.0, gratuit sans clé pour l'usage non commercial, ~10 000
    requêtes/jour. La carte n'en fait aucune : tout passe par les exports
    `data/wind_coarse.json`, `data/zones/` et `data/weather_forecast.json`.
