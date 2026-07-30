@@ -13,6 +13,7 @@
 <link rel="icon" href="/favicon.svg" type="image/svg+xml" sizes="any">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="manifest" href="/site.webmanifest">
+<link rel="preload" href="/fonts/instrument-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
 
 <!-- apercu des liens : reseaux sociaux, messageries, moteurs de recherche -->
 <meta property="og:type" content="website">
@@ -35,6 +36,13 @@
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5/dist/maplibre-gl.css">
 <script src="https://unpkg.com/maplibre-gl@5/dist/maplibre-gl.js"></script>
 <style>
+  @font-face {
+    font-family: "Instrument Sans";
+    src: url("/fonts/instrument-sans-latin.woff2") format("woff2");
+    font-style: normal;
+    font-weight: 400 700;
+    font-display: swap;
+  }
   :root {
     --burnt:      #2a2320;   /* terre brulee, feu eteint     */
     --burnt-edge: #6b5a4e;
@@ -57,7 +65,8 @@
              padding: 0; overflow: hidden; clip-path: inset(50%); border: 0; }
   html, body { margin: 0; height: 100%; overflow: hidden;
                background: var(--bg); color: var(--ink);
-               font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+               font: 14px/1.45 "Instrument Sans", -apple-system, BlinkMacSystemFont,
+                     "Segoe UI", sans-serif;
                -webkit-text-size-adjust: 100%; }
   #map { position: absolute; inset: 0; background: var(--bg); }
   /* Les nappes atmospheriques sont peintes a la main, au-dessus de la carte
@@ -98,8 +107,13 @@
   #head { position: absolute; z-index: 500; top: 14px; left: 14px;
           padding: 11px 18px 12px; }
   #head .brand { display: flex; align-items: center; gap: 10px; pointer-events: none; }
-  #head .mark { display: block; width: 42px; height: auto; flex: none; }
-  #head h1 { margin: 0; font-size: 21px; font-weight: 700; letter-spacing: .4px; }
+  #head .mark { display: block; width: 40px; height: auto; flex: none; }
+  #head h1 {
+    margin: 0; font-size: 23px; font-weight: 700; line-height: 1;
+    letter-spacing: -.04em;
+    font-variation-settings: "wdth" 95, "wght" 700;
+    font-feature-settings: "ss02" 1;
+  }
   #head h1 .brand-hot { color: var(--hot); }
   #home-btn { position: absolute; z-index: 1; inset: 0; width: 100%; height: 100%;
               border: 0; border-radius: inherit; background: transparent;
@@ -115,7 +129,7 @@
     min-width: 0; padding: 7px 10px; border: 1px solid rgba(255,255,255,.12);
     border-radius: 8px; background: rgba(13,15,18,.85); color: #d8d5d1;
     backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
-    font: inherit; font-size: 11.5px; line-height: 1.2; cursor: pointer;
+    font: inherit; font-size: 12px; font-weight: 600; line-height: 1.2; cursor: pointer;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   #incidents button:hover, #incidents button:focus-visible {
@@ -158,12 +172,12 @@
   body.past #legend .burnt-key { opacity: .32; }
   #layers-btn {
     display: block; position: absolute; z-index: 501; top: 14px; right: 58px;
-    padding: 8px 12px; color: var(--ink-dim); font: inherit; font-size: 10.5px;
-    line-height: 1.45; cursor: pointer;
+    padding: 8px 12px; color: #cbc7c2; font: inherit; font-size: 12px;
+    font-weight: 600; line-height: 1.45; cursor: pointer;
   }
   #layers-btn:hover { color: var(--ink); }
   #layers-btn svg, #weather-btn svg { width: 16px; height: 16px; flex: none;
-                                     stroke-width: 1.8; }
+                                     stroke-width: 2; }
   #layers-btn svg { margin-right: 5px; color: #fff; vertical-align: -3px; }
   #layers-btn::after { content: " ›"; }
   #layers-btn[aria-expanded="true"]::after { content: " ⌄"; }
@@ -173,15 +187,28 @@
   #legend span { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
   #legend i { width: 12px; height: 12px; border-radius: 50%; flex: none; }
   #legend i.poly { border-radius: 3px; }
+  #legend-btn {
+    display: none; font: inherit; font-size: 11.5px; font-weight: 600;
+    color: #bcb7b1; text-align: left; cursor: pointer;
+  }
 
   /* Echelle continue d'anciennete. Le degrade et la position des reperes sont
      poses par `drawAgeKey()` a partir de la table qui peint la carte : une
      seule source, elles ne peuvent pas diverger. */
-  #agekey { align-items: flex-start; }
-  #ageramp { position: relative; display: block; width: 156px; height: 8px;
-             border-radius: 4px; margin-bottom: 13px; }
-  #ageramp b { position: absolute; top: 11px; font-weight: 400; font-size: 9.5px;
-               line-height: 1; color: var(--ink-dim); white-space: nowrap; }
+  #agekey { align-items: flex-start; width: 100%; }
+  #ageramp {
+    position: relative; display: block; width: 156px; height: 10px;
+    border-radius: 5px; margin-bottom: 17px;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.08);
+  }
+  #ageramp b {
+    position: absolute; top: 15px; font-weight: 400; font-size: 10px;
+    line-height: 1; color: var(--ink-dim); white-space: nowrap;
+  }
+  #ageramp b::before {
+    content: ""; position: absolute; top: -5px; left: var(--tick-offset, 0);
+    width: 1px; height: 3px; background: rgba(255,255,255,.28);
+  }
 
   /* lecture du vent : la fleche pointe la ou le vent pousse */
   #windkey { color: var(--wind); font-variant-numeric: tabular-nums; }
@@ -276,8 +303,8 @@
   /* ---- previsions meteo, repliees tant qu'elles ne sont pas demandees ---- */
   #weather-btn {
     position: absolute; z-index: 501; top: 14px; right: 165px;
-    height: 35px; padding: 0 12px; color: var(--ink-dim);
-    font: inherit; font-size: 11px; cursor: pointer;
+    height: 35px; padding: 0 12px; color: #cbc7c2;
+    font: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
   }
   #weather-btn:hover, #weather-btn[aria-expanded="true"] { color: var(--ink); }
   #weather-btn .weather-icon { margin-right: 5px; color: #fff; vertical-align: -3px; }
@@ -295,7 +322,8 @@
   #weather-close:hover { background: #2c313a; }
   #weather-place { margin: 12px 0 7px; font-size: 12px; color: var(--ink-dim);
                    font-variant-numeric: tabular-nums; }
-  #weather-follow { display: block; margin: 0 0 8px; font: inherit; font-size: 11.5px;
+  #weather-follow { display: block; margin: 0 0 8px; font: inherit; font-size: 12px;
+    font-weight: 600;
     color: var(--ink); background: #21252b; border: 1px solid #363b43;
     border-radius: 7px; padding: 5px 9px; cursor: pointer; }
   /* `display: block` sur un sélecteur d'id l'emporte sur la règle `[hidden]` du
@@ -310,7 +338,8 @@
   #weather-chart-wrap { position: relative; }
   #weather-chart { display: block; width: 100%; height: auto; overflow: visible;
                    cursor: crosshair; }
-  #weather-chart text { font: 11px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  #weather-chart text { font: 11px "Instrument Sans", -apple-system, BlinkMacSystemFont,
+                        "Segoe UI", sans-serif; }
   #weather-chart .axis { fill: #9da3aa; }
   #weather-chart .weather-band { stroke: rgba(255,255,255,.10); stroke-width: .8; }
   #weather-chart .temp-band { fill: rgba(255,107,26,.070); }
@@ -360,7 +389,7 @@
     color: #fff; font-size: clamp(20px, 1.8vw, 28px); font-weight: 700;
     line-height: 1.1; letter-spacing: -.02em; white-space: nowrap;
     font-variant-numeric: tabular-nums;
-    text-shadow: 0 2px 5px rgba(0,0,0,.95), 0 0 18px rgba(0,0,0,.75);
+    text-shadow: 0 1px 3px rgba(0,0,0,.9), 0 0 10px rgba(0,0,0,.5);
   }
 
   /* Les credits prenaient six lignes de mentions qu'on lit une fois : sur
@@ -378,8 +407,8 @@
   /* Liens de pied separes des sources : ils ne creditent personne. */
   #credits .cr-foot { margin: 9px 0 0; padding-top: 8px; border-top: 1px solid #322f2b; }
   #credits #updated { display: block; margin-top: 5px; }
-  #cr-btn { display: block; font: inherit; font-size: 10.5px; color: var(--ink-dim);
-            text-align: left; cursor: pointer; }
+  #cr-btn { display: block; font: inherit; font-size: 11.5px; font-weight: 600;
+            color: #bcb7b1; text-align: left; cursor: pointer; }
   #cr-btn:hover { color: var(--ink); }
   #cr-btn::after { content: " ›"; }
   #cr-btn[aria-expanded="true"]::after { content: " ⌄"; }
@@ -439,6 +468,7 @@
             display: flex; align-items: flex-end; gap: 14px; pointer-events: none; }
     #dock > * { pointer-events: auto; }
     #legend { flex-direction: column; gap: 7px; padding: 13px 16px; }
+    #legend #ageramp { width: 100%; }
     #timebar { flex: 1; max-width: 620px; margin: 0 auto; padding: 13px 16px; }
     /* Le bouton reste dans la ligne du dock, le panneau vient se poser au-dessus
        de lui plutôt qu'à côté : hors du flux, il ne rétrécit pas la réglette en
@@ -473,7 +503,7 @@
                  max-width: calc(100vw - 72px);
                  overflow-x: auto; scrollbar-width: none; }
     #incidents::-webkit-scrollbar { display: none; }
-    #incidents button { flex: none; max-width: 220px; font-size: 11px; }
+    #incidents button { flex: none; max-width: 220px; font-size: 11.5px; }
     #incidents.layers-open, #incidents.credits-open, #incidents.activity-open,
     #incidents.weather-open { display: none; }
 
@@ -504,7 +534,7 @@
       position: absolute; z-index: 500; left: 10px; right: 10px;
       bottom: calc(10px + var(--safe-b));
       display: grid; grid-template-columns: 1fr;
-      grid-template-areas: "timeline" "legend";
+      grid-template-areas: "legend" "timeline";
       align-items: end; gap: 8px; pointer-events: none;
     }
     #dock > * { pointer-events: auto; }
@@ -513,6 +543,13 @@
       grid-template-columns: auto minmax(110px, 1fr);
       gap: 7px 12px; padding: 10px 12px; font-size: 11.5px;
     }
+    #legend:not(.open) { display: none; }
+    #legend-btn {
+      position: fixed; z-index: 501; right: 10px;
+      display: grid; place-items: center;
+      width: 42px; height: 42px; padding: 0;
+    }
+    #legend-btn svg { width: 21px; height: 21px; }
     /* Les deux emprises s'empilent dans la colonne etroite, le degrade tient
        la colonne large sur leurs deux rangs plutot que de laisser un trou. */
     #legend .burnt-key { grid-column: 1; }
@@ -633,13 +670,18 @@
 
 <div id="head" class="glass">
   <div class="brand">
-    <!-- trois disques legerement superposes, chacun devant le precedent et plus
-         gros que lui : les trois couleurs de la legende, du feu ancien au front
-         actif, la taille montant avec l'intensite -->
-    <svg class="mark" viewBox="0 0 39 20" aria-hidden="true" focusable="false">
-      <circle cx="5"  cy="10" r="5"   fill="var(--recent)"></circle>
-      <circle cx="15" cy="10" r="7.5" fill="var(--hot)"></circle>
-      <circle cx="29" cy="10" r="10"  fill="var(--front)"></circle>
+    <!-- Constellation de detections satellite : un foyer actif dominant,
+         deux foyers secondaires et six observations plus discretes. -->
+    <svg class="mark" viewBox="0 0 36 34" aria-hidden="true" focusable="false">
+      <circle cx="19" cy="13"   r="7"   fill="var(--front)"></circle>
+      <circle cx="9"  cy="22"   r="5"   fill="var(--hot)"></circle>
+      <circle cx="27" cy="25"   r="5.2" fill="var(--recent)"></circle>
+      <circle cx="8.5" cy="6.5" r="1.6" fill="var(--front)"></circle>
+      <circle cx="25" cy="3.5"  r="1.4" fill="var(--recent)"></circle>
+      <circle cx="34" cy="11.5" r="1.5" fill="var(--recent)"></circle>
+      <circle cx="2"  cy="29.5" r="1.4" fill="var(--hot)"></circle>
+      <circle cx="17" cy="31.5" r="1.5" fill="var(--front)"></circle>
+      <circle cx="34" cy="30"   r="1.4" fill="var(--hot)"></circle>
     </svg>
     <h1><span class="brand-hot">Fla</span>map<span class="sr-only"> — carte des incendies en France en quasi temps réel</span></h1>
   </div>
@@ -756,12 +798,12 @@
 
 <div id="dock">
   <div id="legend" class="glass">
-    <span class="burnt-key" title="Périmètre EFFIS daté : la surface brûlée telle qu'elle était au cran affiché"><i class="poly" style="background:var(--burnt);border:1px solid var(--burnt-edge)"></i>terre brûlée (datée)</span>
+    <span class="burnt-key" title="Périmètre touché par un incendie, recensé par EFFIS et daté au cran affiché. Donnée indicative susceptible d'être révisée"><i class="poly" style="background:var(--burnt);border:1px solid var(--burnt-edge)"></i>périmètre touché</span>
     <!-- Même famille de bruns, deux crans plus clair : l'emprise NRT est
          assombrie assez pour se lire, pas assez pour passer pour un périmètre
-         confirmé. Le voile de la carte reste bien plus discret (30 %) qu'un
+         déjà recensé. Le voile de la carte reste bien plus discret (30 %) qu'un
          aplat de 12 px ne peut le montrer. -->
-    <span class="burnt-key" title="Emprise EFFIS quasi temps réel, sans date ni surface : elle peut aussi contenir d'anciennes cicatrices"><i class="poly" style="background:var(--nrt);border:1px solid var(--nrt-edge)"></i>emprise NRT</span>
+    <span class="burnt-key" title="Périmètre potentiellement touché par un incendie, détecté automatiquement par EFFIS en quasi temps réel. Donnée indicative susceptible d'être révisée"><i class="poly" style="background:var(--nrt);border:1px solid var(--nrt-edge)"></i>périmètre potentiellement touché</span>
     <!-- l'échelle d'ancienneté : le dégradé et la position des repères sont
          posés par le script, à partir de la rampe qui peint la carte -->
     <span id="agekey" title="Couleur d'un foyer selon son ancienneté, de dix jours à l'instant de la détection">
@@ -783,6 +825,20 @@
       <span id="windval">—</span>
     </span>
   </div>
+  <button id="legend-btn" class="glass" aria-expanded="false"
+          aria-controls="legend" aria-label="Afficher la légende" title="Afficher la légende">
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <circle cx="5" cy="5" r="2" fill="var(--front)"></circle>
+      <path d="M10 5h10" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round"></path>
+      <rect x="3" y="10" width="4" height="4" rx="1" fill="var(--burnt-edge)"></rect>
+      <path d="M10 12h10" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round"></path>
+      <circle cx="5" cy="19" r="2" fill="var(--hot)"></circle>
+      <path d="M10 19h10" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round"></path>
+    </svg>
+  </button>
 
   <div id="timebar" class="glass">
     <div id="timerow">
@@ -952,14 +1008,33 @@ function drawAgeKey() {
   // sens de lecture : l'ancien a gauche, la detection fraiche a droite
   ramp.style.background = 'linear-gradient(90deg,'
     + AGE_COLOR.map(([a, c]) => `${c} ${agePos(a).toFixed(1)}%`).reverse().join(',') + ')';
-  for (const b of ramp.querySelectorAll('b')) {
-    const p = agePos(+b.dataset.age);
-    b.style.left = p.toFixed(1) + '%';
-    // les reperes des extremites rentrent dans la barre, celui du milieu se centre
-    b.style.transform = `translateX(${p < 8 ? 0 : p > 92 ? -100 : -50}%)`;
+  requestAnimationFrame(() => positionAgeLabels(ramp));
+}
+
+/* Les libelles sont d'abord centres sur leur repere, puis repousses de droite
+ * a gauche s'ils se chevauchent. Leur petit trait reste, lui, a la position
+ * exacte de l'age : la lecture demeure juste meme sur une barre etroite. */
+function positionAgeLabels(ramp) {
+  const width = ramp.clientWidth;
+  if (!width) return;
+  const gap = 7;
+  const labels = [...ramp.querySelectorAll('b')]
+    .map(b => ({ b, x: agePos(+b.dataset.age) / 100 * width,
+                 w: b.getBoundingClientRect().width }))
+    .sort((a, b) => a.x - b.x);
+  const starts = labels.map(({ x, w }) => Math.max(0, Math.min(width - w, x - w / 2)));
+  for (let i = labels.length - 2; i >= 0; i--)
+    starts[i] = Math.min(starts[i], starts[i + 1] - gap - labels[i].w);
+  for (let i = 0; i < labels.length; i++) {
+    const start = Math.max(0, starts[i]);
+    labels[i].b.style.left = `${start}px`;
+    labels[i].b.style.transform = 'none';
+    labels[i].b.style.setProperty('--tick-offset', `${labels[i].x - start}px`);
   }
 }
 drawAgeKey();
+new ResizeObserver(() => positionAgeLabels(document.getElementById('ageramp')))
+  .observe(document.getElementById('ageramp'));
 
 /*
  * Un pixel VIIRS couvre 375 m au sol : a z9 il vaut 2 px d'ecran, a z14 il en
@@ -1108,6 +1183,13 @@ document.getElementById('cr-btn').addEventListener('click', e => {
     document.getElementById('layers-btn').setAttribute('aria-expanded', 'false');
     document.getElementById('incidents').classList.remove('layers-open');
   }
+});
+
+document.getElementById('legend-btn').addEventListener('click', e => {
+  const open = document.getElementById('legend').classList.toggle('open');
+  e.currentTarget.setAttribute('aria-expanded', open);
+  e.currentTarget.setAttribute('aria-label', open ? 'Masquer la légende' : 'Afficher la légende');
+  e.currentTarget.title = open ? 'Masquer la légende' : 'Afficher la légende';
 });
 
 document.getElementById('layers-btn').addEventListener('click', e => {
@@ -1604,6 +1686,11 @@ function placeClock() {
   const r = anchor.getBoundingClientRect();
   clockEl.style.left = `${r.left + r.width / 2}px`;
   clockEl.style.bottom = `${innerHeight - r.top + (MOBILE ? 10 : 9)}px`;
+  if (MOBILE) {
+    const legendBtn = document.getElementById('legend-btn');
+    const clockH = clockEl.getBoundingClientRect().height;
+    legendBtn.style.bottom = `${innerHeight - r.top + 18 + clockH}px`;
+  }
 }
 addEventListener('resize', placeClock);
 new ResizeObserver(placeClock).observe(document.getElementById('dock'));

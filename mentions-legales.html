@@ -10,8 +10,16 @@
 <meta name="theme-color" content="#0d0f12">
 <link rel="icon" href="/favicon.ico" sizes="48x48">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml" sizes="any">
+<link rel="preload" href="/fonts/instrument-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
 
 <style>
+  @font-face {
+    font-family: "Instrument Sans";
+    src: url("/fonts/instrument-sans-latin.woff2") format("woff2");
+    font-style: normal;
+    font-weight: 400 700;
+    font-display: swap;
+  }
   :root {
     color-scheme: dark;
     --bg: #0d0f12;
@@ -21,8 +29,8 @@
     --line: #353a41;
     --hot: #ff6b1a;
     --front: #ffd84d;
-    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
-                 "Segoe UI", sans-serif;
+    font-family: "Instrument Sans", ui-sans-serif, system-ui, -apple-system,
+                 BlinkMacSystemFont, "Segoe UI", sans-serif;
   }
   * { box-sizing: border-box; }
   body { margin: 0; color: var(--ink); background: var(--bg); }
@@ -38,12 +46,12 @@
     display: flex; align-items: center; gap: 10px;
     color: var(--ink); text-decoration: none;
   }
-  .mark { position: relative; width: 39px; height: 20px; flex: none; }
-  .mark i { position: absolute; border-radius: 50%; }
-  .mark i:nth-child(1) { left: 0; top: 5px; width: 10px; height: 10px; background: #b1341f; }
-  .mark i:nth-child(2) { left: 7.5px; top: 2.5px; width: 15px; height: 15px; background: var(--hot); }
-  .mark i:nth-child(3) { left: 19px; top: 0; width: 20px; height: 20px; background: var(--front); }
-  .brand strong { font-size: 20px; letter-spacing: -.04em; color: var(--hot); }
+  .mark { display: block; width: 38px; height: auto; flex: none; }
+  .brand strong {
+    font-size: 22px; line-height: 1; letter-spacing: -.04em; color: var(--hot);
+    font-variation-settings: "wdth" 95, "wght" 700;
+    font-feature-settings: "ss02" 1;
+  }
   .brand strong span { color: var(--ink); }
   header > a { color: var(--dim); font-size: 14px; }
   main { padding: 56px 0 70px; }
@@ -82,8 +90,18 @@
 <body>
 <header>
   <a class="brand" href="/" aria-label="Retour à Flamap">
-    <span class="mark" aria-hidden="true"><i></i><i></i><i></i></span>
-    <strong>fla<span>map</span></strong>
+    <svg class="mark" viewBox="0 0 36 34" aria-hidden="true" focusable="false">
+      <circle cx="19" cy="13" r="7" fill="#ffd84d"/>
+      <circle cx="9" cy="22" r="5" fill="#ff6b1a"/>
+      <circle cx="27" cy="25" r="5.2" fill="#b1341f"/>
+      <circle cx="8.5" cy="6.5" r="1.6" fill="#ffd84d"/>
+      <circle cx="25" cy="3.5" r="1.4" fill="#b1341f"/>
+      <circle cx="34" cy="11.5" r="1.5" fill="#b1341f"/>
+      <circle cx="2" cy="29.5" r="1.4" fill="#ff6b1a"/>
+      <circle cx="17" cy="31.5" r="1.5" fill="#ffd84d"/>
+      <circle cx="34" cy="30" r="1.4" fill="#ff6b1a"/>
+    </svg>
+    <strong>Fla<span>map</span></strong>
   </a>
   <a href="/">Retour à la carte</a>
 </header>
