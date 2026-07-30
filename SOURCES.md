@@ -14,7 +14,7 @@ Notes de repérage + ce que j'ai testé pour de vrai le 28/07/2026 sur le feu du
 | **Périmètre haute résolution** | Copernicus EMS Rapid Mapping | heures à jours, seulement si activation | ~10 m et mieux |
 | **Périmètre haute résolution, en autonomie** | Sentinel-2 dNBR | revisite 5 jours | 10–20 m |
 | **Vent (passé + 24 h à venir)** | Open-Meteo / AROME HD | horaire, 7 j en arrière | maille 1,5 km |
-| **Température à 2 m et pluie** | Open-Meteo / AROME HD | horaire, ±12 h | maille 1,5 km, rééchantillonnée à 20 km |
+| **Température à 2 m et pluie** | Open-Meteo / AROME HD | horaire, ±18 h | maille 1,5 km, rééchantillonnée à 20 km |
 | **Moyens aériens** | Airplanes.live / ADS-B | quelques secondes | position transpondeur |
 
 Les deux premières lignes et la dernière sont celles implémentées dans
@@ -186,10 +186,12 @@ réanalyse ERA5, 25 km, latence 5 jours).
    réelle du point cliqué — traiterait ce cas, et elle demande un modèle
    d'élévation côté navigateur, que la carte n'embarque pas.
 
-   `thermal.json` couvre les 12 dernières et les 12 prochaines heures, avec sa
-   propre base de temps : il est collecté toutes les 6 h par un workflow
-   distinct, alors que le vent l'est toutes les 2 h, et les deux champs ne se
-   lisent donc jamais au même indice de ligne. Le navigateur le charge au
+   `thermal.json` couvre ±18 h, avec sa propre base de temps : il est collecté
+   toutes les 6 h par un workflow distinct, alors que le vent l'est toutes les
+   2 h, et les deux champs ne se lisent donc jamais au même indice de ligne. La
+   fenêtre est plus large que les ±12 h du vent exprès : les deux collectes
+   peuvent être décalées de six heures, et sans cette marge le graphique perdait
+   jusqu'à six heures de tracé. Le navigateur le charge au
    démarrage puisque la légende y lit la température. Au-delà de cette fenêtre —
    la frise remonte dix jours — ou si le fichier manque encore, la légende comme
    le volet retombent sur la maille horaire grossière de température et de pluie
