@@ -6,7 +6,7 @@
 <meta name="robots" content="noindex,nofollow">
 <title>Flamap — préparer une publication</title>
 <meta name="theme-color" content="#0d0f12">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230d0f12'/%3E%3Ccircle cx='10.5' cy='20.7' r='7' fill='%23b1341f'/%3E%3Ccircle cx='21.5' cy='20.7' r='7' fill='%23ff6b1a'/%3E%3Ccircle cx='16' cy='11.3' r='7' fill='%23ffd84d'/%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230d0f12'/%3E%3Ccircle cx='6.3' cy='16' r='3.3' fill='%23b1341f'/%3E%3Ccircle cx='13' cy='16' r='5' fill='%23ff6b1a'/%3E%3Ccircle cx='22.3' cy='16' r='6.7' fill='%23ffd84d'/%3E%3C/svg%3E">
 <style>
   :root {
     color-scheme: dark;
@@ -35,13 +35,13 @@
     justify-content: space-between; gap: 24px;
   }
   .brand { display: flex; align-items: center; gap: 9px; text-decoration: none; }
-  .mark { position: relative; width: 25px; height: 23.5px; flex: 0 0 auto; }
-  .mark i { position: absolute; width: 14px; height: 14px; border-radius: 50%; }
-  .mark i:nth-child(1) { left: 0; top: 9.5px; background: var(--recent); }
-  .mark i:nth-child(2) { left: 11px; top: 9.5px; background: var(--hot); }
-  .mark i:nth-child(3) { left: 5.5px; top: 0; background: var(--front); }
+  .mark { position: relative; width: 39px; height: 20px; flex: 0 0 auto; }
+  .mark i { position: absolute; border-radius: 50%; }
+  .mark i:nth-child(1) { left: 0; top: 5px; width: 10px; height: 10px; background: var(--recent); }
+  .mark i:nth-child(2) { left: 7.5px; top: 2.5px; width: 15px; height: 15px; background: var(--hot); }
+  .mark i:nth-child(3) { left: 19px; top: 0; width: 20px; height: 20px; background: var(--front); }
   .brand strong { font-size: 20px; letter-spacing: -.04em; color: var(--hot); }
-  .brand strong span { color: var(--front); }
+  .brand strong span { color: var(--ink); }
   header > a { color: var(--dim); font-size: 13px; text-underline-offset: 3px; }
   main {
     width: min(1180px, calc(100% - 32px)); margin: 24px auto 48px;
@@ -209,17 +209,17 @@ function drawCard(current, previous, latest, series) {
   ctx.fillRect(0, 0, W, H);
 
   ctx.fillStyle = '#b1341f';
-  ctx.beginPath(); ctx.arc(58, 58, 14, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(51, 49, 7, 0, Math.PI * 2); ctx.fill();
   ctx.fillStyle = '#ff6b1a';
-  ctx.beginPath(); ctx.arc(80, 58, 14, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(65, 49, 10.5, 0, Math.PI * 2); ctx.fill();
   ctx.fillStyle = '#ffd84d';
-  ctx.beginPath(); ctx.arc(69, 39, 14, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(84.6, 49, 14, 0, Math.PI * 2); ctx.fill();
   ctx.font = '700 27px system-ui, -apple-system, sans-serif';
   ctx.fillStyle = '#ff6b1a';
-  ctx.fillText('Fla', 108, 59);
+  ctx.fillText('Fla', 112, 59);
   const fla = ctx.measureText('Fla').width;
-  ctx.fillStyle = '#ffd84d';
-  ctx.fillText('map', 108 + fla, 59);
+  ctx.fillStyle = '#e8e6e3';
+  ctx.fillText('map', 112 + fla, 59);
 
   const countText = nf.format(current);
   const titleSize = countText.length > 5 ? 40 : countText.length > 3 ? 44 : 48;
