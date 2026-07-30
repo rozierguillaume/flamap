@@ -71,13 +71,29 @@ WIND_DETAIL_STRIDE = 3
 WIND_COARSE_N = 15
 # Pas de la grille de temperature, sans rapport avec celui du vent : voir
 # `fetch_thermal`. Descendre a 10 km ne gagnerait qu'environ 1 °C en plaine
-# pour 3,4 fois le poids du fichier et 62 requetes au lieu de 18.
+# pour 3,4 fois le poids du fichier et 36 lots au lieu de 10.
 THERMAL_SPACING_KM = 20
 THERMAL_PAST_DAYS = 1
+# Le vrai plafond d'un lot est la longueur de l'URL, pas le service : 430 points
+# de la grille nationale tiennent en 6 750 caracteres et repondent en moins
+# d'une seconde, la ou 1 000 points renvoient un HTTP 414. La grille thermique
+# tient donc en dix lots au lieu de dix-huit, et chaque aller-retour economise
+# est une occasion de moins de tomber sur un bridage.
+THERMAL_BATCH = 430
+# Au-dela, on abandonne le champ fin et on repart sur la grille du vent. Sans ce
+# plafond la collecte n'est bornee que par la chance : le 30/07/2026, cinq
+# poignees de main expirees ont suffi a depasser les 25 min de l'etape et a
+# emporter foyers et perimetres avec elles.
+THERMAL_DEADLINE = 6 * 60
 FIRMS_FINE_MIN = 50
 FIRMS_TIMEOUT = 60
 FIRMS_ATTEMPTS = 2
 WIND_REQUEST_PAUSE = 6
+# Une reponse saine arrive en moins d'une seconde. Un timeout genereux ne protege
+# donc rien : il fixe le prix d'un incident. A 180 s, cinq poignees de main
+# expirees coutaient 15 min de temps mort et faisaient tomber la collecte
+# entiere sur son plafond de 25 min.
+OPEN_METEO_TIMEOUT = 30
 # EX_TEMPFAIL : le workflow reconnaît ce cas externe et conserve le site actif.
 TEMPORARY_SOURCE_FAILURE = 75
 
@@ -537,7 +553,7 @@ def meteo_request(points, model, variables, past_days):
         url += f"&models={model}"
     for attempt in range(4):
         try:
-            data = json.loads(get(url, timeout=180))
+            data = json.loads(get(url, timeout=OPEN_METEO_TIMEOUT))
             return data if isinstance(data, list) else [data]
         except Exception as error:
             if attempt == 3:
@@ -562,14 +578,26 @@ def meteo_request(points, model, variables, past_days):
             time.sleep(delay)
 
 
-def request_batches(points, model, variables, past_days):
+class DeadlineExceeded(Exception):
+    """Le budget de temps d'une serie de lots est epuise."""
+
+
+def request_batches(points, model, variables, past_days, batch_size=WIND_BATCH,
+                    budget=None):
     batches = [
-        points[index:index + WIND_BATCH]
-        for index in range(0, len(points), WIND_BATCH)
+        points[index:index + batch_size]
+        for index in range(0, len(points), batch_size)
     ]
-    print(f"  {len(batches)} lots de {WIND_BATCH} points au plus")
+    print(f"  {len(batches)} lots de {batch_size} points au plus")
+    limit = None if budget is None else time.monotonic() + budget
     chunks = []
-    for batch in batches:
+    for number, batch in enumerate(batches, 1):
+        # Le controle porte sur le lot suivant, jamais sur celui en cours : une
+        # serie interrompue au milieu ne donnerait aucune grille exploitable.
+        if limit is not None and time.monotonic() > limit:
+            raise DeadlineExceeded(
+                f"{number - 1}/{len(batches)} lots en {budget} s"
+            )
         chunks.append(meteo_request(batch, model, variables, past_days))
         # Les runners GitHub partagent leurs IP avec beaucoup de jobs. Espacer
         # franchement les requêtes évite qu'une série de grilles fines soit
@@ -683,7 +711,13 @@ def fetch_thermal(box, spacing_km):
           f"pas ~{dx / (nx - 1):.0f} km")
 
     variables = ["temperature_2m", "precipitation"]
-    series = request_batches(points, WIND_MODEL, variables, THERMAL_PAST_DAYS)
+    started = time.monotonic()
+
+    def remaining():
+        return THERMAL_DEADLINE - (time.monotonic() - started)
+
+    series = request_batches(points, WIND_MODEL, variables, THERMAL_PAST_DAYS,
+                            THERMAL_BATCH, remaining())
     holes = sum(
         value is None
         for location in series
@@ -697,7 +731,10 @@ def fetch_thermal(box, spacing_km):
             "bascule best_match",
             file=sys.stderr,
         )
-        series = request_batches(points, None, variables, THERMAL_PAST_DAYS)
+        # La reprise partage le meme budget : hors domaine AROME, mieux vaut un
+        # champ large qu'une seconde serie complete payee au prix du delai.
+        series = request_batches(points, None, variables, THERMAL_PAST_DAYS,
+                                 THERMAL_BATCH, remaining())
         model = "best_match"
 
     keep, timestamps = keep_recent(series)
@@ -890,20 +927,6 @@ def main():
         coarse_box, coarse_spacing, "grille nationale", temperature=True
     )
 
-    # La temperature du vent grossier reste exportee : elle sert de repli au
-    # badge quand la frise remonte au-dela de la fenetre du champ fin.
-    print("\nOpen-Meteo / AROME HD - temperature a 2 m")
-    try:
-        thermal = fetch_thermal(coarse_box, THERMAL_SPACING_KM)
-    except Exception as error:
-        # Dix-huit requetes de plus, c'est dix-huit occasions de tomber sur une
-        # coupure passagere. Une temperature trop lissee vaut mieux qu'une carte
-        # sans foyers : on repart sur la grille du vent, comme avant l'ajout du
-        # champ fin, et le passage suivant retentera.
-        print(f"  ! grille thermique indisponible, repli sur le champ large "
-              f"({error})", file=sys.stderr)
-        thermal = None
-
     fine_keys = fine_wind_tiles(recent, hotspots, latest)
     fine_wind = {}
     print(f"  {len(fine_keys)} cellules avec vent fin")
@@ -928,6 +951,23 @@ def main():
             print(f"  ! {name} : fin du vent fin ({error})", file=sys.stderr)
             break
         fine_wind[(ix, iy)] = whole_wind(raw, WIND_DETAIL_STRIDE)
+
+    # Collectee en dernier, et sous plafond de temps : c'est la seule serie qui
+    # sache se replier entierement sans rien perdre d'essentiel. Passee avant le
+    # vent fin, elle mangeait le budget de l'etape et emportait foyers et
+    # perimetres avec elle. La temperature du vent grossier reste exportee : elle
+    # sert de repli au badge quand la frise remonte au-dela du champ fin.
+    print("\nOpen-Meteo / AROME HD - temperature a 2 m")
+    try:
+        thermal = fetch_thermal(coarse_box, THERMAL_SPACING_KM)
+    except Exception as error:
+        # Dix lots de plus, c'est dix occasions de tomber sur un bridage. Une
+        # temperature trop lissee vaut mieux qu'une carte sans foyers : on repart
+        # sur la grille du vent, comme avant l'ajout du champ fin, et le passage
+        # suivant retentera.
+        print(f"  ! grille thermique abandonnee, repli sur le champ large "
+              f"({error})", file=sys.stderr)
+        thermal = None
 
     print("\nDecoupage")
     hotspot_cells = partition_features(hotspots["features"], point=True)

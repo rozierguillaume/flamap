@@ -226,12 +226,11 @@ affiché : la nappe ne présente ni trou ni bord carré.
   (`effis.nrt.ba.poly`), et ajoute deux epochs (`ts`, `lu`) exploitables
   directement par le curseur.
 - Open-Meteo sert le modèle **AROME HD** de Météo-France en JSON, sans clé. Le
-  script demande 225 points pour le champ national de vent, environ 4 350 pour
+  script demande 225 points pour le champ national de vent, environ 4 290 pour
   la grille de température à 20 km, puis de petites grilles de vent à 20 km
-  dans les cellules actives — soit une vingtaine de requêtes par passage, les
-  points étant groupés par lots de 250. Les requêtes sont séquentielles avec
-  reprise bornée sur HTTP 429 et espacées de six secondes pour les IP partagées
-  des runners GitHub. Si une grille fine reste indisponible, la série fine
+  dans les cellules actives — soit une trentaine de requêtes par passage. Les
+  requêtes sont séquentielles et espacées de six secondes pour les IP partagées
+  des runners GitHub. Si une grille fine de vent reste indisponible, la série
   s'arrête proprement : le vent national grossier demeure affiché partout.
   Vitesse et azimut sont convertis en composantes est/nord.
 
@@ -240,6 +239,17 @@ affiché : la nappe ne présente ni trou ni bord carré.
   ses points supplémentaires. Elle pèse au total environ 5 % de données de plus
   qu'avant son introduction, les grilles fines de vent restant de loin le poste
   dominant.
+
+  Le quota Open-Meteo se compte par variables et par durée, pas par point : un
+  lot de 430 points pèse un appel comme un lot d'un seul. La contrainte réelle
+  est le nombre d'aller-retours depuis l'IP partagée du runner, qui déclenche
+  au-delà d'un certain rythme des HTTP 429 et des poignées de main TLS qui
+  restent pendantes. D'où trois garde-fous : des lots de 430 points — le
+  plafond est la longueur d'URL, 1 000 points renvoient un `HTTP 414` — un
+  timeout de 30 s là où une réponse saine arrive en moins d'une seconde, et un
+  budget de six minutes pour la grille de température, collectée en dernier.
+  Passé ce délai elle est abandonnée au profit du champ large : une température
+  trop lissée vaut mieux qu'une carte sans foyers.
 - Airplanes.live n'est pas interrogé par le collecteur : le navigateur lui
   demande en une seule fois les positions courantes des ICAO24 connus dès
   l'ouverture de la carte. Les réponses sans position fraîche sont
@@ -320,9 +330,13 @@ compressés et 5 Mio pour l'archive gzip transmise à Pages. La limite officiell
 de publication est de 1 Go et le déploiement doit finir en moins de 10 minutes ;
 l'artefact dispose donc d'une marge très large. La génération Python elle-même
 n'utilise que la bibliothèque standard et dispose de 25 minutes dans le
-workflow. Les reprises bornées sur HTTP 429 protègent les requêtes Open-Meteo
-sans pouvoir bloquer le runner indéfiniment ; l'échec d'une seule grille fine
-ne bloque pas le rafraîchissement des incendies. Les quatre timeouts FIRMS
+workflow. Les reprises bornées — HTTP 429 comme coupures de transport —
+protègent les requêtes Open-Meteo sans pouvoir bloquer le runner indéfiniment ;
+l'échec d'une seule grille fine ne bloque pas le rafraîchissement des
+incendies. Ces 25 minutes ont déjà été atteintes une fois, le 30 juillet 2026 :
+cinq poignées de main TLS expirées à 180 s chacune avaient suffi à consommer
+15 minutes de temps mort. C'est de là que viennent le timeout ramené à 30 s et
+le budget de six minutes sur la grille de température. Les quatre timeouts FIRMS
 s'exécutent en parallèle pour qu'une panne réseau globale échoue rapidement au
 lieu de monopoliser le runner pendant huit minutes.
 
