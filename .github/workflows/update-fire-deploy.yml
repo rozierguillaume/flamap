@@ -1,4 +1,7 @@
-name: deploy
+# Foyers, périmètres, vent national et vent fin des cellules actives.
+# La grille de température est collectée à part par update-weather-deploy.yml,
+# sur une cadence plus lente : voir la section « Trois workflows » du README.
+name: update-fire-deploy
 
 on:
   # Toutes les 2 h. Décalé de 17 min : les tâches planifiées à l'heure ronde
@@ -7,12 +10,12 @@ on:
     - cron: "17 */2 * * *"
   push:
     branches: [main]
-    # Une modification du front est livree par deploy-front.yml, qui reutilise
-    # les donnees deja publiees. On ne refait la collecte longue que lorsque le
-    # collecteur ou ce workflow change.
+    # Une modification du front est livree par update-front-deploy.yml, qui
+    # reutilise les donnees deja publiees. On ne refait la collecte longue que
+    # lorsque le collecteur ou ce workflow change.
     paths:
       - fetch_fires.py
-      - .github/workflows/deploy.yml
+      - .github/workflows/update-fire-deploy.yml
   workflow_dispatch:
 
 permissions:
@@ -20,7 +23,11 @@ permissions:
   pages: write
   id-token: write
 
-# Un déploiement à la fois, sans annuler celui qui est en cours de publication.
+# Groupe partagé par les trois workflows, et volontairement : un groupe de
+# concurrence est global au dépôt, pas propre à un workflow. Deux d'entre eux ne
+# peuvent donc jamais publier en même temps et s'écraser l'un l'autre — le second
+# attend, puisque `cancel-in-progress` est faux, et repart des données que le
+# premier vient de publier.
 concurrency:
   group: pages
   cancel-in-progress: false
@@ -123,6 +130,37 @@ jobs:
                 + (f", {missing} écartées du diff" if missing else ""))
           PY
 
+      # `thermal.json` appartient à update-weather-deploy.yml. Ce workflow ne le
+      # produit pas mais doit le republier tel quel : chaque déploiement Pages
+      # remplace l'artefact entier, donc l'oublier ici effacerait la grille de
+      # température jusqu'au prochain passage du workflow météo. Son absence est
+      # normale avant la première collecte météo — le front retombe alors sur la
+      # température grossière de `wind_coarse.json`.
+      - name: Reprendre la grille de température publiée
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os
+          import pathlib
+          import urllib.request
+
+          base = os.environ['LIVE_SITE'].rstrip('/')
+          target = pathlib.Path('data/thermal.json')
+          target.parent.mkdir(parents=True, exist_ok=True)
+          try:
+              with urllib.request.urlopen(f"{base}/data/thermal.json",
+                                          timeout=60) as response:
+                  body = response.read()
+              if not body:
+                  raise ValueError('réponse vide')
+          except Exception as error:
+              print(f"::warning::Grille de température non reprise : {error}. "
+                    "Le front retombera sur le champ large.")
+          else:
+              target.write_bytes(body)
+              print(f"Grille de température reprise : {len(body) / 1e6:.2f} Mo")
+          PY
+
       # La génération nationale prend quelques minutes : quatre flux FIRMS
       # parallèles, deux requêtes EFFIS et les grilles Open-Meteo séquentielles.
       # Les 25 min laissent une large marge aux reprises HTTP 429 et au WFS lent.
@@ -171,22 +209,23 @@ jobs:
               or any(not isinstance(feature['properties'].get('frp'), (int, float))
                      for feature in overview['features'])):
               sys.exit("puissance radiative FIRMS absente des agrégats")
+          # `weather_forecast.json` ne porte plus que le vent. La température
+          # vient de `thermal.json`, produit par update-weather-deploy.yml, et
+          # son absence est un état valide : le front retombe sur la température
+          # grossière que `wind_coarse.json` transporte toujours.
           weather_rows = weather.get('nt', 0)
-          thermal = weather.get('thermal') or {}
           if (weather_rows < 2
               or any(len(weather.get(name, [])) != weather_rows
-                     for name in ('u', 'v', 'gust'))
-              or any(len(thermal.get(name, [])) != weather_rows
-                     for name in ('temperature', 'precipitation'))):
+                     for name in ('u', 'v', 'gust'))):
               sys.exit("export météo absent ou incomplet")
-          # La grille thermique n'a d'intérêt que si elle reste bien plus fine
-          # que celle du vent. Le collecteur sait retomber sur le champ large
-          # quand Open-Meteo le laisse tomber : ce repli est volontaire et ne
-          # doit pas bloquer la publication, mais il ne doit pas non plus
-          # passer inaperçu — sans quoi Lyon repasserait à 33 °C en silence.
-          if thermal.get('nx', 0) < weather.get('nx', 0) * 3:
-              print('::warning::température repliée sur la grille du vent, '
-                    'valeurs trop lissées en relief')
+          coarse = json.load(open('data/wind_coarse.json'))
+          if any(len(coarse.get(name, [])) != coarse.get('nt', 0)
+                 for name in ('temperature', 'precipitation')):
+              sys.exit("température de repli absente de wind_coarse.json")
+          thermal_path = pathlib.Path('data/thermal.json')
+          if not thermal_path.exists():
+              print('::warning::aucune grille de température reprise, le front '
+                    'affichera le champ large')
           fine = set(manifest['fine_wind_zones'])
           for path in zone_paths:
               zone = json.load(open(path))
@@ -213,6 +252,9 @@ jobs:
           cp data/manifest.json data/overview_hotspots.geojson \
              data/burnt_recent.geojson data/timeline.json \
              data/wind_coarse.json data/weather_forecast.json _site/data/
+          # Repris du site publié, pas produit ici : absent avant la première
+          # collecte météo.
+          if [ -f data/thermal.json ]; then cp data/thermal.json _site/data/; fi
           cp -r data/zones _site/data/
 
       # Pages accepte jusqu'à 1 Go, mais Flamap doit rester très en dessous.

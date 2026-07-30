@@ -166,28 +166,33 @@ cas le volet ne suit plus les déplacements et un bouton ramène au centre :
 température, vent moyen, direction, rafales et précipitations horaires
 sur les 12 dernières et les 12 prochaines heures. Deux traits situent l'heure
 actuelle et l'extraction des données affichées sur la carte. Ces séries sont
-isolées dans `data/weather_forecast.json`. Un déplacement de la carte ouverte
-réinterpole ensuite les mêmes grilles, sans requête réseau supplémentaire —
-sauf sur un point épinglé, qui reste fixe. Le survol donne,
+réparties sur **deux fichiers de pas différents**. Un déplacement de la carte
+ouverte réinterpole ensuite les mêmes grilles, sans requête réseau
+supplémentaire — sauf sur un point épinglé, qui reste fixe. Le survol donne,
 heure par heure, la température, le vent moyen, sa direction, les rafales et le
 cumul de précipitations en millimètres.
 
-Ce fichier porte **deux grilles de pas différents**. Le vent reste sur la
-grille nationale à ~94 km : il varie assez lentement dans l'espace pour s'en
-contenter. La température et les précipitations ont leur propre grille à
-**20 km**, décrite par le bloc `thermal`. La raison est le relief : la
-température à 2 m perd environ 0,65 °C par 100 m d'altitude, si bien qu'un
-point de grille tombé en montagne tirait toute la plaine voisine vers le bas.
-Sur la grille du vent, Lyon ressortait à 33 °C un jour où AROME en prévoyait
-39 ; à 20 km l'écart passe sous le degré. Descendre à 10 km ne gagnerait qu'à
-peu près 1 °C de plus pour 3,4 fois le poids du fichier et 62 requêtes
-Open-Meteo au lieu de 18.
+Le vent vient de `data/weather_forecast.json`, sur la grille nationale à
+~94 km : il varie assez lentement dans l'espace pour s'en contenter. La
+température et les précipitations viennent de `data/thermal.json`, sur une
+grille à **20 km**. La raison est le relief : la température à 2 m perd environ
+0,65 °C par 100 m d'altitude, si bien qu'un point de grille tombé en montagne
+tirait toute la plaine voisine vers le bas. Sur la grille du vent, Lyon
+ressortait à 33 °C un jour où AROME en prévoyait 39 ; à 20 km l'écart passe sous
+le degré. Descendre à 10 km ne gagnerait qu'à peu près 1 °C de plus pour 3,4
+fois le poids du fichier et 36 lots Open-Meteo au lieu de 10.
+
+Les deux fichiers ont leur **propre base de temps** et sont interpolés
+séparément par horodatage, jamais au même indice de ligne : ils sont produits par
+deux workflows de cadences différentes, 2 h pour le vent et 6 h pour la
+température.
 
 La légende principale affiche la température au centre de la carte en lisant
 cette même grille fine, ce qui impose de la télécharger au démarrage et non à
 l'ouverture du volet. Elle ne couvre que ±12 h ; dès que le curseur temporel
-sort de cette fenêtre, la légende retombe sur la température grossière
-transportée par `data/wind_coarse.json`, qui suit les dix jours de la frise.
+sort de cette fenêtre — ou si `thermal.json` manque encore — la légende comme le
+volet retombent sur la température grossière transportée par
+`data/wind_coarse.json`, qui suit les dix jours de la frise.
 
 ## Chargement progressif
 
@@ -300,13 +305,16 @@ visuelle accélérée même lorsque la frise est en pause.
 
 ## Déploiement
 
-Le site est publié par GitHub Pages avec deux workflows :
+Le site est publié par GitHub Pages avec trois workflows :
 
-- [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) exécute
+- [`update-fire-deploy.yml`](.github/workflows/update-fire-deploy.yml) exécute
   `fetch_fires.py` toutes les 2 heures (et lors d'une modification du
-  collecteur), assemble les exports nationaux dans `_site`, puis les livre à
-  Pages ;
-- [`.github/workflows/deploy-front.yml`](.github/workflows/deploy-front.yml)
+  collecteur) : foyers, périmètres, vent national et vent fin des cellules
+  actives ;
+- [`update-weather-deploy.yml`](.github/workflows/update-weather-deploy.yml)
+  exécute `fetch_fires.py --thermal` toutes les 6 heures et ne produit que
+  `data/thermal.json`, la grille de température à 20 km ;
+- [`update-front-deploy.yml`](.github/workflows/update-front-deploy.yml)
   est déclenché par une modification du front, de l'aperçu social, des icônes
   ou des fichiers destinés aux moteurs de recherche.
   Il reprend les données de la version déjà publiée sur `flamap.fr`, y superpose
@@ -315,7 +323,44 @@ Le site est publié par GitHub Pages avec deux workflows :
   collecteur, ce workflow rapide s'efface au profit du déploiement complet.
 
 Un premier déploiement complet doit naturellement avoir réussi avant un
-déploiement front seul.
+déploiement front seul, ou un déploiement météo seul.
+
+### Pourquoi la météo a son propre workflow
+
+La grille de température représentait dix des dix-sept requêtes Open-Meteo d'une
+collecte, et c'est le rythme des aller-retours depuis l'IP partagée du runner qui
+déclenche les bridages. Elle n'a pourtant aucune raison de suivre la cadence des
+foyers : **AROME HD ne sort une nouvelle échéance que toutes les 3 heures**. La
+passer de 12 à 4 collectes par jour divise sa pression par trois sans rien
+perdre, et une panne météo ne peut plus retarder la publication d'un foyer.
+
+### Comment deux workflows ne s'écrasent pas
+
+Un artefact Pages remplace **toujours le précédent en entier** : il n'existe pas
+de déploiement partiel. Deux protections en découlent.
+
+D'abord le verrou : les trois workflows partagent `concurrency: group: pages`,
+et un groupe de concurrence est **global au dépôt**, pas propre à un workflow.
+Deux d'entre eux ne peuvent donc jamais publier en même temps ; le second attend
+que le premier ait fini, puisque `cancel-in-progress` est faux.
+
+Ensuite le partage des fichiers, sans recouvrement :
+
+| Fichier | Produit par |
+|---|---|
+| `manifest.json`, foyers, périmètres, frise, `zones/` (vent fin inclus), `wind_coarse.json`, `weather_forecast.json` | `update-fire-deploy` |
+| `thermal.json` | `update-weather-deploy` |
+
+Chaque workflow reprend du site publié tout ce qu'il ne produit pas, et n'y
+substitue que ses propres fichiers. Comme les runs sont sérialisés, chacun repart
+donc de l'état que l'autre vient de publier.
+
+`thermal.json` porte sa propre base de temps (`t0`, `dt`, `nt`), indépendante de
+celle du vent. C'est ce qui permet aux deux cadences de ne pas avoir à s'aligner :
+le navigateur interpole chaque champ séparément par horodatage. Son absence est
+un état valide — avant la première collecte météo, ou si celle-ci échoue — et le
+front retombe alors sur la température grossière que `wind_coarse.json`
+transporte toujours.
 
 Le service `flamap-aircraft-history` est déployé séparément sur le VPS. Il
 conserve quinze minutes en RAM et expose
@@ -401,9 +446,11 @@ volet météo.
 | `make_og.py` | fabrique `og.png`, l'aperçu des liens (Pillow requis) |
 | `og.png` | image de partage, 1200 × 630, versionnée |
 | `SOURCES.md` | note de repérage sur les sources de données |
-| `.github/workflows/deploy.yml` | rafraîchissement toutes les 2 h + publication Pages |
-| `.github/workflows/deploy-front.yml` | publication rapide des seuls changements de front |
+| `.github/workflows/update-fire-deploy.yml` | foyers, périmètres et vent toutes les 2 h + publication Pages |
+| `.github/workflows/update-weather-deploy.yml` | grille de température toutes les 6 h |
+| `.github/workflows/update-front-deploy.yml` | publication rapide des seuls changements de front |
 | `data/manifest.json` | emprise, génération, liste et format des zones |
+| `data/thermal.json` | température et pluie à 20 km sur ±12 h, non versionné |
 | `data/zones/` | paquets détaillés générés, non versionnés |
 
 ## Limites connues

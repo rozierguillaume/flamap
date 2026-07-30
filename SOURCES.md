@@ -170,14 +170,13 @@ réanalyse ERA5, 25 km, latence 5 jours).
    AROME prévoyait 38,7 °C au point, parce que la maille voisine tombait à
    1 815 m dans le Vercors et une autre à 2 844 m dans les Alpes. La
    température et les précipitations ont donc leur **propre grille à 20 km**,
-   exportée dans le bloc `thermal` de `weather_forecast.json` : Lyon y remonte
-   à 37,8 °C. Le vent, lui, reste sur la grille large — il varie assez
+   exportée dans `thermal.json` : Lyon y remonte à 37,8 °C. Le vent, lui, reste sur la grille large — il varie assez
    lentement dans l'espace, et le raffiner coûterait cinq fois plus de requêtes
    sans rien corriger.
 
    Le pas de 20 km est un compromis mesuré : à 10 km Lyon donne 39,0 °C, soit
    ~1 °C de mieux, mais le fichier pèse 3,4 fois plus (596 Ko gzip contre
-   169 Ko) pour 62 requêtes au lieu de 18.
+   169 Ko) pour 36 lots au lieu de 10.
 
    **Ce que ça ne corrige pas** : les vallées alpines encaissées. Un point à
    509 m en Savoie entouré de mailles à 1 800–2 800 m reste sous-estimé de
@@ -187,11 +186,14 @@ réanalyse ERA5, 25 km, latence 5 jours).
    réelle du point cliqué — traiterait ce cas, et elle demande un modèle
    d'élévation côté navigateur, que la carte n'embarque pas.
 
-   `weather_forecast.json` couvre les 12 dernières et les 12 prochaines heures,
-   et le navigateur le charge au démarrage puisque la légende y lit la
-   température. Au-delà de cette fenêtre, la frise remontant dix jours, la
-   légende retombe sur la maille horaire de température grossière que
-   `wind_coarse.json` continue de transporter.
+   `thermal.json` couvre les 12 dernières et les 12 prochaines heures, avec sa
+   propre base de temps : il est collecté toutes les 6 h par un workflow
+   distinct, alors que le vent l'est toutes les 2 h, et les deux champs ne se
+   lisent donc jamais au même indice de ligne. Le navigateur le charge au
+   démarrage puisque la légende y lit la température. Au-delà de cette fenêtre —
+   la frise remonte dix jours — ou si le fichier manque encore, la légende comme
+   le volet retombent sur la maille horaire grossière de température et de pluie
+   que `wind_coarse.json` continue de transporter.
 5. Licence CC BY 4.0, gratuit sans clé pour l'usage non commercial, ~10 000
    requêtes/jour, 600/min. La carte n'en fait aucune : tout passe par les
    exports `data/wind_coarse.json`, `data/zones/` et
