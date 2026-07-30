@@ -369,6 +369,15 @@
   #credits { font-size: 10.5px; line-height: 1.5; color: #7d7873; }
   #credits a { color: #9a948e; text-decoration: none; border-bottom: 1px solid #3a3733; }
   #credits:not(.open) { display: none; }
+  /* Une ligne par source, avec le libelle en tete : on cherche « d'ou vient le
+     vent » sans relire les six phrases voisines. Le retrait negatif garde la
+     continuation d'une ligne trop longue en retrait du libelle. */
+  #credits ul { margin: 0; padding: 0; list-style: none; }
+  #credits li { margin-bottom: 4px; padding-left: 9px; text-indent: -9px; }
+  #credits b { color: #a39d97; font-weight: 600; }
+  /* Liens de pied separes des sources : ils ne creditent personne. */
+  #credits .cr-foot { margin: 9px 0 0; padding-top: 8px; border-top: 1px solid #322f2b; }
+  #credits #updated { display: block; margin-top: 5px; }
   #cr-btn { display: block; font: inherit; font-size: 10.5px; color: var(--ink-dim);
             text-align: left; cursor: pointer; }
   #cr-btn:hover { color: var(--ink); }
@@ -440,8 +449,10 @@
        centrée dans la place qui reste et, sous 1300 px de large, il n'y a plus
        les 280 px du panneau entre son bord droit et celui de l'écran — il
        viendrait mordre dessus. */
+    /* Panneau ancre a droite mais texte a gauche : la liste a besoin d'un bord
+       de lecture commun, un alignement a droite casserait les libelles. */
     #credits { position: absolute; right: 0; bottom: calc(100% + 10px);
-               width: 280px; padding: 11px 14px; text-align: right; }
+               width: 280px; padding: 11px 14px; text-align: left; }
     #updates-panel { position: fixed; z-index: 502; right: 14px; bottom: 84px;
                      width: 350px; max-height: min(570px, calc(100vh - 120px));
                      padding: 15px 17px; }
@@ -522,11 +533,13 @@
       color: #a39d97; white-space: nowrap;
     }
     #cr-btn .wide { display: none; }
-    /* Le panneau s'ouvre sous son bouton dans l'en-tête, sans modifier la
-       hauteur des commandes temporelles en bas. */
+    /* Le panneau s'ouvre sous les deux rangées de commandes de l'en-tête, sans
+       modifier la hauteur des commandes temporelles en bas. Sa liste peut
+       défiler sur les écrans courts plutôt que de passer sous le dock. */
     #credits {
-      position: fixed; z-index: 501; top: 60px; right: 10px; bottom: auto;
-      width: min(330px, calc(100vw - 20px)); padding: 12px 14px; text-align: left;
+      position: fixed; z-index: 501; top: 110px; right: 10px; bottom: auto;
+      width: min(330px, calc(100vw - 20px)); max-height: calc(100vh - 300px);
+      overflow: auto; padding: 12px 14px; text-align: left;
     }
     /* Laisser la rangée d'en-tête (crédits + menu) accessible : la croix du
        panneau ne vient plus se poser sur le bouton sandwich. */
@@ -798,25 +811,30 @@
           aria-controls="credits"><span class="wide">Sources &amp; </span>crédits</button>
 
   <div id="credits" class="glass">
-    Foyers actifs : <a href="https://firms.modaps.eosdis.nasa.gov/" target="_blank" rel="noopener">NASA FIRMS</a>
-    (VIIRS 375 m &amp; MODIS, LANCE/EOSDIS).
-    Surfaces brûlées : <a href="https://forest-fire.emergency.copernicus.eu/" target="_blank" rel="noopener">Copernicus EFFIS</a>.
-    Vent à 10 m : modèle <a href="https://meteofrance.com/" target="_blank" rel="noopener">AROME HD</a>
-    de Météo-France, servi par <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a> (CC BY 4.0).
-    Fumée : simulation indicative à partir de la puissance radiative FIRMS et du vent AROME,
-    et non mesure de qualité de l'air.
-    Fond : ortho-photo <a href="https://geoservices.ign.fr/" target="_blank" rel="noopener">IGN-F/Géoplateforme</a>,
-    hors France <a href="https://s2maps.eu" target="_blank" rel="noopener">Sentinel-2 cloudless</a> par EOX
-    (données Copernicus Sentinel modifiées 2020) ;
-    toponymes <a href="https://openfreemap.org/" target="_blank" rel="noopener">OpenFreeMap</a> /
-    <a href="https://openmaptiles.org/" target="_blank" rel="noopener">OpenMapTiles</a> /
-    <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>.
-    Communes : <a href="https://data.geopf.fr/geocodage/" target="_blank" rel="noopener">Géoplateforme / BAN</a>.
-    Positions des moyens aériens : <a href="https://airplanes.live/" target="_blank"
-    rel="noopener">Airplanes.live</a> (ADS-B communautaire, affichage non exhaustif).
-    Rendu <a href="https://maplibre.org/" target="_blank" rel="noopener">MapLibre GL</a>.
-    Icônes <a href="https://lucide.dev/" target="_blank" rel="noopener">Lucide</a> (ISC).
-    <a href="/mentions-legales.html">Mentions légales &amp; confidentialité</a>.
+    <ul>
+      <li><b>Foyers actifs</b> — <a href="https://firms.modaps.eosdis.nasa.gov/" target="_blank" rel="noopener">NASA FIRMS</a>
+          (VIIRS 375 m &amp; MODIS, LANCE/EOSDIS)</li>
+      <li><b>Surfaces brûlées</b> — <a href="https://forest-fire.emergency.copernicus.eu/" target="_blank" rel="noopener">Copernicus EFFIS</a></li>
+      <li><b>Vent à 10 m</b> — modèle <a href="https://meteofrance.com/" target="_blank" rel="noopener">AROME HD</a>
+          de Météo-France, servi par <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a> (CC BY 4.0)</li>
+      <li><b>Fumée</b> — simulation indicative à partir de la puissance radiative FIRMS et du vent AROME,
+          et non mesure de qualité de l'air</li>
+      <li><b>Fond</b> — ortho-photo <a href="https://geoservices.ign.fr/" target="_blank" rel="noopener">IGN-F/Géoplateforme</a>,
+          hors France <a href="https://s2maps.eu" target="_blank" rel="noopener">Sentinel-2 cloudless</a> par EOX
+          (données Copernicus Sentinel modifiées 2020)</li>
+      <li><b>Toponymes</b> — <a href="https://openfreemap.org/" target="_blank" rel="noopener">OpenFreeMap</a> /
+          <a href="https://openmaptiles.org/" target="_blank" rel="noopener">OpenMapTiles</a> /
+          <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a></li>
+      <li><b>Communes</b> — <a href="https://data.geopf.fr/geocodage/" target="_blank" rel="noopener">Géoplateforme / BAN</a></li>
+      <li><b>Moyens aériens</b> — <a href="https://airplanes.live/" target="_blank"
+          rel="noopener">Airplanes.live</a> (ADS-B communautaire, affichage non exhaustif)</li>
+      <li><b>Rendu</b> — <a href="https://maplibre.org/" target="_blank" rel="noopener">MapLibre GL</a>,
+          icônes <a href="https://lucide.dev/" target="_blank" rel="noopener">Lucide</a> (ISC)</li>
+    </ul>
+    <p class="cr-foot">
+      <a href="https://github.com/rozierguillaume/flamap" target="_blank" rel="noopener">Code source</a> ·
+      <a href="/mentions-legales.html">Mentions légales &amp; confidentialité</a>
+    </p>
     <span id="updated"></span>
   </div>
 </div>
