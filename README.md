@@ -51,11 +51,10 @@ symboles distincts.
 Le bouton `i` à droite de la frise ouvre le journal des 40 dernières mises à
 jour : heure, source et volume de données reçu.
 
-Sur la vue nationale, les détections des dernières 24 heures sont regroupées
+Sur la vue nationale, les détections des dernières 72 heures sont regroupées
 spatialement. Un groupe reçoit un halo et un raccourci lorsqu'il compte au
-moins 25 foyers près d'un périmètre EFFIS mis à jour dans les 7 derniers jours,
-ou lorsque quelques détections confirment encore une surface brûlée d'au moins
-200 ha. Le voisinage EFFIS
+moins 25 foyers près d'un périmètre EFFIS mis à jour dans les 30 derniers
+jours. Le voisinage EFFIS
 écarte notamment les anomalies thermiques industrielles et les groupes
 étrangers inclus dans le rectangle de collecte FIRMS. Il s'agit de seuils
 fixes, pas d'un classement limité à trois incendies. Cliquer sur un raccourci
@@ -72,7 +71,8 @@ python3 fetch_fires.py
 ```
 
 Écrit un aperçu national léger (`manifest.json`, foyers agrégés, EFFIS récent,
-frise et vent grossier), puis environ 176 paquets dans `data/zones/`.
+contexte EFFIS à 30 jours pour les grands feux, frise et vent grossier), puis
+environ 176 paquets dans `data/zones/`.
 Bibliothèque standard uniquement, aucune clé d'API.
 
 Compter quelques minutes depuis une connexion résidentielle : le WFS d'EFFIS
@@ -203,6 +203,8 @@ jours de la frise.
 - foyers FIRMS regroupés par cellule de 0,25°, heure et satellite, avec leur
   nombre et leur FRP totale ;
 - périmètres EFFIS français mis à jour dans les sept derniers jours ;
+- périmètres EFFIS des trente derniers jours, utilisés seulement pour confirmer
+  les grands feux ;
 - vent national 15 × 15 ;
 - grille de température à 20 km sur ±12 h, pour la légende et le volet météo ;
 - manifest et frise nationale.

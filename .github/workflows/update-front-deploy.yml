@@ -111,6 +111,7 @@ jobs:
                                           'data/manifest.json')))
           files = []
           for name in ('overview_hotspots.geojson', 'burnt_recent.geojson',
+                       'burnt_major.geojson',
                        'timeline.json', 'wind_coarse.json',
                        'weather_forecast.json'):
               files.append((f'data/{name}', f'data/{name}'))
