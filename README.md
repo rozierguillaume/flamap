@@ -189,10 +189,12 @@ température.
 
 La légende principale affiche la température au centre de la carte en lisant
 cette même grille fine, ce qui impose de la télécharger au démarrage et non à
-l'ouverture du volet. Elle ne couvre que ±12 h ; dès que le curseur temporel
-sort de cette fenêtre — ou si `thermal.json` manque encore — la légende comme le
-volet retombent sur la température grossière transportée par
-`data/wind_coarse.json`, qui suit les dix jours de la frise.
+l'ouverture du volet. Elle couvre ±18 h — délibérément plus large que les ±12 h
+du vent, pour que le graphique reste complet même quand les deux collectes sont
+décalées de six heures. Dès que le curseur temporel sort de cette fenêtre — ou si
+`thermal.json` manque encore — la légende comme le volet retombent sur la
+température grossière transportée par `data/wind_coarse.json`, qui suit les dix
+jours de la frise.
 
 ## Chargement progressif
 
@@ -450,7 +452,7 @@ volet météo.
 | `.github/workflows/update-weather-deploy.yml` | grille de température toutes les 6 h |
 | `.github/workflows/update-front-deploy.yml` | publication rapide des seuls changements de front |
 | `data/manifest.json` | emprise, génération, liste et format des zones |
-| `data/thermal.json` | température et pluie à 20 km sur ±12 h, non versionné |
+| `data/thermal.json` | température et pluie à 20 km sur ±18 h, non versionné |
 | `data/zones/` | paquets détaillés générés, non versionnés |
 
 ## Limites connues
