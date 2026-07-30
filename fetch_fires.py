@@ -29,6 +29,7 @@ import os
 import shutil
 import sys
 import time
+import urllib.error
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
@@ -539,11 +540,25 @@ def meteo_request(points, model, variables, past_days):
             data = json.loads(get(url, timeout=180))
             return data if isinstance(data, list) else [data]
         except Exception as error:
-            if getattr(error, "code", None) != 429 or attempt == 3:
+            if attempt == 3:
                 raise
-            delay = (10, 30, 60)[attempt]
-            print(f"  ! Open-Meteo limite le debit, nouvel essai dans {delay} s",
-                  file=sys.stderr)
+            if getattr(error, "code", None) == 429:
+                delay = (10, 30, 60)[attempt]
+                reason = "Open-Meteo limite le debit"
+            # Une collecte demande maintenant une trentaine de requetes, dont
+            # dix-huit pour la seule grille thermique. A ce volume, une coupure
+            # reseau passagere — poignee de main TLS expiree, connexion coupee —
+            # finit par tomber regulierement : la laisser remonter ferait
+            # echouer toute la collecte pour un incident de quelques secondes.
+            # `HTTPError` derive de `URLError` : une 400 sur une URL mal formee
+            # doit echouer tout de suite, pas etre rejouee quatre fois.
+            elif (isinstance(error, (urllib.error.URLError, TimeoutError))
+                  and not isinstance(error, urllib.error.HTTPError)):
+                delay = (5, 15, 30)[attempt]
+                reason = f"Open-Meteo injoignable ({error})"
+            else:
+                raise
+            print(f"  ! {reason}, nouvel essai dans {delay} s", file=sys.stderr)
             time.sleep(delay)
 
 
@@ -761,7 +776,21 @@ def weather_forecast(wind, thermal, now, hours=12):
     part. Les deux series sont horaires et calees sur l'heure ronde, mais le
     thermique demarre bien plus tard ; la fenetre est donc reduite a ce que les
     deux couvrent, sinon le graphique afficherait des trous.
+
+    `thermal` a None signale un repli : la grille fine n'a pas pu etre
+    collectee, et la temperature repart de celle du vent — le format de sortie
+    ne change pas, seule sa finesse.
     """
+    if thermal is None:
+        thermal = {
+            "box": wind["box"],
+            "nx": wind["nx"],
+            "ny": wind["ny"],
+            "t0": wind["t0"],
+            "dt": wind["dt"],
+            "temperature": wind["temperature"],
+            "precipitation": wind["precipitation"],
+        }
     pivot = next(
         (index for index in range(len(wind["u"]))
          if wind["t0"] + index * wind["dt"] >= now),
@@ -864,7 +893,16 @@ def main():
     # La temperature du vent grossier reste exportee : elle sert de repli au
     # badge quand la frise remonte au-dela de la fenetre du champ fin.
     print("\nOpen-Meteo / AROME HD - temperature a 2 m")
-    thermal = fetch_thermal(coarse_box, THERMAL_SPACING_KM)
+    try:
+        thermal = fetch_thermal(coarse_box, THERMAL_SPACING_KM)
+    except Exception as error:
+        # Dix-huit requetes de plus, c'est dix-huit occasions de tomber sur une
+        # coupure passagere. Une temperature trop lissee vaut mieux qu'une carte
+        # sans foyers : on repart sur la grille du vent, comme avant l'ajout du
+        # champ fin, et le passage suivant retentera.
+        print(f"  ! grille thermique indisponible, repli sur le champ large "
+              f"({error})", file=sys.stderr)
+        thermal = None
 
     fine_keys = fine_wind_tiles(recent, hotspots, latest)
     fine_wind = {}
