@@ -869,11 +869,15 @@ def wind_subset(wind, xs, ys, time_stride=1):
         "v": [[wind["v"][row][index] for index in indices] for row in rows],
         "gust": [[wind["gust"][row][index] for index in indices] for row in rows],
     }
-    if "temperature" in wind:
-        result["temperature"] = [
-            [wind["temperature"][row][index] for index in indices]
-            for row in rows
-        ]
+    # Temperature et pluie grossieres : repli du volet meteo et du badge quand
+    # `thermal.json` manque — premier deploiement, ou workflow meteo en retard —
+    # ou quand la frise remonte au-dela de la fenetre du champ fin.
+    for name in ("temperature", "precipitation"):
+        if name in wind:
+            result[name] = [
+                [wind[name][row][index] for index in indices]
+                for row in rows
+            ]
     return result
 
 
@@ -886,30 +890,14 @@ def whole_wind(wind, time_stride=1):
     )
 
 
-def weather_forecast(wind, thermal, now, hours=12):
-    """Extrait 12 h passees et 12 h futures pour le volet meteo.
+def weather_forecast(wind, now, hours=12):
+    """Extrait 12 h passees et 12 h futures de vent pour le volet meteo.
 
-    Le vent reste sur la grille nationale large, la temperature et les pluies
-    arrivent sur la grille fine : les deux champs n'ont ni le meme pas ni la
-    meme emprise, d'ou le bloc `thermal` separe que le navigateur interpole a
-    part. Les deux series sont horaires et calees sur l'heure ronde, mais le
-    thermique demarre bien plus tard ; la fenetre est donc reduite a ce que les
-    deux couvrent, sinon le graphique afficherait des trous.
-
-    `thermal` a None signale un repli : la grille fine n'a pas pu etre
-    collectee, et la temperature repart de celle du vent — le format de sortie
-    ne change pas, seule sa finesse.
+    Ne porte que le vent. La temperature et les pluies vivent dans
+    `thermal.json`, sur une grille bien plus fine et avec leur propre base de
+    temps : les deux champs sont collectes par des workflows de cadences
+    differentes, et le navigateur les interpole separement.
     """
-    if thermal is None:
-        thermal = {
-            "box": wind["box"],
-            "nx": wind["nx"],
-            "ny": wind["ny"],
-            "t0": wind["t0"],
-            "dt": wind["dt"],
-            "temperature": wind["temperature"],
-            "precipitation": wind["precipitation"],
-        }
     pivot = next(
         (index for index in range(len(wind["u"]))
          if wind["t0"] + index * wind["dt"] >= now),
@@ -917,20 +905,7 @@ def weather_forecast(wind, thermal, now, hours=12):
     )
     start = max(0, pivot - hours)
     stop = min(pivot + hours + 1, len(wind["u"]))
-
-    span = len(thermal["temperature"])
-
-    def row_of(index):
-        stamp = wind["t0"] + index * wind["dt"]
-        return (stamp - thermal["t0"]) // thermal["dt"]
-
-    while start < stop and not 0 <= row_of(start) < span:
-        start += 1
-    while stop > start and not 0 <= row_of(stop - 1) < span:
-        stop -= 1
-
     rows = range(start, stop)
-    thermal_rows = [row_of(index) for index in rows]
     return {
         "model": wind["model"],
         "bbox": [round(value, 4) for value in wind["box"]],
@@ -942,13 +917,29 @@ def weather_forecast(wind, thermal, now, hours=12):
         "u": [wind["u"][row] for row in rows],
         "v": [wind["v"][row] for row in rows],
         "gust": [wind["gust"][row] for row in rows],
-        "thermal": {
-            "bbox": [round(value, 4) for value in thermal["box"]],
-            "nx": thermal["nx"],
-            "ny": thermal["ny"],
-            "temperature": [thermal["temperature"][row] for row in thermal_rows],
-            "precipitation": [thermal["precipitation"][row] for row in thermal_rows],
-        },
+    }
+
+
+def thermal_export(thermal, now, hours=12):
+    """Reduit la grille thermique a la fenetre affichee par le volet meteo."""
+    pivot = next(
+        (index for index in range(len(thermal["temperature"]))
+         if thermal["t0"] + index * thermal["dt"] >= now),
+        len(thermal["temperature"]),
+    )
+    start = max(0, pivot - hours)
+    stop = min(pivot + hours + 1, len(thermal["temperature"]))
+    rows = range(start, stop)
+    return {
+        "model": thermal["model"],
+        "bbox": [round(value, 4) for value in thermal["box"]],
+        "nx": thermal["nx"],
+        "ny": thermal["ny"],
+        "t0": thermal["t0"] + start * thermal["dt"],
+        "dt": thermal["dt"],
+        "nt": stop - start,
+        "temperature": [thermal["temperature"][row] for row in rows],
+        "precipitation": [thermal["precipitation"][row] for row in rows],
     }
 
 
@@ -974,12 +965,39 @@ def fine_wind_tiles(recent, hotspots, latest):
 # Assemblage
 # ---------------------------------------------------------------------------
 
+def main_thermal(bbox):
+    """Grille de temperature seule, pour le workflow meteo lent.
+
+    Elle ne partage aucun fichier avec la collecte des foyers : `thermal.json`
+    porte sa propre base de temps, donc les deux cadences n'ont pas a s'aligner.
+    AROME HD ne sort une nouvelle echeance que toutes les 3 h — l'interroger
+    douze fois par jour ne gagnait rien et alimentait les bridages.
+    """
+    os.makedirs(OUT, exist_ok=True)
+    print(f"bbox {bbox}\n")
+    print("Open-Meteo / AROME HD - temperature a 2 m")
+    thermal = fetch_thermal(wind_box(bbox), THERMAL_SPACING_KM)
+    now = datetime.now(timezone.utc).timestamp()
+    export = thermal_export(thermal, now)
+    export["generated_at"] = datetime.now(timezone.utc).isoformat()
+    write_json(os.path.join(OUT, "thermal.json"), export)
+    print(f"\n-> {export['nt']} heures, grille {export['nx']}x{export['ny']}")
+    print(f"-> ecrit dans {OUT}/thermal.json")
+
+
 def main():
     bbox = DEFAULT_BBOX
-    if len(sys.argv) == 5:
-        bbox = tuple(float(value) for value in sys.argv[1:5])
-    elif len(sys.argv) != 1:
-        raise SystemExit("usage: fetch_fires.py [west south east north]")
+    args = sys.argv[1:]
+    thermal_only = "--thermal" in args
+    args = [value for value in args if value != "--thermal"]
+    if len(args) == 4:
+        bbox = tuple(float(value) for value in args)
+    elif args:
+        raise SystemExit(
+            "usage: fetch_fires.py [--thermal] [west south east north]"
+        )
+    if thermal_only:
+        return main_thermal(bbox)
 
     os.makedirs(OUT, exist_ok=True)
     print(f"bbox {bbox}\n")
@@ -1034,23 +1052,6 @@ def main():
         for key, grid in raw.items():
             fine_wind[key] = whole_wind(grid, WIND_DETAIL_STRIDE)
 
-    # Collectee en dernier, et sous plafond de temps : c'est la seule serie qui
-    # sache se replier entierement sans rien perdre d'essentiel. Passee avant le
-    # vent fin, elle mangeait le budget de l'etape et emportait foyers et
-    # perimetres avec elle. La temperature du vent grossier reste exportee : elle
-    # sert de repli au badge quand la frise remonte au-dela du champ fin.
-    print("\nOpen-Meteo / AROME HD - temperature a 2 m")
-    try:
-        thermal = fetch_thermal(coarse_box, THERMAL_SPACING_KM)
-    except Exception as error:
-        # Dix lots de plus, c'est dix occasions de tomber sur un bridage. Une
-        # temperature trop lissee vaut mieux qu'une carte sans foyers : on repart
-        # sur la grille du vent, comme avant l'ajout du champ fin, et le passage
-        # suivant retentera.
-        print(f"  ! grille thermique abandonnee, repli sur le champ large "
-              f"({error})", file=sys.stderr)
-        thermal = None
-
     print("\nDecoupage")
     hotspot_cells = partition_features(hotspots["features"], point=True)
     dated_cells = partition_features(burnt["burnt_dated"]["features"])
@@ -1080,7 +1081,7 @@ def main():
     overview = aggregate_hotspots(hotspots)
     coarse = whole_wind(coarse_wind)
     now = datetime.now(timezone.utc).timestamp()
-    weather = weather_forecast(coarse_wind, thermal, now)
+    weather = weather_forecast(coarse_wind, now)
     manifest = {
         "version": 1,
         "generated_at": generated,
@@ -1103,6 +1104,8 @@ def main():
     write_json(os.path.join(OUT, "wind_coarse.json"), coarse)
     write_json(os.path.join(OUT, "weather_forecast.json"), weather)
     write_json(os.path.join(OUT, "manifest.json"), manifest, compact=False)
+    # `thermal.json` appartient au workflow meteo : ne jamais l'ecrire ici, sous
+    # peine de le remplacer par un champ vieux de plusieurs heures.
 
     print(
         f"  {len(zone_ids)} zones, {len(overview['features'])} foyers agreges, "

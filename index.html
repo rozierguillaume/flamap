@@ -1127,10 +1127,12 @@ const weatherPlace = document.getElementById('weather-place');
 const weatherStatus = document.getElementById('weather-status');
 const weatherTitle = document.getElementById('weather-title');
 const weatherFollow = document.getElementById('weather-follow');
-// v3 : le fichier porte désormais un bloc `thermal` à part, sur une grille bien
-// plus fine que celle du vent.
-const WEATHER_URL = 'data/weather_forecast.json?v=3';
+// v4 : le fichier ne porte plus que le vent. La température vit dans
+// `thermal.json`, collecté par un workflow de cadence différente.
+const WEATHER_URL = 'data/weather_forecast.json?v=4';
+const THERMAL_URL = 'data/thermal.json';
 let weatherData = null, weatherPromise = null, weatherRows = [];
+let thermalData = null;
 let weatherCommune = '', weatherPlaceRequest = 0;
 const weatherPlaceCache = new Map();
 /* Le panneau lit soit le centre de la carte — son comportement d'origine, qui
@@ -1276,14 +1278,40 @@ function gridBilinear(grid, values, lon, lat) {
        + (cells[2] * (1 - fx) + cells[3] * fx) * fy;
 }
 
+/* Interpole une nappe d'une grille horaire à un instant quelconque. Le champ
+ * thermique et le vent sont collectés par deux workflows de cadences
+ * différentes : ils n'ont ni le même pas d'espace, ni la même base de temps, et
+ * ne se lisent donc jamais au même indice de ligne. */
+function gridAt(grid, key, lon, lat, ts) {
+  if (!grid?.[key]) return null;
+  const x = (ts - grid.t0) / grid.dt;
+  const last = grid[key].length - 1;
+  if (!(x >= 0 && x <= last)) return null;
+  const k = Math.min(x | 0, last - 1), f = x - k;
+  const a = gridBilinear(grid, grid[key][k], lon, lat);
+  const b = gridBilinear(grid, grid[key][k + 1], lon, lat);
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
+  return a + (b - a) * f;
+}
+
+/* Température et pluie au pas de 20 km quand `thermal.json` couvre l'instant
+ * demandé. Sinon la grille du vent prend le relais : plus grossière — elle
+ * lisse les reliefs et sous-estime les plaines de plusieurs degrés — mais elle
+ * couvre les dix jours de la frise, et elle est là dès le premier déploiement,
+ * avant que le workflow météo n'ait tourné une première fois. */
+function thermalAt(key, lon, lat, ts) {
+  const fine = gridAt(thermalData, key, lon, lat, ts);
+  if (Number.isFinite(fine)) return fine;
+  return gridAt(W.data, key, lon, lat, ts);
+}
+
 function weatherValue(data, row, lon, lat) {
-  // Exports antérieurs au champ thermique fin : tout tenait sur une grille.
-  const thermal = data.thermal || data;
+  const ts = data.t0 + row * data.dt;
   const u = gridBilinear(data, data.u[row], lon, lat);
   const v = gridBilinear(data, data.v[row], lon, lat);
   const gust = gridBilinear(data, data.gust[row], lon, lat);
-  const temperature = gridBilinear(thermal, thermal.temperature[row], lon, lat);
-  const precipitation = gridBilinear(thermal, thermal.precipitation[row], lon, lat);
+  const temperature = thermalAt('temperature', lon, lat, ts);
+  const precipitation = thermalAt('precipitation', lon, lat, ts);
   if (![u, v, gust, temperature, precipitation].every(Number.isFinite)) return null;
   return { u, v, gust, temperature, precipitation, speed: Math.hypot(u, v) * 3.6 };
 }
@@ -1959,33 +1987,12 @@ function windAtGrid(d, g, lon, lat, out) {
   return true;
 }
 
-/* Température au pas de 20 km, interpolée entre les deux heures encadrantes.
- * Ne couvre que ±12 h autour de l'export : au-delà, `temperatureAt` retombe
- * sur la grille du vent. */
-function fineTemperatureAt(lon, lat, ts) {
-  const w = weatherData, thermal = w?.thermal;
-  if (!thermal) return null;
-  const x = (ts - w.t0) / w.dt;
-  if (!(x >= 0 && x <= w.nt - 1)) return null;
-  const k = Math.min(x | 0, w.nt - 2), f = x - k;
-  const a = gridBilinear(thermal, thermal.temperature[k], lon, lat);
-  const b = gridBilinear(thermal, thermal.temperature[k + 1], lon, lat);
-  if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
-  return a + (b - a) * f;
-}
-
 function temperatureAt(lon, lat) {
-  const d = W.data;
-  // Le champ fin ne porte que la fenêtre de prévision. La frise, elle, remonte
-  // dix jours : le champ large — plus grossier, mais complet — prend le relais
-  // dès que le curseur sort de cette fenêtre.
-  const fine = fineTemperatureAt(lon, lat, W.ts);
+  const fine = thermalAt('temperature', lon, lat, W.ts);
   if (Number.isFinite(fine)) return fine;
-  // Format courant : la température suit la même interpolation temporelle que
-  // le vent. L'instantané reste accepté pour les anciens exports locaux.
-  const values = W.cur?.temperature || d?.temperature_2m;
-  if (!values) return null;
-  return gridBilinear(d, values, lon, lat);
+  // Anciens exports locaux : un instantané unique, sans dimension temporelle.
+  const values = W.data?.temperature_2m;
+  return values ? gridBilinear(W.data, values, lon, lat) : null;
 }
 
 // Au zoom de détail, la grille fine se fond dans le champ national sur les
@@ -2036,8 +2043,11 @@ function windGridTime(d, ts) {
     for (let n = 0; n < a.length; n++) o[n] = a[n] + (b[n] - a[n]) * f;
     return o;
   };
+  // Seul le vent est pré-mélangé : il est relu à chaque frame par la nappe de
+  // particules. La température ne sert qu'au badge et au volet, quelques fois
+  // par seconde au plus, et `thermalAt` fait son interpolation temporelle
+  // lui-même — la pré-mélanger reviendrait à parcourir 225 valeurs pour rien.
   d._cur = { u: mix(d.u), v: mix(d.v), gust: mix(d.gust) };
-  if (d.temperature) d._cur.temperature = mix(d.temperature);
   return d._cur;
 }
 
@@ -2089,7 +2099,10 @@ function temperatureBadge() {
   tempKey.hidden = !Number.isFinite(value);
   if (tempKey.hidden) return;
   tempVal.textContent = `${Math.round(value)} °C`;
-  const stamp = W.cur?.temperature ? W.ts : W.data.temperature_ts;
+  // Les champs datés suivent la frise ; l'instantané des anciens exports locaux
+  // porte sa propre heure.
+  const dated = thermalData || W.data?.temperature;
+  const stamp = dated ? W.ts : W.data?.temperature_ts;
   tempKey.title = 'Température à 2 m au centre de la carte'
                 + (stamp ? `, au ${fmt(stamp)}` : '');
 }
@@ -3936,15 +3949,19 @@ const dataP = Promise.all([
   };
 });
 
-/* Le badge de température lit le champ fin du volet météo : il ne peut plus
- * attendre l'ouverture du panneau. La requête part en parallèle des données
- * nationales sans les retarder, et son échec reste sans conséquence —
- * `temperatureAt` retombe alors sur la grille du vent. */
+/* Le badge de température lit le champ fin : il ne peut donc plus attendre
+ * l'ouverture du volet météo. Les deux fichiers partent en parallèle des données
+ * nationales sans les retarder, et leur échec reste sans conséquence —
+ * `thermalAt` retombe sur la grille du vent. `thermal.json` peut d'ailleurs
+ * manquer légitimement : il appartient à un workflow de cadence plus lente. */
 weatherPromise = json(WEATHER_URL);
-weatherPromise.then(data => {
-  weatherData = data;
+weatherPromise.then(data => { weatherData = data; },
+                    () => { weatherPromise = null; });
+json(THERMAL_URL).then(data => {
+  thermalData = data;
   temperatureBadge();
-}, () => { weatherPromise = null; });
+  if (weatherPanel.classList.contains('open') && weatherData) drawWeather();
+}, () => {});
 
 /*
  * On ne s'accroche pas au seul événement 'load' : il n'est émis qu'après la
