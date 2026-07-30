@@ -80,6 +80,13 @@ THERMAL_PAST_DAYS = 1
 # tient donc en dix lots au lieu de dix-huit, et chaque aller-retour economise
 # est une occasion de moins de tomber sur un bridage.
 THERMAL_BATCH = 430
+# Meme plafond pour le vent fin, dont les points de toutes les cellules actives
+# voyagent ensemble : dix-huit cellules tiennent en six requetes. Voir
+# `fetch_fine_winds`.
+FINE_WIND_BATCH = 430
+# Le vent fin est un enrichissement, comme la grille thermique : mieux vaut le
+# champ national partout qu'une etape qui deborde et ne publie rien.
+FINE_WIND_DEADLINE = 8 * 60
 # Au-dela, on abandonne le champ fin et on repart sur la grille du vent. Sans ce
 # plafond la collecte n'est bornee que par la chance : le 30/07/2026, cinq
 # poignees de main expirees ont suffi a depasser les 25 min de l'etape et a
@@ -579,7 +586,16 @@ def meteo_request(points, model, variables, past_days):
 
 
 class DeadlineExceeded(Exception):
-    """Le budget de temps d'une serie de lots est epuise."""
+    """Le budget de temps d'une serie de lots est epuise.
+
+    Porte les series deja collectees : une grille tronquee est inutilisable,
+    mais un ensemble de cellules dont les premieres sont completes reste bon a
+    prendre. C'est au demandeur de trancher.
+    """
+
+    def __init__(self, message, collected):
+        super().__init__(message)
+        self.collected = collected
 
 
 def request_batches(points, model, variables, past_days, batch_size=WIND_BATCH,
@@ -596,7 +612,8 @@ def request_batches(points, model, variables, past_days, batch_size=WIND_BATCH,
         # serie interrompue au milieu ne donnerait aucune grille exploitable.
         if limit is not None and time.monotonic() > limit:
             raise DeadlineExceeded(
-                f"{number - 1}/{len(batches)} lots en {budget} s"
+                f"{number - 1}/{len(batches)} lots en {budget:.0f} s",
+                [series for chunk in chunks for series in chunk],
             )
         chunks.append(meteo_request(batch, model, variables, past_days))
         # Les runners GitHub partagent leurs IP avec beaucoup de jobs. Espacer
@@ -625,34 +642,26 @@ def keep_recent(series):
     return keep, [timestamps[index] for index in keep]
 
 
-def fetch_wind(box, spacing_km, label, temperature=False):
-    nx, ny, points = wind_grid(box, spacing_km)
-    dx = (box[2] - box[0]) * 111 * math.cos(math.radians((box[1] + box[3]) / 2))
-    print(f"  {label} {nx}x{ny} = {len(points)} points, pas ~{dx / (nx - 1):.0f} km")
-
-    series = request_wind_batches(points, WIND_MODEL, temperature)
+def wind_holes(series):
     holes = sum(
         value is None
         for location in series
         for value in location["hourly"]["wind_speed_10m"]
     )
     total = sum(len(location["hourly"]["wind_speed_10m"]) for location in series)
-    model = WIND_MODEL
-    if holes > total * 0.2:
-        print(
-            f"  ! AROME HD : {holes}/{total} valeurs manquantes, bascule best_match",
-            file=sys.stderr,
-        )
-        series = request_wind_batches(points, None, temperature)
-        model = "best_match"
+    return holes, total
 
+
+def build_wind(box, nx, ny, series, model, temperature=False):
+    """Convertit les series horaires d'un lot de points en grille exploitable."""
     keep, timestamps = keep_recent(series)
+    count = len(series)
 
-    u = [[0.0] * len(points) for _ in timestamps]
-    v = [[0.0] * len(points) for _ in timestamps]
-    gust = [[0] * len(points) for _ in timestamps]
-    temp = [[None] * len(points) for _ in timestamps] if temperature else None
-    precipitation = [[None] * len(points) for _ in timestamps] if temperature else None
+    u = [[0.0] * count for _ in timestamps]
+    v = [[0.0] * count for _ in timestamps]
+    gust = [[0] * count for _ in timestamps]
+    temp = [[None] * count for _ in timestamps] if temperature else None
+    precipitation = [[None] * count for _ in timestamps] if temperature else None
     for column, location in enumerate(series):
         hourly = location["hourly"]
         for row, index in enumerate(keep):
@@ -673,7 +682,6 @@ def fetch_wind(box, spacing_km, label, temperature=False):
             value = hourly["wind_gusts_10m"][index]
             gust[row][column] = round(value * 3.6) if value is not None else 0
 
-    print(f"  {len(timestamps)} heures, modele {model}")
     result = {
         "model": model,
         "box": box,
@@ -688,6 +696,80 @@ def fetch_wind(box, spacing_km, label, temperature=False):
     if temperature:
         result["temperature"] = temp
         result["precipitation"] = precipitation
+    return result
+
+
+def fetch_wind(box, spacing_km, label, temperature=False):
+    nx, ny, points = wind_grid(box, spacing_km)
+    dx = (box[2] - box[0]) * 111 * math.cos(math.radians((box[1] + box[3]) / 2))
+    print(f"  {label} {nx}x{ny} = {len(points)} points, pas ~{dx / (nx - 1):.0f} km")
+
+    series = request_wind_batches(points, WIND_MODEL, temperature)
+    holes, total = wind_holes(series)
+    model = WIND_MODEL
+    if holes > total * 0.2:
+        print(
+            f"  ! AROME HD : {holes}/{total} valeurs manquantes, bascule best_match",
+            file=sys.stderr,
+        )
+        series = request_wind_batches(points, None, temperature)
+        model = "best_match"
+
+    result = build_wind(box, nx, ny, series, model, temperature)
+    print(f"  {len(result['u'])} heures, modele {model}")
+    return result
+
+
+def fetch_fine_winds(boxes, spacing_km, budget=None):
+    """Vent fin de plusieurs cellules, en lots partages entre les cellules.
+
+    Le decoupage en cellules de 1° sert le navigateur, pas l'API : Open-Meteo
+    accepte une liste de coordonnees quelconque, et son quota se compte par
+    variables et par duree, pas par point. Une requete par cellule gaspillait
+    donc dix-huit aller-retours la ou six suffisent — et c'est le rythme des
+    aller-retours depuis l'IP partagee du runner qui declenche les bridages, pas
+    le volume demande. Les points de toutes les cellules partent donc ensemble,
+    et chaque grille est reconstruite depuis sa tranche de la reponse.
+    """
+    grids = {}
+    points = []
+    for key, box in boxes.items():
+        nx, ny, cell = wind_grid(box, spacing_km)
+        grids[key] = (box, nx, ny, len(points), len(cell))
+        points.extend(cell)
+    print(f"  {len(boxes)} cellules, {len(points)} points au total")
+
+    variables = ["wind_speed_10m", "wind_direction_10m", "wind_gusts_10m"]
+    model = WIND_MODEL
+    try:
+        series = request_batches(points, WIND_MODEL, variables, WIND_PAST_DAYS,
+                                 FINE_WIND_BATCH, budget)
+        holes, total = wind_holes(series)
+        if holes > total * 0.2:
+            print(
+                f"  ! AROME HD : {holes}/{total} valeurs manquantes, "
+                "bascule best_match",
+                file=sys.stderr,
+            )
+            series = request_batches(points, None, variables, WIND_PAST_DAYS,
+                                     FINE_WIND_BATCH, budget)
+            model = "best_match"
+    except DeadlineExceeded as error:
+        # Les cellules entierement couvertes par les lots deja recus restent
+        # exploitables. Les suivantes retomberont sur le champ national, comme
+        # lorsqu'une cellule n'est pas encore telechargee par le navigateur.
+        print(f"  ! vent fin ecourte ({error})", file=sys.stderr)
+        series = error.collected
+
+    result = {}
+    for key, (box, nx, ny, start, count) in grids.items():
+        if start + count > len(series):
+            continue
+        result[key] = build_wind(box, nx, ny, series[start:start + count], model)
+    if not result:
+        return {}
+    hours = len(result[next(iter(result))]["u"])
+    print(f"  {len(result)}/{len(boxes)} cellules, {hours} heures, modele {model}")
     return result
 
 
@@ -929,28 +1011,28 @@ def main():
 
     fine_keys = fine_wind_tiles(recent, hotspots, latest)
     fine_wind = {}
-    print(f"  {len(fine_keys)} cellules avec vent fin")
-    for ix, iy in sorted(fine_keys):
+    if fine_keys:
         # La grille dépasse la cellule active de 60 km. Le navigateur fond
         # ensuite cette marge dans le champ national : sans débord, la rupture
         # de résolution dessinerait un carré net dans les particules.
-        fine_box = wind_box((ix, iy, ix + TILE_DEG, iy + TILE_DEG))
-        name = tile_id(ix, iy)
+        fine_boxes = {
+            (ix, iy): wind_box((ix, iy, ix + TILE_DEG, iy + TILE_DEG))
+            for ix, iy in sorted(fine_keys)
+        }
         try:
-            raw = fetch_wind(
-                fine_box,
-                WIND_SPACING_KM,
-                f"    {name}",
-            )
+            raw = fetch_fine_winds(fine_boxes, WIND_SPACING_KM,
+                                   FINE_WIND_DEADLINE)
         except Exception as error:
             # Le champ national grossier reste disponible partout : une maille
             # fine est un enrichissement, pas une raison de bloquer la mise à
-            # jour des foyers et périmètres pendant plusieurs heures. Après un
-            # épuisement des reprises, les cellules suivantes rencontreraient
-            # vraisemblablement la même limite : on arrête proprement la série.
-            print(f"  ! {name} : fin du vent fin ({error})", file=sys.stderr)
-            break
-        fine_wind[(ix, iy)] = whole_wind(raw, WIND_DETAIL_STRIDE)
+            # jour des foyers et périmètres pendant plusieurs heures. Les points
+            # voyageant desormais en lots partages, une serie interrompue ne
+            # donne aucune cellule exploitable : c'est tout ou rien, la ou la
+            # boucle par cellule gardait les premieres.
+            print(f"  ! vent fin abandonne ({error})", file=sys.stderr)
+            raw = {}
+        for key, grid in raw.items():
+            fine_wind[key] = whole_wind(grid, WIND_DETAIL_STRIDE)
 
     # Collectee en dernier, et sous plafond de temps : c'est la seule serie qui
     # sache se replier entierement sans rien perdre d'essentiel. Passee avant le

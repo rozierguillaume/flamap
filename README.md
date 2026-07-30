@@ -226,13 +226,13 @@ affiché : la nappe ne présente ni trou ni bord carré.
   (`effis.nrt.ba.poly`), et ajoute deux epochs (`ts`, `lu`) exploitables
   directement par le curseur.
 - Open-Meteo sert le modèle **AROME HD** de Météo-France en JSON, sans clé. Le
-  script demande 225 points pour le champ national de vent, environ 4 290 pour
-  la grille de température à 20 km, puis de petites grilles de vent à 20 km
-  dans les cellules actives — soit une trentaine de requêtes par passage. Les
+  script demande 225 points pour le champ national de vent, environ 2 570 pour
+  les grilles fines à 20 km des cellules actives, et environ 4 290 pour la
+  grille de température à 20 km — soit **environ 17 requêtes** par passage. Les
   requêtes sont séquentielles et espacées de six secondes pour les IP partagées
-  des runners GitHub. Si une grille fine de vent reste indisponible, la série
-  s'arrête proprement : le vent national grossier demeure affiché partout.
-  Vitesse et azimut sont convertis en composantes est/nord.
+  des runners GitHub. Si une grille fine de vent reste indisponible, le vent
+  national grossier demeure affiché partout. Vitesse et azimut sont convertis
+  en composantes est/nord.
 
   La grille de température ne demande qu'un jour de passé, contre dix pour le
   vent, et deux variables au lieu de cinq : c'est cette fenêtre courte qui paie
@@ -244,12 +244,19 @@ affiché : la nappe ne présente ni trou ni bord carré.
   lot de 430 points pèse un appel comme un lot d'un seul. La contrainte réelle
   est le nombre d'aller-retours depuis l'IP partagée du runner, qui déclenche
   au-delà d'un certain rythme des HTTP 429 et des poignées de main TLS qui
-  restent pendantes. D'où trois garde-fous : des lots de 430 points — le
-  plafond est la longueur d'URL, 1 000 points renvoient un `HTTP 414` — un
-  timeout de 30 s là où une réponse saine arrive en moins d'une seconde, et un
-  budget de six minutes pour la grille de température, collectée en dernier.
-  Passé ce délai elle est abandonnée au profit du champ large : une température
-  trop lissée vaut mieux qu'une carte sans foyers.
+  restent pendantes.
+
+  D'où quatre garde-fous. Les points partent par lots de 430 — le plafond est la
+  longueur d'URL, 1 000 points renvoient un `HTTP 414`. Le découpage en cellules
+  de 1° sert le navigateur, pas l'API : les points de **toutes** les cellules
+  actives voyagent dans des lots partagés, donc 18 cellules tiennent en 6
+  requêtes au lieu de 18, et chaque grille est reconstruite depuis sa tranche de
+  la réponse. Le timeout est à 30 s là où une réponse saine arrive en moins
+  d'une seconde. Enfin le vent fin et la grille de température ont chacun un
+  budget de temps — 8 et 6 minutes — au-delà duquel ils sont écourtés au profit
+  du champ national : les cellules entièrement couvertes par les lots déjà reçus
+  restent exploitables, les autres retombent sur le champ large, exactement
+  comme une cellule que le navigateur n'a pas encore téléchargée.
 - Airplanes.live n'est pas interrogé par le collecteur : le navigateur lui
   demande en une seule fois les positions courantes des ICAO24 connus dès
   l'ouverture de la carte. Les réponses sans position fraîche sont

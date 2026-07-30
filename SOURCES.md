@@ -206,10 +206,17 @@ réanalyse ERA5, 25 km, latence 5 jours).
    requêtes par collecte — HTTP 429 sur quatre requêtes, et surtout cinq
    poignées de main TLS laissées pendantes jusqu'au timeout. À 180 s chacune,
    ces cinq incidents ont consommé 15 minutes et fait échouer la collecte sur
-   les 25 minutes de l'étape. D'où les trois garde-fous : lots de 430 points
-   (le plafond est la longueur d'URL — 1 000 points renvoient un `HTTP 414`),
-   timeout de 30 s, et budget de 6 min sur la grille de température, collectée
-   en dernier parce que c'est la seule série qui sache se replier entièrement.
+   les 25 minutes de l'étape.
+
+   D'où quatre garde-fous : lots de 430 points (le plafond est la longueur
+   d'URL — 1 000 points renvoient un `HTTP 414`), timeout de 30 s, budgets de
+   temps sur le vent fin et la température, et surtout **des lots partagés entre
+   cellules**. Ce dernier point ramène la collecte de 33 à ~17 requêtes : le
+   découpage en cellules de 1° existe pour le navigateur, l'API accepte une
+   liste de coordonnées quelconque, donc rien n'obligeait à payer un
+   aller-retour par cellule. Vérifié : une grille reconstruite depuis sa tranche
+   d'un lot partagé est identique au bit près à celle obtenue par une requête
+   dédiée.
 
 ### Les autres pistes de vent, écartées
 
