@@ -166,14 +166,28 @@ cas le volet ne suit plus les déplacements et un bouton ramène au centre :
 température, vent moyen, direction, rafales et précipitations horaires
 sur les 12 dernières et les 12 prochaines heures. Deux traits situent l'heure
 actuelle et l'extraction des données affichées sur la carte. Ces séries sont
-isolées dans `data/weather_forecast.json` et ne sont téléchargées qu'à la
-première ouverture du volet. Un déplacement de la carte ouverte réinterpole
-ensuite la même grille, sans requête réseau supplémentaire — sauf sur un point
-épinglé, qui reste fixe. Le survol donne,
+isolées dans `data/weather_forecast.json`. Un déplacement de la carte ouverte
+réinterpole ensuite les mêmes grilles, sans requête réseau supplémentaire —
+sauf sur un point épinglé, qui reste fixe. Le survol donne,
 heure par heure, la température, le vent moyen, sa direction, les rafales et le
-cumul de précipitations en millimètres. La légende principale affiche aussi la
-température actuelle grâce à un seul instantané de 225 valeurs inclus dans
-`data/wind_coarse.json`, sans charger toute la série météo.
+cumul de précipitations en millimètres.
+
+Ce fichier porte **deux grilles de pas différents**. Le vent reste sur la
+grille nationale à ~94 km : il varie assez lentement dans l'espace pour s'en
+contenter. La température et les précipitations ont leur propre grille à
+**20 km**, décrite par le bloc `thermal`. La raison est le relief : la
+température à 2 m perd environ 0,65 °C par 100 m d'altitude, si bien qu'un
+point de grille tombé en montagne tirait toute la plaine voisine vers le bas.
+Sur la grille du vent, Lyon ressortait à 33 °C un jour où AROME en prévoyait
+39 ; à 20 km l'écart passe sous le degré. Descendre à 10 km ne gagnerait qu'à
+peu près 1 °C de plus pour 3,4 fois le poids du fichier et 62 requêtes
+Open-Meteo au lieu de 18.
+
+La légende principale affiche la température au centre de la carte en lisant
+cette même grille fine, ce qui impose de la télécharger au démarrage et non à
+l'ouverture du volet. Elle ne couvre que ±12 h ; dès que le curseur temporel
+sort de cette fenêtre, la légende retombe sur la température grossière
+transportée par `data/wind_coarse.json`, qui suit les dix jours de la frise.
 
 ## Chargement progressif
 
@@ -183,6 +197,7 @@ température actuelle grâce à un seul instantané de 225 valeurs inclus dans
   nombre et leur FRP totale ;
 - périmètres EFFIS français mis à jour dans les sept derniers jours ;
 - vent national 15 × 15 ;
+- grille de température à 20 km sur ±12 h, pour la légende et le volet météo ;
 - manifest et frise nationale.
 
 À partir du zoom 7, `moveend` charge les cellules de 1° qui coupent l'écran.
@@ -211,12 +226,20 @@ affiché : la nappe ne présente ni trou ni bord carré.
   (`effis.nrt.ba.poly`), et ajoute deux epochs (`ts`, `lu`) exploitables
   directement par le curseur.
 - Open-Meteo sert le modèle **AROME HD** de Météo-France en JSON, sans clé. Le
-  script demande 225 points pour le champ national, puis de petites grilles à
-  20 km dans les cellules actives. Les requêtes sont séquentielles avec reprise
-  bornée sur HTTP 429 et espacées de six secondes pour les IP partagées des
-  runners GitHub. Si une grille fine reste indisponible, la série fine s'arrête
-  proprement : le vent national grossier demeure affiché partout. Vitesse et
-  azimut sont convertis en composantes est/nord.
+  script demande 225 points pour le champ national de vent, environ 4 350 pour
+  la grille de température à 20 km, puis de petites grilles de vent à 20 km
+  dans les cellules actives — soit une vingtaine de requêtes par passage, les
+  points étant groupés par lots de 250. Les requêtes sont séquentielles avec
+  reprise bornée sur HTTP 429 et espacées de six secondes pour les IP partagées
+  des runners GitHub. Si une grille fine reste indisponible, la série fine
+  s'arrête proprement : le vent national grossier demeure affiché partout.
+  Vitesse et azimut sont convertis en composantes est/nord.
+
+  La grille de température ne demande qu'un jour de passé, contre dix pour le
+  vent, et deux variables au lieu de cinq : c'est cette fenêtre courte qui paie
+  ses points supplémentaires. Elle pèse au total environ 5 % de données de plus
+  qu'avant son introduction, les grilles fines de vent restant de loin le poste
+  dominant.
 - Airplanes.live n'est pas interrogé par le collecteur : le navigateur lui
   demande en une seule fois les positions courantes des ICAO24 connus dès
   l'ouverture de la carte. Les réponses sans position fraîche sont
@@ -386,6 +409,10 @@ volet météo.
   les trois heures. Elle donne une tendance, pas la rafale d'une parcelle.
 - La vitesse de la nappe est relative, jamais une distance parcourue au sol :
   les chiffres justes sont ceux de la légende.
+- **La température reste sous-estimée dans les vallées encaissées.** Sa grille
+  à 20 km suffit en plaine — Lyon à moins d'un degré — mais un fond de vallée
+  alpin n'a que des sommets pour voisins, et perd plusieurs degrés à
+  l'interpolation. Corriger ce cas demanderait un modèle d'élévation embarqué.
 - Tout est en UTC côté satellite ; l'affichage est converti en heure de Paris.
 
 ## Crédits

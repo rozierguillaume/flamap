@@ -146,10 +146,17 @@ jobs:
           if not manifest['hotspot_count'] or not timeline or actual != expected:
               sys.exit('artefact publie incomplet, déploiement annulé')
           weather_rows = weather.get('nt', 0)
+          # Ce workflow republie les données déjà en ligne : entre la mise en
+          # service du champ thermique fin et le passage suivant du workflow
+          # complet, elles sont encore au format plat. Le front sait lire les
+          # deux, la vérification aussi — sans quoi un simple correctif de
+          # style resterait bloqué jusqu'au prochain cron.
+          thermal = weather.get('thermal') or weather
           if (weather_rows < 2
               or any(len(weather.get(name, [])) != weather_rows
-                     for name in ('u', 'v', 'gust', 'temperature',
-                                  'precipitation'))):
+                     for name in ('u', 'v', 'gust'))
+              or any(len(thermal.get(name, [])) != weather_rows
+                     for name in ('temperature', 'precipitation'))):
               sys.exit('export météo absent ou incomplet')
           fine = set(manifest['fine_wind_zones'])
           for path in zone_paths:

@@ -68,6 +68,11 @@ WIND_BATCH = 250
 WIND_MARGIN_KM = 60
 WIND_DETAIL_STRIDE = 3
 WIND_COARSE_N = 15
+# Pas de la grille de temperature, sans rapport avec celui du vent : voir
+# `fetch_thermal`. Descendre a 10 km ne gagnerait qu'environ 1 °C en plaine
+# pour 3,4 fois le poids du fichier et 62 requetes au lieu de 18.
+THERMAL_SPACING_KM = 20
+THERMAL_PAST_DAYS = 1
 FIRMS_FINE_MIN = 50
 FIRMS_TIMEOUT = 60
 FIRMS_ATTEMPTS = 2
@@ -518,16 +523,13 @@ def wind_grid(box, spacing_km):
     return nx, ny, points
 
 
-def wind_request(points, model, temperature=False):
+def meteo_request(points, model, variables, past_days):
     lat = ",".join(str(point[0]) for point in points)
     lon = ",".join(str(point[1]) for point in points)
-    variables = "wind_speed_10m,wind_direction_10m,wind_gusts_10m"
-    if temperature:
-        variables += ",temperature_2m,precipitation"
     url = (
         f"{OPEN_METEO}?latitude={lat}&longitude={lon}"
-        f"&hourly={variables}"
-        f"&past_days={WIND_PAST_DAYS}&forecast_days=2"
+        f"&hourly={','.join(variables)}"
+        f"&past_days={past_days}&forecast_days=2"
         "&wind_speed_unit=ms&timezone=UTC"
     )
     if model:
@@ -545,7 +547,7 @@ def wind_request(points, model, temperature=False):
             time.sleep(delay)
 
 
-def request_wind_batches(points, model, temperature=False):
+def request_batches(points, model, variables, past_days):
     batches = [
         points[index:index + WIND_BATCH]
         for index in range(0, len(points), WIND_BATCH)
@@ -553,12 +555,31 @@ def request_wind_batches(points, model, temperature=False):
     print(f"  {len(batches)} lots de {WIND_BATCH} points au plus")
     chunks = []
     for batch in batches:
-        chunks.append(wind_request(batch, model, temperature))
+        chunks.append(meteo_request(batch, model, variables, past_days))
         # Les runners GitHub partagent leurs IP avec beaucoup de jobs. Espacer
         # franchement les requêtes évite qu'une série de grilles fines soit
         # prise pour une rafale, même loin du quota journalier.
         time.sleep(WIND_REQUEST_PAUSE)
     return [series for chunk in chunks for series in chunk]
+
+
+def request_wind_batches(points, model, temperature=False):
+    variables = ["wind_speed_10m", "wind_direction_10m", "wind_gusts_10m"]
+    if temperature:
+        variables += ["temperature_2m", "precipitation"]
+    return request_batches(points, model, variables, WIND_PAST_DAYS)
+
+
+def keep_recent(series):
+    """Indices et horodatages retenus : tout le passe, 24 h de prevision."""
+    times = series[0]["hourly"]["time"]
+    timestamps = [
+        int(datetime.fromisoformat(value).replace(tzinfo=timezone.utc).timestamp())
+        for value in times
+    ]
+    now = datetime.now(timezone.utc).timestamp()
+    keep = [index for index, stamp in enumerate(timestamps) if stamp <= now + 24 * 3600]
+    return keep, [timestamps[index] for index in keep]
 
 
 def fetch_wind(box, spacing_km, label, temperature=False):
@@ -582,14 +603,7 @@ def fetch_wind(box, spacing_km, label, temperature=False):
         series = request_wind_batches(points, None, temperature)
         model = "best_match"
 
-    times = series[0]["hourly"]["time"]
-    timestamps = [
-        int(datetime.fromisoformat(value).replace(tzinfo=timezone.utc).timestamp())
-        for value in times
-    ]
-    now = datetime.now(timezone.utc).timestamp()
-    keep = [index for index, stamp in enumerate(timestamps) if stamp <= now + 24 * 3600]
-    timestamps = [timestamps[index] for index in keep]
+    keep, timestamps = keep_recent(series)
 
     u = [[0.0] * len(points) for _ in timestamps]
     v = [[0.0] * len(points) for _ in timestamps]
@@ -632,6 +646,67 @@ def fetch_wind(box, spacing_km, label, temperature=False):
         result["temperature"] = temp
         result["precipitation"] = precipitation
     return result
+
+
+def fetch_thermal(box, spacing_km):
+    """Grille dediee a la temperature, bien plus fine que celle du vent.
+
+    La temperature a 2 m suit le relief : sur la grille nationale du vent, dont
+    le pas atteint ~94 km, un point tombe en altitude tire toute la plaine
+    voisine vers le bas — Lyon ressortait a 33 °C un jour ou AROME en prevoyait
+    39. Le pas de 20 km ramene l'ecart sous le degre en plaine. Le vent, lui,
+    varie assez lentement dans l'espace pour se contenter de la grille large :
+    le raffiner couterait cinq fois plus de requetes sans rien corriger.
+
+    Fenetre volontairement courte — 1 jour de passe, 2 de prevision — la ou le
+    vent en garde 10 : le volet meteo n'affiche que +/-12 h, et c'est cette
+    profondeur reduite qui paie les points supplementaires.
+    """
+    nx, ny, points = wind_grid(box, spacing_km)
+    dx = (box[2] - box[0]) * 111 * math.cos(math.radians((box[1] + box[3]) / 2))
+    print(f"  grille thermique {nx}x{ny} = {len(points)} points, "
+          f"pas ~{dx / (nx - 1):.0f} km")
+
+    variables = ["temperature_2m", "precipitation"]
+    series = request_batches(points, WIND_MODEL, variables, THERMAL_PAST_DAYS)
+    holes = sum(
+        value is None
+        for location in series
+        for value in location["hourly"]["temperature_2m"]
+    )
+    total = sum(len(location["hourly"]["temperature_2m"]) for location in series)
+    model = WIND_MODEL
+    if holes > total * 0.2:
+        print(
+            f"  ! AROME HD : {holes}/{total} temperatures manquantes, "
+            "bascule best_match",
+            file=sys.stderr,
+        )
+        series = request_batches(points, None, variables, THERMAL_PAST_DAYS)
+        model = "best_match"
+
+    keep, timestamps = keep_recent(series)
+    temp = [[None] * len(points) for _ in timestamps]
+    precipitation = [[None] * len(points) for _ in timestamps]
+    for column, location in enumerate(series):
+        hourly = location["hourly"]
+        for row, index in enumerate(keep):
+            value = hourly["temperature_2m"][index]
+            temp[row][column] = round(value, 1) if value is not None else None
+            value = hourly["precipitation"][index]
+            precipitation[row][column] = round(value, 2) if value is not None else None
+
+    print(f"  {len(timestamps)} heures, modele {model}")
+    return {
+        "model": model,
+        "box": box,
+        "nx": nx,
+        "ny": ny,
+        "t0": timestamps[0],
+        "dt": 3600,
+        "temperature": temp,
+        "precipitation": precipitation,
+    }
 
 
 def wind_subset(wind, xs, ys, time_stride=1):
@@ -677,8 +752,16 @@ def whole_wind(wind, time_stride=1):
     )
 
 
-def weather_forecast(wind, now, hours=12):
-    """Extrait 12 h passees et 12 h futures pour le volet meteo."""
+def weather_forecast(wind, thermal, now, hours=12):
+    """Extrait 12 h passees et 12 h futures pour le volet meteo.
+
+    Le vent reste sur la grille nationale large, la temperature et les pluies
+    arrivent sur la grille fine : les deux champs n'ont ni le meme pas ni la
+    meme emprise, d'ou le bloc `thermal` separe que le navigateur interpole a
+    part. Les deux series sont horaires et calees sur l'heure ronde, mais le
+    thermique demarre bien plus tard ; la fenetre est donc reduite a ce que les
+    deux couvrent, sinon le graphique afficherait des trous.
+    """
     pivot = next(
         (index for index in range(len(wind["u"]))
          if wind["t0"] + index * wind["dt"] >= now),
@@ -686,7 +769,20 @@ def weather_forecast(wind, now, hours=12):
     )
     start = max(0, pivot - hours)
     stop = min(pivot + hours + 1, len(wind["u"]))
+
+    span = len(thermal["temperature"])
+
+    def row_of(index):
+        stamp = wind["t0"] + index * wind["dt"]
+        return (stamp - thermal["t0"]) // thermal["dt"]
+
+    while start < stop and not 0 <= row_of(start) < span:
+        start += 1
+    while stop > start and not 0 <= row_of(stop - 1) < span:
+        stop -= 1
+
     rows = range(start, stop)
+    thermal_rows = [row_of(index) for index in rows]
     return {
         "model": wind["model"],
         "bbox": [round(value, 4) for value in wind["box"]],
@@ -698,8 +794,13 @@ def weather_forecast(wind, now, hours=12):
         "u": [wind["u"][row] for row in rows],
         "v": [wind["v"][row] for row in rows],
         "gust": [wind["gust"][row] for row in rows],
-        "temperature": [wind["temperature"][row] for row in rows],
-        "precipitation": [wind["precipitation"][row] for row in rows],
+        "thermal": {
+            "bbox": [round(value, 4) for value in thermal["box"]],
+            "nx": thermal["nx"],
+            "ny": thermal["ny"],
+            "temperature": [thermal["temperature"][row] for row in thermal_rows],
+            "precipitation": [thermal["precipitation"][row] for row in thermal_rows],
+        },
     }
 
 
@@ -760,6 +861,11 @@ def main():
         coarse_box, coarse_spacing, "grille nationale", temperature=True
     )
 
+    # La temperature du vent grossier reste exportee : elle sert de repli au
+    # badge quand la frise remonte au-dela de la fenetre du champ fin.
+    print("\nOpen-Meteo / AROME HD - temperature a 2 m")
+    thermal = fetch_thermal(coarse_box, THERMAL_SPACING_KM)
+
     fine_keys = fine_wind_tiles(recent, hotspots, latest)
     fine_wind = {}
     print(f"  {len(fine_keys)} cellules avec vent fin")
@@ -814,7 +920,7 @@ def main():
     overview = aggregate_hotspots(hotspots)
     coarse = whole_wind(coarse_wind)
     now = datetime.now(timezone.utc).timestamp()
-    weather = weather_forecast(coarse_wind, now)
+    weather = weather_forecast(coarse_wind, thermal, now)
     manifest = {
         "version": 1,
         "generated_at": generated,
