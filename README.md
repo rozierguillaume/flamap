@@ -27,6 +27,9 @@ VIIRS/S-NPP et MODIS). Il permet aussi de choisir la métrique des graphiques :
 nombre de foyers ou, par défaut, somme de leur puissance radiative instantanée
 (FRP, en MW). Sur la carte, la FRP module légèrement la taille de chaque point ;
 l'ancienneté reste le facteur visuel principal.
+Le graphique ouvert depuis la frise reprend ce choix avec deux onglets —
+**Puissance (MW)** et **Nombre de foyers** — synchronisés avec le réglage de
+**Calques**. Sa ligne jaune est une moyenne mobile centrée sur 48 heures.
 La fumée peut elle aussi être masquée dans **Calques**. Elle est indicative :
 ce n'est ni une observation satellite de fumée ni une mesure de qualité de
 l'air.
@@ -104,6 +107,9 @@ rien dans les données. La frise nationale regroupe les détections par satellit
 et par passage. Une barre orange par passage représente, au choix, le nombre de
 foyers ou leur puissance radiative totale. Dès que toute la France ne tient plus
 à l'écran, ce graphique est recalculé sur la seule emprise visible.
+Les deux métriques sont commutables directement au-dessus du graphique ; la
+ligne jaune lisse la série avec une fenêtre centrée de 48 heures (24 heures de
+chaque côté du passage).
 
 Les mises à jour EFFIS restent consultables dans le journal ouvert par le bouton
 `i`, sans être mélangées à cette mesure d'intensité FIRMS.

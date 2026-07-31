@@ -263,11 +263,29 @@
                           cursor: pointer; padding: 0; font: 400 23px/1 system-ui, sans-serif; }
   #activity-panel-close:hover { background: #2c313a; }
   #activity-scope { margin: 12px 0 8px; color: var(--ink-dim); font-size: 12px; }
+  #activity-tabs { display: flex; gap: 5px; margin: 0 0 10px; padding: 3px;
+                   border: 1px solid #343941; border-radius: 8px;
+                   background: rgba(0,0,0,.18); }
+  #activity-tabs button { flex: 1; min-width: 0; padding: 6px 9px;
+                          border: 0; border-radius: 5px; color: var(--ink-dim);
+                          background: transparent; font: inherit; font-size: 12px;
+                          cursor: pointer; }
+  #activity-tabs button:hover { color: var(--ink); background: rgba(255,255,255,.06); }
+  #activity-tabs button[aria-selected="true"] { color: var(--ink); background: #343941;
+                                                  box-shadow: 0 1px 3px rgba(0,0,0,.24); }
   #activity-large { position: relative; flex: none; height: 250px;
                     border-bottom: 1px solid #454a52; cursor: crosshair; }
+  /* La ligne reste au-dessus des barres pour rester lisible dans les pics. Le
+     calque SVG ne capture aucun pointeur : les barres gardent leur sélection. */
+  #activity-average { position: absolute; z-index: 3; inset: 0; width: 100%; height: 100%;
+                      overflow: visible; pointer-events: none; }
+  #activity-average path { fill: none; stroke-linecap: round; stroke-linejoin: round;
+                           vector-effect: non-scaling-stroke; }
+  #activity-average .halo { stroke: rgba(16,19,22,.92); stroke-width: 6; }
+  #activity-average .line { stroke: var(--front); stroke-width: 2.5; }
   #activity-large b { position: absolute; bottom: 0; width: 4px; min-height: 3px;
                       margin-left: -2px; background: var(--hot);
-                      border-radius: 3px 3px 0 0; opacity: .82; }
+                      border-radius: 3px 3px 0 0; opacity: .82; z-index: 2; }
   #activity-large b:hover, #activity-large b.selected {
     background: var(--front); opacity: 1 !important;
   }
@@ -902,6 +920,12 @@
     <button id="activity-panel-close" aria-label="Fermer">×</button>
   </header>
   <p id="activity-scope"></p>
+  <div id="activity-tabs" role="tablist" aria-label="Métrique du graphique">
+    <button type="button" role="tab" data-activity-metric="frp"
+            aria-controls="activity-large" aria-selected="true">Puissance (MW)</button>
+    <button type="button" role="tab" data-activity-metric="count"
+            aria-controls="activity-large" aria-selected="false">Nombre de foyers</button>
+  </div>
   <div id="activity-large" role="img"
        aria-label="Nombre de foyers détectés à chaque passage satellite"></div>
   <div id="activity-detail" aria-live="polite"></div>
@@ -1214,6 +1238,7 @@ const activityPanel = document.getElementById('activity-panel');
 const activityLarge = document.getElementById('activity-large');
 const activityDetail = document.getElementById('activity-detail');
 const activityMetricInputs = [...document.querySelectorAll('input[name="activity-metric"]')];
+const activityMetricTabs = [...document.querySelectorAll('[data-activity-metric]')];
 const powerMetricInput = activityMetricInputs.find(input => input.value === 'frp');
 const clockEl = document.getElementById('clock');
 const updatesPanel = document.getElementById('updates-panel');
@@ -1226,6 +1251,23 @@ const weatherPlace = document.getElementById('weather-place');
 const weatherStatus = document.getElementById('weather-status');
 const weatherTitle = document.getElementById('weather-title');
 const weatherFollow = document.getElementById('weather-follow');
+
+function syncActivityMetricControls() {
+  for (const input of activityMetricInputs)
+    input.checked = input.value === activityMetric;
+  for (const tab of activityMetricTabs) {
+    const selected = tab.dataset.activityMetric === activityMetric;
+    tab.setAttribute('aria-selected', selected);
+    tab.tabIndex = selected ? 0 : -1;
+  }
+}
+function setActivityMetric(metric) {
+  if (!['count', 'frp'].includes(metric)) return;
+  const changed = activityMetric !== metric;
+  activityMetric = metric;
+  syncActivityMetricControls();
+  if (changed) drawActivity();
+}
 // v4 : le fichier ne porte plus que le vent. La température vit dans
 // `thermal.json`, collecté par un workflow de cadence différente.
 const WEATHER_URL = 'data/weather_forecast.json?v=4';
@@ -2503,9 +2545,32 @@ function activityPassages() {
 
 let activityMetric =
   document.querySelector('input[name="activity-metric"]:checked')?.value || 'count';
-let renderedActivity = [], activityPeak = 1, activityT0 = 0, activitySpan = 1;
+let renderedActivity = [], renderedActivityAverages = [];
+let activityPeak = 1, activityT0 = 0, activitySpan = 1;
+syncActivityMetricControls();
 
 const activityValue = step => activityMetric === 'frp' ? (+step.frp || 0) : step.n;
+const ACTIVITY_AVERAGE_H = 48;
+const activityAverageText = `moyenne centrée sur ${ACTIVITY_AVERAGE_H} h`;
+/* Les passages ne sont pas espacés régulièrement : une moyenne sur un nombre
+ * fixe de barres changerait de durée selon la zone et la période affichées.
+ * La fenêtre est bornée par le temps et centrée sur chaque passage, avec
+ * 24 heures de données de chaque côté. Chaque passage compte une fois. */
+function activityMovingAverage(passes, windowMs = ACTIVITY_AVERAGE_H * H) {
+  const averages = [];
+  const halfWindow = windowMs / 2;
+  let first = 0, last = 0, sum = 0;
+  for (let i = 0; i < passes.length; i++) {
+    const start = passes[i].ts - halfWindow;
+    const end = passes[i].ts + halfWindow;
+    while (last < passes.length && passes[last].ts <= end)
+      sum += activityValue(passes[last++]);
+    while (first < last && passes[first].ts < start)
+      sum -= activityValue(passes[first++]);
+    averages.push({ ts: passes[i].ts, value: sum / (last - first) });
+  }
+  return averages;
+}
 const countLabel = n => `${n.toLocaleString('fr-FR')} foyer${n > 1 ? 's' : ''}`;
 const powerLabel = frp => `${frp.toLocaleString('fr-FR', {
   maximumFractionDigits: frp < 100 ? 1 : 0,
@@ -2526,7 +2591,8 @@ function showActivityDetail(index) {
   const strong = document.createElement('strong');
   strong.textContent = primaryActivityLabel(step);
   const meta = document.createElement('span');
-  meta.textContent = `${fmt(step.ts)} · ${step.label} · ${secondaryActivityLabel(step)}`;
+  const average = renderedActivityAverages[index]?.value || 0;
+  meta.textContent = `${fmt(step.ts)} · ${step.label} · ${secondaryActivityLabel(step)} · ${activityAverageText} : ${activityMetric === 'frp' ? powerLabel(average) : countLabel(Math.round(average))}`;
   activityDetail.replaceChildren(strong, meta);
 }
 
@@ -2534,27 +2600,38 @@ function drawLargeActivity(selected = null) {
   if (!activityPanel.classList.contains('open')) return;
   document.getElementById('activity-scope').textContent =
     activityEl.dataset.scope === 'local'
-      ? 'Passages dans la zone visible · échelle adaptée au pic local.'
-      : "Passages sur l'ensemble de la France.";
+      ? `Passages dans la zone visible · échelle adaptée au pic local · ligne jaune : ${activityAverageText}.`
+      : `Passages sur l'ensemble de la France · ligne jaune : ${activityAverageText}.`;
   document.getElementById('activity-title').textContent =
     activityMetric === 'frp' ? 'Puissance radiative détectée' : 'Nombre de foyers détectés';
   activityLarge.setAttribute('aria-label',
-    `${renderedActivity.length} passages satellite — ${activityEl.getAttribute('aria-label')}`);
+    `${renderedActivity.length} passages satellite — ${activityEl.getAttribute('aria-label')} — ligne de ${activityAverageText}`);
 
   if (!renderedActivity.length) {
     activityLarge.innerHTML = '<span id="activity-empty">Aucun foyer détecté dans cette zone.</span>';
+    renderedActivityAverages = [];
     activityDetail.replaceChildren();
     return;
   }
   const panelPeak = Math.max(...renderedActivity.map(activityValue), 1);
+  renderedActivityAverages = activityMovingAverage(renderedActivity);
+  const averagePath = renderedActivityAverages.map((point, index) => {
+    const x = ((point.ts - activityT0) / activitySpan * 100).toFixed(3);
+    const y = (100 - 100 * point.value / panelPeak).toFixed(3);
+    return `${index ? 'L' : 'M'} ${x} ${y}`;
+  }).join(' ');
+  const averageLine = renderedActivityAverages.length > 1
+    ? `<svg id="activity-average" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">`
+      + `<path class="halo" d="${averagePath}"></path><path class="line" d="${averagePath}"></path></svg>`
+    : '';
   activityLarge.innerHTML = renderedActivity.map((step, index) => {
     const left = ((step.ts - activityT0) / activitySpan * 100).toFixed(3);
     const value = activityValue(step);
     const height = (100 * value / panelPeak).toFixed(2);
-    const opacity = (.42 + .5 * value / panelPeak).toFixed(2);
+    const opacity = (.28 + .36 * value / panelPeak).toFixed(2);
     return `<b data-i="${index}" title="${activityLabel(step)}" `
       + `style="left:${left}%;height:${height}%;min-height:${value ? 3 : 0}px;opacity:${opacity}"></b>`;
-  }).join('');
+  }).join('') + averageLine;
   const fallback = renderedActivity.reduce(
     (best, step, index) =>
       activityValue(step) > activityValue(renderedActivity[best]) ? index : best, 0);
@@ -4307,8 +4384,10 @@ for (const check of sourceChecks) check.addEventListener('change', event => {
 });
 for (const input of activityMetricInputs) input.addEventListener('change', event => {
   if (!event.target.checked) return;
-  activityMetric = event.target.value;
-  drawActivity();
+  setActivityMetric(event.target.value);
+});
+for (const tab of activityMetricTabs) tab.addEventListener('click', event => {
+  setActivityMetric(event.currentTarget.dataset.activityMetric);
 });
 document.getElementById('ck-wind').addEventListener('change', e => {
   W.on = e.target.checked; windLoop(); windBadge();
