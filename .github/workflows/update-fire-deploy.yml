@@ -4,10 +4,10 @@
 name: update-fire-deploy
 
 on:
-  # Toutes les 2 h. Décalé de 17 min : les tâches planifiées à l'heure ronde
-  # partent dans une file d'attente saturée et démarrent avec du retard.
+  # Toutes les 30 min. Décalé de 17 min : les tâches planifiées à l'heure
+  # ronde partent dans une file d'attente saturée et démarrent avec du retard.
   schedule:
-    - cron: "17 */2 * * *"
+    - cron: "17,47 * * * *"
   push:
     branches: [main]
     # Une modification du front est livree par update-front-deploy.yml, qui
@@ -56,7 +56,7 @@ jobs:
       # une tuile perdue est écartée du diff au lieu d'y verser des centaines de
       # faux nouveaux foyers.
       #
-      # Les reprises comptent : 176 requêtes par cycle, douze cycles par jour, un
+      # Les reprises comptent : 176 requêtes par cycle, 48 cycles par jour, un
       # 503 de CDN finit toujours par tomber. Sans elles, un incident sur une
       # seule tuile coûtait à la fois trois jours d'historique FIRMS et la
       # notification du cycle.

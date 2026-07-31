@@ -190,7 +190,7 @@ fois le poids du fichier et 36 lots Open-Meteo au lieu de 10.
 
 Les deux fichiers ont leur **propre base de temps** et sont interpolés
 séparément par horodatage, jamais au même indice de ligne : ils sont produits par
-deux workflows de cadences différentes, 2 h pour le vent et 6 h pour la
+deux workflows de cadences différentes, 30 min pour le vent et 6 h pour la
 température.
 
 La légende principale affiche la température au centre de la carte en lisant
@@ -318,7 +318,7 @@ visuelle accélérée même lorsque la frise est en pause.
 Le site est publié par GitHub Pages avec trois workflows :
 
 - [`update-fire-deploy.yml`](.github/workflows/update-fire-deploy.yml) exécute
-  `fetch_fires.py` toutes les 2 heures (et lors d'une modification du
+  `fetch_fires.py` toutes les 30 minutes (et lors d'une modification du
   collecteur) : foyers, périmètres, vent national et vent fin des cellules
   actives ;
 - [`update-weather-deploy.yml`](.github/workflows/update-weather-deploy.yml)
@@ -405,7 +405,7 @@ lieu de monopoliser le runner pendant huit minutes.
 Deux points de vigilance propres aux workflows planifiés :
 
 - ils partent avec du retard aux heures de pointe, d'où le décalage de 17 min
-  dans le cron ;
+  dans le cron (les passages ont lieu à :17 et :47) ;
 - GitHub **désactive un workflow planifié après 60 jours sans activité** sur le
   dépôt. Sans commit pendant deux mois, le rafraîchissement s'arrête en
   silence ; il faut le réactiver à la main dans l'onglet Actions.
@@ -456,7 +456,7 @@ volet météo.
 | `make_og.py` | fabrique `og.png`, l'aperçu des liens (Pillow requis) |
 | `og.png` | image de partage, 1200 × 630, versionnée |
 | `SOURCES.md` | note de repérage sur les sources de données |
-| `.github/workflows/update-fire-deploy.yml` | foyers, périmètres et vent toutes les 2 h + publication Pages |
+| `.github/workflows/update-fire-deploy.yml` | foyers, périmètres et vent toutes les 30 min + publication Pages |
 | `.github/workflows/update-weather-deploy.yml` | grille de température toutes les 6 h |
 | `.github/workflows/update-front-deploy.yml` | publication rapide des seuls changements de front |
 | `data/manifest.json` | emprise, génération, liste et format des zones |

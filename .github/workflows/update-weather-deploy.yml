@@ -13,8 +13,8 @@
 name: update-weather-deploy
 
 on:
-  # Toutes les 6 h, décalé de 47 min pour ne pas tomber sur le cron des foyers
-  # (:17 toutes les 2 h) et éviter une attente systématique sur le verrou.
+  # Toutes les 6 h, à :47. Le passage :47 coïncide avec un cycle incendies,
+  # mais le verrou partagé le met en file derrière la publication en cours.
   schedule:
     - cron: "47 1,7,13,19 * * *"
   workflow_dispatch:

@@ -925,7 +925,7 @@ def thermal_export(thermal, now, hours=18):
     """Reduit la grille thermique a la fenetre affichee par le volet meteo.
 
     Volontairement plus large que les +/-12 h du vent. Les deux champs sont
-    collectes par des workflows de cadences differentes — 2 h et 6 h — donc
+    collectes par des workflows de cadences differentes — 30 min et 6 h — donc
     centres sur des instants qui peuvent differer de six heures. Soit F l'instant
     de la collecte du vent et T celui de la temperature, avec T <= F et
     F - T <= 6 h : le vent couvre [F-12, F+12], et il faut que la temperature
