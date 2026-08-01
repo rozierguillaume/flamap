@@ -1,0 +1,203 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Flamap — mesure lot 0</title>
+<style>
+  html, body, iframe { width: 100%; height: 100%; margin: 0; border: 0; }
+  #result { display: none; }
+  #result[data-done="true"] {
+    display: block;
+    position: fixed;
+    inset: 0;
+    overflow: auto;
+    margin: 0;
+    padding: 16px;
+    color: #eee;
+    background: #111;
+  }
+</style>
+<iframe id="app" title="Flamap mesurée"></iframe>
+<pre id="result">en cours</pre>
+<script>
+const app = document.getElementById('app');
+const output = document.getElementById('result');
+const result = { startedAt: new Date().toISOString() };
+const start = performance.now();
+const longRun = new URLSearchParams(location.search).get('long') !== '0';
+
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+const resources = win => win.performance.getEntriesByType('resource').map(entry => ({
+  name: entry.name,
+  initiatorType: entry.initiatorType,
+  duration: entry.duration,
+  transferSize: entry.transferSize,
+  encodedBodySize: entry.encodedBodySize,
+  decodedBodySize: entry.decodedBodySize,
+}));
+const memory = win => win.performance.memory ? {
+  usedJSHeapSize: win.performance.memory.usedJSHeapSize,
+  totalJSHeapSize: win.performance.memory.totalJSHeapSize,
+  jsHeapSizeLimit: win.performance.memory.jsHeapSizeLimit,
+} : null;
+const median = values => {
+  if (!values.length) return null;
+  const sorted = [...values].sort((left, right) => left - right);
+  return sorted[Math.floor(sorted.length / 2)];
+};
+
+app.addEventListener('load', async () => {
+  let win = null;
+  try {
+  win = app.contentWindow;
+  result.environment = {
+    userAgent: win.navigator.userAgent,
+    viewport: [win.innerWidth, win.innerHeight],
+    devicePixelRatio: win.devicePixelRatio,
+    hardwareConcurrency: win.navigator.hardwareConcurrency,
+  };
+  result.frameLoadMs = performance.now() - start;
+  const deadline = performance.now() + 30000;
+  while (win.document.getElementById('export-btn').disabled) {
+    if (performance.now() > deadline) throw new Error('initialisation > 30 s');
+    await sleep(25);
+  }
+  result.initReadyMs = performance.now() - start;
+  result.navigation = JSON.parse(JSON.stringify(
+    win.performance.getEntriesByType('navigation')[0] || null));
+  const networkSnapshot = (async () => {
+    await sleep(5000);
+    result.resourcesAtFiveSeconds = resources(win);
+    const aircraft = win.document.getElementById('ck-aircraft');
+    if (aircraft.checked) aircraft.click();
+  })();
+
+  const visualDeadline = performance.now() + 30000;
+  while (!win.eval('!map.isMoving() && map.areTilesLoaded()')) {
+    if (performance.now() > visualDeadline)
+      throw new Error('carte non stabilisée après 30 s');
+    await sleep(25);
+  }
+  await new Promise(resolve => win.requestAnimationFrame(() =>
+    win.requestAnimationFrame(resolve)));
+  result.mapReadyMs = performance.now() - start;
+  await networkSnapshot;
+  if (!longRun) {
+    result.finishedAt = new Date().toISOString();
+    output.textContent = JSON.stringify(result, null, 2);
+    output.dataset.done = 'true';
+    app.remove();
+    return;
+  }
+
+  const idleFrameTimes = [];
+  await new Promise(resolve => {
+    let firstFrame = null;
+    const idleFrame = now => {
+      firstFrame ??= now;
+      idleFrameTimes.push(now);
+      if (now - firstFrame >= 2000) resolve();
+      else win.requestAnimationFrame(idleFrame);
+    };
+    win.requestAnimationFrame(idleFrame);
+  });
+  result.idleRefreshIntervalMs = median(idleFrameTimes
+    .slice(1).map((value, index) => value - idleFrameTimes[index]));
+  win.__lot0IdleRefreshIntervalMs = result.idleRefreshIntervalMs;
+  result.memoryBeforeFiveMinutes = memory(win);
+
+  win.eval(`
+    window.__lot0 = {
+      originalShow: show,
+      showDurations: [],
+      frameTimes: [],
+      probeRaf: 0,
+      referenceIntervalMs: window.__lot0IdleRefreshIntervalMs,
+      started: performance.now()
+    };
+    show = function lot0MeasuredShow(ts) {
+      const before = performance.now();
+      try { return window.__lot0.originalShow(ts); }
+      finally { window.__lot0.showDurations.push(performance.now() - before); }
+    };
+    function lot0Frame(now) {
+      window.__lot0.frameTimes.push(now);
+      if (!playing) document.getElementById('play').click();
+      window.__lot0.probeRaf = requestAnimationFrame(lot0Frame);
+    }
+    document.getElementById('play').click();
+    window.__lot0.probeRaf = requestAnimationFrame(lot0Frame);
+  `);
+
+  await sleep(30000);
+  result.playback = win.eval(`(() => {
+    cancelAnimationFrame(window.__lot0.probeRaf);
+    if (playing) document.getElementById('play').click();
+    show = window.__lot0.originalShow;
+    const frames = window.__lot0.frameTimes;
+    const durations = window.__lot0.showDurations;
+    const deltas = frames.slice(1).map((value, index) => value - frames[index]);
+    const sortedDeltas = [...deltas].sort((a, b) => a - b);
+    const sortedShow = [...durations].sort((a, b) => a - b);
+    const percentile = (values, ratio) => values.length
+      ? values[Math.min(Math.floor(values.length * ratio), values.length - 1)] : null;
+    const elapsed = frames.length > 1 ? frames.at(-1) - frames[0] : 0;
+    const refreshIntervalMs = percentile(sortedDeltas, .5);
+    const expectedIntervals = window.__lot0.referenceIntervalMs
+      ? Math.round(elapsed / window.__lot0.referenceIntervalMs) : 0;
+    const missedFrames = Math.max(
+      0, expectedIntervals - Math.max(frames.length - 1, 0));
+    const summary = {
+      elapsedMs: elapsed,
+      frames: frames.length,
+      referenceIntervalMs: window.__lot0.referenceIntervalMs,
+      refreshIntervalMs,
+      missedFrames,
+      missedFramePoints: expectedIntervals
+        ? missedFrames / expectedIntervals * 100 : null,
+      frameMedianMs: percentile(sortedDeltas, .5),
+      frameP95Ms: percentile(sortedDeltas, .95),
+      showCalls: durations.length,
+      showMeanMs: durations.length
+        ? durations.reduce((sum, value) => sum + value, 0) / durations.length : null,
+      showMedianMs: percentile(sortedShow, .5),
+      showP95Ms: percentile(sortedShow, .95),
+      showMaxMs: durations.length ? Math.max(...durations) : null,
+    };
+    window.__lot0 = null;
+    window.__lot0IdleRefreshIntervalMs = null;
+    return summary;
+  })()`);
+
+  await sleep(210000);
+  const memorySamples = [];
+  for (let sample = 0; sample < 60; sample++) {
+    const value = memory(win);
+    if (value) memorySamples.push(value);
+    await sleep(1000);
+  }
+  result.memoryAfterFiveMinutes = memorySamples.length ? {
+    samples: memorySamples.length,
+    usedJSHeapSizeMedian: median(memorySamples.map(value => value.usedJSHeapSize)),
+    usedJSHeapSizeMin: Math.min(...memorySamples.map(value => value.usedJSHeapSize)),
+    usedJSHeapSizeMax: Math.max(...memorySamples.map(value => value.usedJSHeapSize)),
+    totalJSHeapSizeMedian: median(memorySamples.map(value => value.totalJSHeapSize)),
+  } : null;
+  result.resourcesAfterFiveMinutes = resources(win);
+  result.finishedAt = new Date().toISOString();
+  output.textContent = JSON.stringify(result, null, 2);
+  output.dataset.done = 'true';
+  for (const id of ['ck-wind', 'ck-smoke']) {
+    const input = win.document.getElementById(id);
+    if (input.checked) input.click();
+  }
+  app.remove();
+  } catch (error) {
+    result.error = error instanceof Error ? error.message : String(error);
+    result.finishedAt = new Date().toISOString();
+    output.textContent = JSON.stringify(result, null, 2);
+    output.dataset.done = 'true';
+    app.remove();
+  }
+});
+
+app.src = `../index.html?lot0=${Date.now()}`;
+</script>
