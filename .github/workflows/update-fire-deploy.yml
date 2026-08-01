@@ -98,6 +98,12 @@ jobs:
               raise SystemExit(0)
           manifest = json.loads(payload)
 
+          social, social_error = fetch(f"{base}/data/social_timeline.json")
+          if social is None:
+              print(f"::warning::Historique social indisponible : {social_error}")
+          else:
+              pathlib.Path('data/social_timeline.json').write_bytes(social)
+
           root.mkdir(parents=True, exist_ok=True)
 
           def download(zone_id):
@@ -258,7 +264,7 @@ jobs:
           cp data/manifest.json data/overview_hotspots.geojson \
              data/burnt_recent.geojson \
              data/psfdf_fires.geojson \
-             data/timeline.json \
+             data/timeline.json data/social_timeline.json \
              data/wind_coarse.json data/weather_forecast.json _site/data/
           # Repris du site publié, pas produit ici : absent avant la première
           # collecte météo.

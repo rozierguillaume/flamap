@@ -144,9 +144,17 @@ jobs:
               for _ in pool.map(download, files):
                   pass
 
+          try:
+              download(('data/social_timeline.json',
+                        'data/social_timeline.json'))
+          except SystemExit as error:
+              print(f'::warning::Historique social repris depuis la frise : {error}')
+              shutil.copy(root / 'data/timeline.json',
+                          root / 'data/social_timeline.json')
+
           # La seule substitution : la grille fraîchement collectée.
           shutil.copy('data/thermal.json', root / 'data/thermal.json')
-          print(f"{len(files) + 1} fichiers repris, grille de température "
+          print(f"{len(files) + 2} fichiers repris, grille de température "
                 "remplacée")
           PY
 

@@ -50,6 +50,7 @@ OVERVIEW_H = 1
 # Les contours affiches dans l'apercu national restent bornes a sept jours.
 RECENT_DAYS = 7
 HOTSPOT_DAYS = 10
+SOCIAL_DAYS = 14
 
 FIRMS_BASE = "https://firms.modaps.eosdis.nasa.gov/data/active_fire"
 FIRMS_FEEDS = [
@@ -498,6 +499,48 @@ def build_timeline(hotspots, dated):
         if step["kind"] == "sat":
             step["frp"] = round(step["frp"], 2)
     return sorted(steps, key=lambda step: step["ts"])
+
+
+def build_social_timeline(timeline):
+    """Conserve quatorze jours de passages pour la carte de publication.
+
+    La frise cartographique reste volontairement bornee a dix jours. Ce petit
+    historique agrege est prolonge a chaque collecte sans conserver les lourds
+    pixels FIRMS correspondants. Un passage du flux courant remplace l'ancien
+    passage du meme satellite situe dans la meme fenetre orbitale.
+    """
+    current = [dict(step) for step in timeline if step.get("kind") == "sat"]
+    if not current:
+        return []
+    latest = max(step["ts"] for step in current)
+    cutoff = latest - SOCIAL_DAYS * 86400
+    path = os.path.join(OUT, "social_timeline.json")
+    previous = []
+    try:
+        with open(path, encoding="utf-8") as source:
+            loaded = json.load(source)
+        if isinstance(loaded, list):
+            previous = loaded
+    except (OSError, ValueError):
+        pass
+
+    gap = 25 * 60
+    merged = list(current)
+    current_by_source = {}
+    for step in current:
+        current_by_source.setdefault(step.get("label"), []).append(step["ts"])
+    for step in previous:
+        if (
+            step.get("kind") != "sat"
+            or not isinstance(step.get("ts"), (int, float))
+            or step["ts"] < cutoff
+            or any(abs(step["ts"] - stamp) <= gap
+                   for stamp in current_by_source.get(step.get("label"), []))
+        ):
+            continue
+        merged.append(step)
+    return sorted((step for step in merged if step["ts"] >= cutoff),
+                  key=lambda step: step["ts"])
 
 
 # ---------------------------------------------------------------------------
@@ -1342,6 +1385,7 @@ def main():
 
     generated = datetime.now(timezone.utc).isoformat()
     timeline = build_timeline(hotspots, burnt["burnt_dated"])
+    social_timeline = build_social_timeline(timeline)
     overview = aggregate_hotspots(hotspots)
     coarse = whole_wind(coarse_wind)
     now = datetime.now(timezone.utc).timestamp()
@@ -1367,6 +1411,7 @@ def main():
     write_json(os.path.join(OUT, "burnt_recent.geojson"), recent)
     write_json(os.path.join(OUT, "psfdf_fires.geojson"), psfdf)
     write_json(os.path.join(OUT, "timeline.json"), timeline)
+    write_json(os.path.join(OUT, "social_timeline.json"), social_timeline)
     write_json(os.path.join(OUT, "wind_coarse.json"), coarse)
     write_json(os.path.join(OUT, "weather_forecast.json"), weather)
     write_json(os.path.join(OUT, "manifest.json"), manifest, compact=False)

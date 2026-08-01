@@ -158,6 +158,8 @@
 
 <script>
 const DAY = 86400;
+const CHART_DAYS = 10;
+const CHART_BIN = 6 * 3600;
 const nf = new Intl.NumberFormat('fr-FR');
 const longDate = new Intl.DateTimeFormat('fr-FR', {
   dateStyle: 'long', timeStyle: 'short', timeZone: 'Europe/Paris'
@@ -198,17 +200,44 @@ function variationLabel(current, previous) {
 }
 
 function activitySeries(passages, latest) {
-  const start = latest - 6 * DAY;
+  const start = latest - CHART_DAYS * DAY;
   const points = [];
-  const bin = 6 * 3600;
-  for (let end = start + bin; end <= latest; end += bin) {
+  for (let end = start + CHART_BIN; end <= latest; end += CHART_BIN) {
     points.push({
       ts: end,
-      raw: countBetween(passages, end - bin, end),
+      raw: countBetween(passages, end - CHART_BIN, end),
       rolling: countBetween(passages, end - DAY, end),
     });
   }
   return points;
+}
+
+function activityScale(peak, intervals = 4) {
+  const rawStep = Math.max(peak, 1) / intervals;
+  const magnitude = 10 ** Math.floor(Math.log10(rawStep));
+  const normalized = rawStep / magnitude;
+  const factor = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10;
+  const step = Math.max(1, factor * magnitude);
+  const max = Math.max(step, Math.ceil(peak / step) * step);
+  const ticks = [];
+  for (let value = 0; value <= max + step / 2; value += step) ticks.push(value);
+  return { max, ticks };
+}
+
+function drawFlamapMark(x, y, scale = 1) {
+  const dots = [
+    [19, 13, 7, '#ffd84d'], [9, 22, 5, '#ff6b1a'],
+    [27, 25, 5.2, '#b1341f'], [8.5, 6.5, 1.6, '#ffd84d'],
+    [25, 3.5, 1.4, '#b1341f'], [34, 11.5, 1.5, '#b1341f'],
+    [2, 29.5, 1.4, '#ff6b1a'], [17, 31.5, 1.5, '#ffd84d'],
+    [34, 30, 1.4, '#ff6b1a'],
+  ];
+  dots.forEach(([cx, cy, radius, color]) => {
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(x + cx * scale, y + cy * scale, radius * scale, 0, Math.PI * 2);
+    ctx.fill();
+  });
 }
 
 function drawCard(current, previous, latest, series) {
@@ -226,12 +255,7 @@ function drawCard(current, previous, latest, series) {
   ctx.fillStyle = glow;
   ctx.fillRect(0, 0, W, H);
 
-  ctx.fillStyle = '#b1341f';
-  ctx.beginPath(); ctx.arc(51, 49, 7, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = '#ff6b1a';
-  ctx.beginPath(); ctx.arc(65, 49, 10.5, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = '#ffd84d';
-  ctx.beginPath(); ctx.arc(84.6, 49, 14, 0, Math.PI * 2); ctx.fill();
+  drawFlamapMark(34, 22, 1.55);
   ctx.font = '700 27px system-ui, -apple-system, sans-serif';
   ctx.fillStyle = '#ff6b1a';
   ctx.fillText('Fla', 112, 59);
@@ -252,20 +276,26 @@ function drawCard(current, previous, latest, series) {
   ctx.fillStyle = '#a8a29c';
   ctx.fillText(`en 24 h, contre ${nf.format(previous)} lors des 24 h précédentes`, 58, 169);
 
-  const x0 = 58, y0 = 207, chartW = 1084, chartH = 341;
+  const x0 = 96, y0 = 211, chartW = 1046, chartH = 325;
 
   const values = series.flatMap(point => [point.raw, point.rolling]);
-  const max = Math.max(...values, 1) * 1.12;
-  const py = value => y0 + chartH - value / max * (chartH - 18);
+  const scale = activityScale(Math.max(...values, 1) * 1.06);
+  const py = value => y0 + chartH - value / scale.max * (chartH - 14);
   const stepW = chartW / series.length;
   const px = index => x0 + (index + .5) * stepW;
 
-  ctx.lineWidth = 1;
-  ctx.strokeStyle = '#2c3035';
-  for (let i = 0; i < 4; i++) {
-    const y = y0 + i * chartH / 3;
+  ctx.font = '500 15px system-ui, -apple-system, sans-serif';
+  ctx.textAlign = 'right';
+  scale.ticks.forEach(value => {
+    const y = py(value);
+    ctx.lineWidth = value ? 1 : 1.5;
+    ctx.strokeStyle = value ? '#2c3035' : '#454a52';
     ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(x0 + chartW, y); ctx.stroke();
-  }
+    ctx.fillStyle = '#8f8b86';
+    ctx.fillText(nf.format(value), x0 - 14, y + 5);
+  });
+  ctx.fillStyle = '#8f8b86';
+  ctx.fillText('foyers', x0 - 14, y0 - 7);
 
   series.forEach((point, index) => {
     const h = y0 + chartH - py(point.raw);
@@ -303,26 +333,27 @@ function drawCard(current, previous, latest, series) {
                  Math.max(y - 13, y0 + 17));
   });
 
+  const chartStart = latest - CHART_DAYS * DAY;
   ctx.font = '500 16px system-ui, -apple-system, sans-serif';
   ctx.fillStyle = '#8f8b86';
   ctx.textAlign = 'left';
-  ctx.fillText(shortDate.format(new Date(series[0].ts * 1000)), x0, 583);
+  ctx.fillText(shortDate.format(new Date(chartStart * 1000)), x0, 568);
   ctx.textAlign = 'center';
-  ctx.fillText(shortDate.format(new Date(series[Math.floor(series.length / 2)].ts * 1000)),
-               x0 + chartW / 2, 583);
+  ctx.fillText(shortDate.format(new Date((chartStart + CHART_DAYS / 2 * DAY) * 1000)),
+               x0 + chartW / 2, 568);
   ctx.textAlign = 'right';
-  ctx.fillText(shortDate.format(new Date(latest * 1000)), x0 + chartW, 583);
+  ctx.fillText(shortDate.format(new Date(latest * 1000)), x0 + chartW, 568);
 
   ctx.textAlign = 'left';
   ctx.font = '500 15px system-ui, -apple-system, sans-serif';
   ctx.fillStyle = '#a84a2e';
-  ctx.fillRect(385, 612, 18, 11);
+  ctx.fillRect(385, 599, 18, 11);
   ctx.fillStyle = '#a8a29c';
-  ctx.fillText('Détections par 6 h', 414, 622);
+  ctx.fillText('Détections par 6 h', 414, 609);
   ctx.strokeStyle = '#ffd84d';
   ctx.lineWidth = 4;
-  ctx.beginPath(); ctx.moveTo(638, 617); ctx.lineTo(661, 617); ctx.stroke();
-  ctx.fillText('Total glissant sur 24 h', 673, 622);
+  ctx.beginPath(); ctx.moveTo(638, 604); ctx.lineTo(661, 604); ctx.stroke();
+  ctx.fillText('Total glissant sur 24 h', 673, 609);
 
   ctx.font = '500 16px system-ui, -apple-system, sans-serif';
   ctx.fillStyle = '#88837e';
@@ -363,8 +394,11 @@ function downloadImage() {
   }, 'image/png');
 }
 
-fetch('data/timeline.json').then(response => {
-  if (!response.ok) throw new Error(`frise indisponible (${response.status})`);
+fetch('data/social_timeline.json').then(response => {
+  if (!response.ok) return fetch('data/timeline.json').then(fallback => {
+    if (!fallback.ok) throw new Error(`frise indisponible (${fallback.status})`);
+    return fallback.json();
+  });
   return response.json();
 }).then(timeline => {
   const passages = timeline
@@ -380,7 +414,7 @@ fetch('data/timeline.json').then(response => {
 
   const noun = current === 1 ? 'détection de foyer relevée' : 'détections de foyers relevées';
   post.value = `🔥 ${nf.format(current)} ${noun} en France par satellite au cours des dernières 24 h${variation(current, previous)}.\n\nCarte actualisée : https://flamap.fr/`;
-  alt.value = `Graphique Flamap montrant ${nf.format(current)} ${current === 1 ? 'détection' : 'détections'} de foyers en France au cours des dernières 24 heures, contre ${nf.format(previous)} durant les 24 heures précédentes. ${variationLabel(current, previous)}. Les barres représentent les détections par tranche de six heures et la ligne leur total glissant sur 24 heures.`;
+  alt.value = `Graphique Flamap sur les dix derniers jours, montrant ${nf.format(current)} ${current === 1 ? 'détection' : 'détections'} de foyers en France au cours des dernières 24 heures, contre ${nf.format(previous)} durant les 24 heures précédentes. ${variationLabel(current, previous)}. L’axe vertical indique le nombre de foyers, les barres représentent les détections par tranche de six heures et la ligne leur total glissant sur 24 heures.`;
 
   drawCard(current, previous, latest, series);
   const description = alt.value;

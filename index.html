@@ -145,11 +145,16 @@
     position: absolute; z-index: 498; top: 76px; right: 14px;
     width: 320px; padding: 15px; display: flex; flex-direction: column;
     max-height: calc(100vh - 168px); overflow: hidden;
-    background: linear-gradient(145deg, var(--psfdf-tint, rgba(13,15,18,.92)),
-                                rgba(13,15,18,.93) 58%);
+    background:
+      radial-gradient(110% 72% at 8% -10%,
+        var(--psfdf-glow, rgba(255,255,255,.08)), transparent 58%),
+      linear-gradient(152deg, var(--psfdf-tint, rgba(20,22,26,.94)),
+                      rgba(13,15,18,.95) 48%, rgba(11,13,16,.94));
     border-width: 1.5px;
     border-color: var(--psfdf-border, rgba(255,255,255,.10));
-    box-shadow: 0 9px 28px rgba(0,0,0,.20);
+    box-shadow: 0 11px 32px rgba(0,0,0,.28),
+                0 0 24px var(--psfdf-shadow, transparent),
+                inset 0 1px 0 rgba(255,255,255,.055);
     transition: background .24s ease, border-color .24s ease,
                 box-shadow .24s ease;
   }
@@ -162,7 +167,8 @@
   #psfdf-panel-toggle { display: none; }
   .psfdf-detail-status i, .psfdf-head-status i {
     width: 9px; height: 9px; border-radius: 50%; flex: none;
-    box-shadow: 0 0 0 1px rgba(255,255,255,.55);
+    box-shadow: 0 0 0 1px rgba(255,255,255,.62),
+                0 0 10px var(--psfdf-accent, transparent);
   }
   .psfdf-detail-status { display: flex; align-items: center; gap: 7px;
                          margin: 0 0 11px 2px; font-size: 12px; font-weight: 650; }
@@ -178,7 +184,12 @@
   }
   .psfdf-head-status { display: none; }
   .psfdf-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
-  .psfdf-stat { padding: 9px; border-radius: 8px; background: rgba(255,255,255,.055); }
+  .psfdf-stat {
+    padding: 9px; border: 1px solid rgba(255,255,255,.045); border-radius: 8px;
+    background: linear-gradient(145deg, rgba(255,255,255,.072),
+                                rgba(255,255,255,.035));
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.025);
+  }
   .psfdf-stat small { display: block; color: var(--ink-dim); font-size: 10px;
                       text-transform: uppercase; letter-spacing: .045em; }
   .psfdf-stat b { display: block; margin-top: 3px; font-size: 15px; }
@@ -187,6 +198,44 @@
                 color: #d8d5d1; font-size: 11.5px; line-height: 1.4; }
   .psfdf-dates { margin: 10px 0 0; color: var(--ink-dim);
                  font-size: 10.5px; line-height: 1.45; }
+  .psfdf-activity { margin-top: 10px; padding-top: 9px;
+                    border-top: 1px solid rgba(255,255,255,.1); }
+  .psfdf-activity-head { display: flex; align-items: center; justify-content: space-between;
+                         gap: 8px; margin-bottom: 6px; }
+  .psfdf-activity-head strong { min-width: 0; font-size: 11px; font-weight: 700; }
+  .psfdf-activity-tabs { display: flex; flex: none; gap: 2px; padding: 2px;
+                         border-radius: 6px; background: rgba(0,0,0,.2); }
+  .psfdf-activity-tabs button { padding: 3px 6px; border: 0; border-radius: 4px;
+                                background: transparent; color: var(--ink-dim);
+                                font: inherit; font-size: 9.5px; cursor: pointer; }
+  .psfdf-activity-tabs button[aria-pressed="true"] {
+    background: rgba(255,255,255,.13); color: var(--ink);
+  }
+  .psfdf-activity-chart { position: relative; height: 96px; }
+  .psfdf-activity-plot { position: absolute; inset: 3px 0 17px 34px;
+                         border-left: 1px solid #454a52;
+                         border-bottom: 1px solid #454a52; }
+  .psfdf-activity-plot::before { content: ''; position: absolute; top: 0;
+                                 right: 0; left: 0; height: 1px;
+                                 background: rgba(255,255,255,.10); }
+  .psfdf-activity-chart b { position: absolute; bottom: 0; width: 3px;
+                            min-height: 2px; margin-left: -1.5px;
+                            border-radius: 2px 2px 0 0; background: var(--hot); }
+  .psfdf-activity-chart svg { position: absolute; inset: 0; width: 100%; height: 100%;
+                              overflow: hidden; pointer-events: none; }
+  .psfdf-activity-chart path { fill: none; stroke: var(--front); stroke-width: 2;
+                               vector-effect: non-scaling-stroke; }
+  .psfdf-activity-y { position: absolute; top: 0; left: 0; width: 29px;
+                      color: var(--ink-dim); text-align: right; font-size: 8.5px;
+                      line-height: 1; font-variant-numeric: tabular-nums; }
+  .psfdf-activity-x { position: absolute; right: 0; bottom: 0; left: 34px;
+                      display: flex; justify-content: space-between;
+                      color: var(--ink-dim); font-size: 8.5px; line-height: 1;
+                      font-variant-numeric: tabular-nums; }
+  .psfdf-activity-empty { display: grid; height: 70px; place-items: center;
+                          color: var(--ink-dim); font-size: 10.5px; }
+  .psfdf-activity-caption { margin: 5px 0 0; color: var(--ink-dim);
+                            font-size: 9.5px; line-height: 1.3; }
   .psfdf-more {
     position: relative; display: grid; place-items: center;
     margin-top: 12px; padding: 10px 40px 10px 12px;
@@ -353,8 +402,19 @@
   #activity-tabs button:hover { color: var(--ink); background: rgba(255,255,255,.06); }
   #activity-tabs button[aria-selected="true"] { color: var(--ink); background: #343941;
                                                   box-shadow: 0 1px 3px rgba(0,0,0,.24); }
-  #activity-large { position: relative; flex: none; height: 250px;
-                    border-bottom: 1px solid #454a52; cursor: crosshair; }
+  #activity-large { --plot-left: 44px; position: relative; flex: none; height: 250px;
+                    overflow: hidden; cursor: crosshair; }
+  .activity-plot { position: absolute; inset: 0 0 0 var(--plot-left);
+                   border-bottom: 1px solid #454a52; }
+  .activity-y-axis { position: absolute; inset: 0 auto 0 0;
+                     width: calc(var(--plot-left) - 7px); pointer-events: none; }
+  .activity-y-tick { position: absolute; right: 0; color: var(--ink-dim);
+                     font-size: 10px; line-height: 1; font-variant-numeric: tabular-nums;
+                     transform: translateY(-50%); white-space: nowrap; }
+  .activity-y-tick.first { transform: none; }
+  .activity-y-tick.last { transform: translateY(-100%); }
+  .activity-gridline { position: absolute; z-index: 1; left: 0; right: 0; height: 1px;
+                       background: rgba(255,255,255,.10); pointer-events: none; }
   /* La ligne reste au-dessus des barres pour rester lisible dans les pics. Le
      calque SVG ne capture aucun pointeur : les barres gardent leur sélection. */
   #activity-average { position: absolute; z-index: 3; inset: 0; width: 100%; height: 100%;
@@ -772,10 +832,11 @@
       fill: none; stroke: currentColor; stroke-width: 2;
       transition: transform .22s ease;
     }
-    #psfdf-panel.open { right: 10px; max-height: min(62vh, 480px); }
+    #psfdf-panel.open { right: 10px; max-height: min(66vh, 520px); }
     #psfdf-panel.open #psfdf-panel-toggle svg { transform: rotate(180deg); }
     #psfdf-panel-body { display: none; padding: 0 12px 12px; }
     #psfdf-panel.open #psfdf-panel-body { display: block; overflow-y: auto; }
+    #psfdf-panel .psfdf-activity-chart { height: 108px; }
     #psfdf-panel .psfdf-detail-status { display: none; }
     #head { top: 10px; left: 10px; padding: 9px 15px 10px; }
     #head .brand { gap: 8px; }
@@ -904,10 +965,11 @@
     #updates-list strong { font-size: 13px; }
     #updates-list span { font-size: 12px; }
     #activity-panel { position: fixed; z-index: 504; top: 60px; right: 10px;
-                      bottom: 10px; left: 10px; padding: 18px; }
+                      bottom: auto; left: 10px; max-height: calc(100vh - 70px);
+                      overflow-y: auto; padding: 18px; }
     #activity-panel h2 { font-size: 17px; }
     #activity-panel-close { width: 38px; height: 38px; font-size: 25px; }
-    #activity-large { flex: 1; min-height: 220px; height: auto; }
+    #activity-large { flex: none; min-height: 210px; height: clamp(210px, 32vh, 280px); }
     #activity-large b { width: 5px; margin-left: -2.5px; }
     #weather-panel { position: fixed; z-index: 504; top: 110px; right: 10px;
                      left: 10px; max-height: calc(100vh - 280px);
@@ -2979,6 +3041,24 @@ const secondaryActivityLabel = step =>
 const activityLabel = step =>
   `${fmt(step.ts)} — ${primaryActivityLabel(step)} — ${secondaryActivityLabel(step)} — ${step.label}`;
 
+function activityScale(peak, metric = activityMetric, intervals = 4) {
+  const rawStep = Math.max(peak, Number.EPSILON) / intervals;
+  const magnitude = 10 ** Math.floor(Math.log10(rawStep));
+  const normalized = rawStep / magnitude;
+  const factor = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10;
+  const step = metric === 'count' ? Math.max(1, factor * magnitude) : factor * magnitude;
+  const max = Math.max(step, Math.ceil(peak / step) * step);
+  const ticks = [];
+  for (let value = 0; value <= max + step / 2; value += step) ticks.push(value);
+  return { max, ticks };
+}
+
+function activityTickLabel(value, metric = activityMetric) {
+  return value.toLocaleString('fr-FR', {
+    maximumFractionDigits: metric === 'frp' && value < 10 ? 1 : 0,
+  });
+}
+
 function showActivityDetail(index) {
   const step = renderedActivity[index];
   if (!step) return;
@@ -3011,24 +3091,36 @@ function drawLargeActivity(selected = null) {
     return;
   }
   const panelPeak = Math.max(...renderedActivity.map(activityValue), 1);
+  const scale = activityScale(panelPeak);
   renderedActivityAverages = activityMovingAverage(renderedActivity);
   const averagePath = renderedActivityAverages.map((point, index) => {
     const x = ((point.ts - activityT0) / activitySpan * 100).toFixed(3);
-    const y = (100 - 100 * point.value / panelPeak).toFixed(3);
+    const y = (100 - 100 * point.value / scale.max).toFixed(3);
     return `${index ? 'L' : 'M'} ${x} ${y}`;
   }).join(' ');
   const averageLine = renderedActivityAverages.length > 1
     ? `<svg id="activity-average" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">`
       + `<path class="halo" d="${averagePath}"></path><path class="line" d="${averagePath}"></path></svg>`
     : '';
-  activityLarge.innerHTML = renderedActivity.map((step, index) => {
+  const bars = renderedActivity.map((step, index) => {
     const left = ((step.ts - activityT0) / activitySpan * 100).toFixed(3);
     const value = activityValue(step);
-    const height = (100 * value / panelPeak).toFixed(2);
+    const height = (100 * value / scale.max).toFixed(2);
     const opacity = (.28 + .36 * value / panelPeak).toFixed(2);
     return `<b data-i="${index}" title="${activityLabel(step)}" `
       + `style="left:${left}%;height:${height}%;min-height:${value ? 3 : 0}px;opacity:${opacity}"></b>`;
-  }).join('') + averageLine;
+  }).join('');
+  const grid = scale.ticks.map(value =>
+    `<i class="activity-gridline" style="bottom:${(100 * value / scale.max).toFixed(2)}%"></i>`
+  ).join('');
+  const axis = scale.ticks.map((value, index) => {
+    const top = 100 - 100 * value / scale.max;
+    const edge = index === 0 ? ' last' : index === scale.ticks.length - 1 ? ' first' : '';
+    return `<span class="activity-y-tick${edge}" style="top:${top.toFixed(2)}%">`
+      + `${activityTickLabel(value)}</span>`;
+  }).join('');
+  activityLarge.innerHTML = `<div class="activity-y-axis" aria-hidden="true">${axis}</div>`
+    + `<div class="activity-plot">${grid}${bars}${averageLine}</div>`;
   const fallback = renderedActivity.reduce(
     (best, step, index) =>
       activityValue(step) > activityValue(renderedActivity[best]) ? index : best, 0);
@@ -4705,6 +4797,171 @@ function psfdfStat(label, value) {
   return box;
 }
 
+const PSFDF_ACTIVITY_MIN_RADIUS_KM = 3;
+const PSFDF_ACTIVITY_MAX_RADIUS_KM = 60;
+const PSFDF_ACTIVITY_HOTSPOT_GAP_KM = 4;
+const PSFDF_ACTIVITY_HOTSPOT_MARGIN_KM = 2.5;
+
+/* Le disque d'activité part de la surface déclarée par PSFDF, convertie en
+ * rayon équivalent puis volontairement élargie : un feu réel n'est presque
+ * jamais circulaire. Les périmètres EFFIS déjà rapprochés côté collecte et la
+ * dispersion des pixels FIRMS détaillés peuvent seulement l'agrandir. */
+function psfdfActivityArea(feature) {
+  const p = feature.properties, center = feature.geometry.coordinates;
+  const areaHa = psfdfHasNumber(p.surface) ? Math.max(0, Number(p.surface)) : 0;
+  const equivalentRadius = areaHa ? Math.sqrt(areaHa / 100 / Math.PI) : 0;
+  let radius = areaHa
+    ? 1.5 + 1.8 * equivalentRadius
+    : PSFDF_ACTIVITY_MIN_RADIUS_KM + 2;
+  const basis = areaHa ? ['surface PSFDF'] : [];
+
+  if (psfdfHasNumber(p.effis_radius_km)) {
+    // `effis_radius_km` couvre déjà tous les morceaux EFFIS rapprochés ; la
+    // marge supplémentaire absorbe l'incertitude du contour et de l'arrondi.
+    radius = Math.max(radius, 1.5 + 1.15 * Number(p.effis_radius_km));
+    basis.push(`${Number(p.effis_matches) > 1 ? `${nf(Number(p.effis_matches))} périmètres` : 'périmètre'} EFFIS`);
+  }
+  if (Array.isArray(p.original_center)) {
+    // Quand EFFIS a recentré le point, conserver aussi une marge autour de la
+    // position PSFDF initiale évite de couper une extension encore non levée.
+    radius = Math.max(radius, distanceKm(center, p.original_center) + 2.5);
+  }
+
+  const searchLimit = Math.min(PSFDF_ACTIVITY_MAX_RADIUS_KM,
+    Math.max(15, radius * 2.2));
+  const distances = Z.hotspots
+    .map(hotspot => distanceKm(center, hotspot.geometry.coordinates))
+    .filter(distance => distance <= searchLimit)
+    .sort((a, b) => a - b);
+  let frontier = radius + 3, furthest = 0;
+  for (const distance of distances) {
+    if (distance > frontier + PSFDF_ACTIVITY_HOTSPOT_GAP_KM) break;
+    furthest = distance;
+    frontier = Math.max(frontier, distance);
+  }
+  const hotspotRadius = furthest + PSFDF_ACTIVITY_HOTSPOT_MARGIN_KM;
+  if (furthest && hotspotRadius > radius) {
+    radius = hotspotRadius;
+    basis.push('foyers FIRMS');
+  }
+
+  radius = Math.min(PSFDF_ACTIVITY_MAX_RADIUS_KM,
+    Math.max(PSFDF_ACTIVITY_MIN_RADIUS_KM, Math.ceil(radius * 2) / 2));
+  if (!basis.length) basis.push('marge minimale');
+  return { radius, basis: basis.join(' + ') };
+}
+
+/* L'aperçu national place chaque agrégat au centre d'une cellule de 0,25°.
+ * On teste donc l'intersection du disque avec la cellule, pas seulement avec
+ * son centre : cela assume délibérément le léger excès plutôt qu'une coupure. */
+function psfdfOverviewCellDistance(center, coordinates) {
+  const halfCell = .125;
+  const nearest = [
+    Math.min(Math.max(center[0], coordinates[0] - halfCell), coordinates[0] + halfCell),
+    Math.min(Math.max(center[1], coordinates[1] - halfCell), coordinates[1] + halfCell),
+  ];
+  return distanceKm(center, nearest);
+}
+
+function psfdfActivityPassages(feature, area) {
+  const center = feature.geometry.coordinates;
+  const grouped = new Map();
+  for (const hotspot of FIRE_CONTEXT.overview) {
+    const p = hotspot.properties;
+    if (!shown.hotspots[p.source]
+        || psfdfOverviewCellDistance(center, hotspot.geometry.coordinates) > area.radius) continue;
+    const key = `${p.source}/${p.ts}`;
+    if (!grouped.has(key))
+      grouped.set(key, { ts: p.ts, kind: 'sat', label: p.source, n: 0, frp: 0 });
+    grouped.get(key).n += +p.n || 1;
+    grouped.get(key).frp += +p.frp || 0;
+  }
+  return [...grouped.values()].sort((a, b) => a.ts - b.ts);
+}
+
+function psfdfActivityAxisValue(value) {
+  if (value >= 10000) return `${nf(value / 1000, 1)}k`;
+  return activityTickLabel(value);
+}
+
+function psfdfActivityAxisDate(timestamp) {
+  return new Date(timestamp * 1000).toLocaleDateString('fr-FR', {
+    day: '2-digit', month: '2-digit',
+  });
+}
+
+function renderPsfdfActivity(container, feature) {
+  const area = psfdfActivityArea(feature);
+  const passes = psfdfActivityPassages(feature, area);
+  const head = document.createElement('div');
+  head.className = 'psfdf-activity-head';
+  const title = document.createElement('strong');
+  title.textContent = 'Détections satellite';
+  const tabs = document.createElement('div');
+  tabs.className = 'psfdf-activity-tabs';
+  tabs.setAttribute('aria-label', 'Métrique du graphique local');
+  for (const [metric, label] of [['count', 'Foyers'], ['frp', 'Puissance']]) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = label;
+    button.dataset.metric = metric;
+    button.setAttribute('aria-pressed', metric === activityMetric);
+    button.disabled = metric === 'frp' && powerMetricInput.disabled;
+    button.addEventListener('click', () => {
+      setActivityMetric(metric);
+      renderPsfdfActivity(container, feature);
+    });
+    tabs.append(button);
+  }
+  head.append(title, tabs);
+
+  if (!passes.length) {
+    const empty = document.createElement('div');
+    empty.className = 'psfdf-activity-empty';
+    empty.textContent = 'Aucune détection récente à proximité.';
+    const caption = document.createElement('p');
+    caption.className = 'psfdf-activity-caption';
+    caption.textContent = `Zone estimée : rayon ${nf(area.radius, 1)} km (${area.basis}).`;
+    container.replaceChildren(head, empty, caption);
+    return;
+  }
+
+  const t0 = steps[0]?.ts ?? passes[0].ts;
+  const span = (steps[steps.length - 1]?.ts ?? passes[passes.length - 1].ts) - t0 || 1;
+  const peak = Math.max(...passes.map(activityValue), 1);
+  const averages = activityMovingAverage(passes);
+  const bars = passes.map(step => {
+    const left = ((step.ts - t0) / span * 100).toFixed(3);
+    const value = activityValue(step);
+    const height = (100 * value / peak).toFixed(2);
+    const opacity = (.34 + .58 * value / peak).toFixed(2);
+    return `<b title="${activityLabel(step)}" style="left:${left}%;height:${height}%;opacity:${opacity}"></b>`;
+  }).join('');
+  const averagePath = averages.map((point, index) => {
+    const x = ((point.ts - t0) / span * 100).toFixed(3);
+    const y = (100 - 100 * point.value / peak).toFixed(3);
+    return `${index ? 'L' : 'M'} ${x} ${y}`;
+  }).join(' ');
+  const line = averages.length > 1
+    ? `<svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><path d="${averagePath}"></path></svg>`
+    : '';
+  const chart = document.createElement('div');
+  chart.className = 'psfdf-activity-chart';
+  chart.setAttribute('role', 'img');
+  const startDate = psfdfActivityAxisDate(t0);
+  const endDate = psfdfActivityAxisDate(t0 + span);
+  const peakLabel = activityMetric === 'frp' ? powerLabel(peak) : countLabel(peak);
+  chart.setAttribute('aria-label', `${passes.length} passages satellite du ${startDate} au ${endDate}, maximum ${peakLabel}, dans une zone estimée de ${nf(area.radius, 1)} kilomètres de rayon`);
+  chart.innerHTML = `<span class="psfdf-activity-y" title="Maximum : ${peakLabel}">${psfdfActivityAxisValue(peak)}</span>`
+    + `<div class="psfdf-activity-plot">${bars}${line}</div>`
+    + `<div class="psfdf-activity-x" aria-hidden="true"><time>${startDate}</time><time>${endDate}</time></div>`;
+  const caption = document.createElement('p');
+  caption.className = 'psfdf-activity-caption';
+  caption.textContent = `Zone estimée : rayon ${nf(area.radius, 1)} km (${area.basis}) · pic : ${
+    activityMetric === 'frp' ? powerLabel(peak) : countLabel(peak)}`;
+  container.replaceChildren(head, chart, caption);
+}
+
 function renderPsfdfDetail(feature) {
   if (!feature) return;
   const featureId = feature.properties.id || feature.properties.commune;
@@ -4714,8 +4971,11 @@ function renderPsfdfDetail(feature) {
   const p = feature.properties;
   const accent = PSFDF_COLORS[p.status] || '#a8a29c';
   const accentRgb = accent.match(/[\da-f]{2}/gi).map(part => parseInt(part, 16)).join(',');
-  psfdfPanel.style.setProperty('--psfdf-tint', `rgba(${accentRgb}, .14)`);
-  psfdfPanel.style.setProperty('--psfdf-border', `rgba(${accentRgb}, .48)`);
+  psfdfPanel.style.setProperty('--psfdf-accent', accent);
+  psfdfPanel.style.setProperty('--psfdf-glow', `rgba(${accentRgb}, .28)`);
+  psfdfPanel.style.setProperty('--psfdf-tint', `rgba(${accentRgb}, .105)`);
+  psfdfPanel.style.setProperty('--psfdf-border', `rgba(${accentRgb}, .58)`);
+  psfdfPanel.style.setProperty('--psfdf-shadow', `rgba(${accentRgb}, .14)`);
   const place = p.commune || 'Incendie signalé';
   const updatedTimestamp = psfdfHasNumber(p.updated_ts)
     ? Number(p.updated_ts) * 1000 : psfdfUpdatedTimestamp(p.updated);
@@ -4754,6 +5014,11 @@ function renderPsfdfDetail(feature) {
     psfdfStat('Département', p.departement || 'Non renseigné'),
   );
   content.append(status, stats);
+
+  const localActivity = document.createElement('section');
+  localActivity.className = 'psfdf-activity';
+  renderPsfdfActivity(localActivity, feature);
+  content.append(localActivity);
 
   if (p.other_info) {
     const note = document.createElement('p');
@@ -4995,7 +5260,12 @@ async function loadVisibleZones() {
       drawActivity();
     }
   } finally {
-    if (token === Z.token) document.body.classList.remove('loading-detail');
+    if (token === Z.token) {
+      document.body.classList.remove('loading-detail');
+      // Le chargement des pixels FIRMS précis peut élargir l'emprise estimée
+      // du feu : rafraîchir la fiche une fois ces données disponibles.
+      if (shown.psfdf && atLatest) updatePsfdfPanel();
+    }
   }
 
   while (Z.cache.size > 20) {
