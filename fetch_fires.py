@@ -63,6 +63,7 @@ EFFIS_WFS = "https://maps.effis.emergency.copernicus.eu/effis"
 
 PSFDF_API = "https://test1.evan-rngt83060.workers.dev/"
 PSFDF_TIMEOUT = 30
+PSFDF_MAX_AGE_DAYS = 7
 # Le point PSFDF vise souvent la commune plutôt que le front. Un périmètre
 # EFFIS récent situé dans cette couronne est considéré comme le même feu ; les
 # morceaux distants de moins de trois kilomètres sont ensuite regroupés.
@@ -166,27 +167,70 @@ def psfdf_number(value):
     return number if math.isfinite(number) else None
 
 
-def psfdf_timestamp(value):
-    """Convertit l'heure locale PSFDF en epoch pour un affichage relatif fiable."""
-    text = str(value or "").strip()
+def psfdf_timestamp(value, now=None):
+    """Convertit Date_MAJ en epoch malgré les deux ordres employés par PSFDF.
+
+    L'API mélange actuellement le français (01/08/2026) et le format américain
+    non rembourré (8/1/2026). Quand les deux lectures sont possibles, une date
+    de mise à jour est nécessairement celle des deux qui est la plus proche de
+    l'instant de collecte. Cette règle interprète donc aussi bien 1/8 que 8/1
+    comme le 1er août lors de la collecte du 1er août.
+    """
+    text = " ".join(
+        str(value or "").replace("\u00a0", " ").replace("à", " ").split()
+    )
     if not text:
         return None
-    for pattern in ("%d/%m/%Y %H:%M:%S", "%d/%m/%Y %H:%M"):
+
+    chunks = text.split(" ", 1)
+    date_bits = chunks[0].split("/")
+    if len(date_bits) != 3:
+        return None
+    try:
+        first, second, year = (int(part) for part in date_bits)
+    except ValueError:
+        return None
+
+    hour = minute = second_of_minute = 0
+    if len(chunks) == 2:
         try:
-            parsed = datetime.strptime(text, pattern).replace(tzinfo=PARIS_TZ)
-            return int(parsed.timestamp())
+            time_bits = [int(part) for part in chunks[1].split(":")]
         except ValueError:
-            pass
-    return None
+            return None
+        if len(time_bits) not in (2, 3):
+            return None
+        hour, minute = time_bits[:2]
+        if len(time_bits) == 3:
+            second_of_minute = time_bits[2]
+
+    candidates = []
+    for month, day in ((second, first), (first, second)):
+        try:
+            candidate = datetime(
+                year, month, day, hour, minute, second_of_minute,
+                tzinfo=PARIS_TZ,
+            )
+        except ValueError:
+            continue
+        if candidate not in candidates:
+            candidates.append(candidate)
+    if not candidates:
+        return None
+
+    reference = now or datetime.now(PARIS_TZ)
+    parsed = min(candidates, key=lambda candidate: abs(candidate - reference))
+    return int(parsed.timestamp())
 
 
 def fetch_psfdf(bbox):
-    """Extrait le petit état courant utile du volumineux historique PSFDF."""
+    """Extrait les états PSFDF mis à jour au cours des sept derniers jours."""
     west, south, east, north = bbox
     payload = json.loads(get(PSFDF_API, timeout=PSFDF_TIMEOUT))
     if not isinstance(payload, list):
         raise ValueError("la réponse PSFDF n'est pas un tableau")
 
+    now = datetime.now(PARIS_TZ)
+    cutoff = now.timestamp() - PSFDF_MAX_AGE_DAYS * 86400
     features = []
     for row in payload:
         if not isinstance(row, dict):
@@ -199,6 +243,9 @@ def fetch_psfdf(bbox):
         if (lon is None or lat is None
                 or not (west <= lon <= east and south <= lat <= north)):
             continue
+        updated_ts = psfdf_timestamp(row.get("Date_MAJ"), now=now)
+        if updated_ts is None or updated_ts < cutoff:
+            continue
         features.append({
             "type": "Feature",
             "geometry": {"type": "Point", "coordinates": [lon, lat]},
@@ -209,7 +256,7 @@ def fetch_psfdf(bbox):
                 "departement": str(row.get("Département") or "").strip(),
                 "reported": str(row.get("Date_signalement") or "").strip(),
                 "updated": str(row.get("Date_MAJ") or "").strip(),
-                "updated_ts": psfdf_timestamp(row.get("Date_MAJ")),
+                "updated_ts": updated_ts,
                 "surface": psfdf_number(row.get("Surface")),
                 "surface_type": str(row.get("Surface_Type") or "").strip(),
                 "personnel": psfdf_number(row.get("Personnel")),
@@ -1223,7 +1270,7 @@ def main():
     print("\nAssociation PSFDF - incendies suivis")
     try:
         psfdf = fetch_psfdf(bbox)
-        print(f"  {len(psfdf['features'])} incendies non archivés")
+        print(f"  {len(psfdf['features'])} incendies mis à jour depuis 7 jours")
         matched = align_psfdf_to_effis(psfdf, recent)
         print(f"  {matched} disques ajustés sur un périmètre EFFIS récent")
     except Exception as error:

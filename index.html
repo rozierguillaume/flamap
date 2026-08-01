@@ -1261,7 +1261,7 @@
       <li><b>Foyers actifs</b> — <a href="https://firms.modaps.eosdis.nasa.gov/" target="_blank" rel="noopener">NASA FIRMS</a>
           (VIIRS 375 m &amp; MODIS, LANCE/EOSDIS)</li>
       <li><b>Surfaces brûlées</b> — <a href="https://forest-fire.emergency.copernicus.eu/" target="_blank" rel="noopener">Copernicus EFFIS</a></li>
-      <li><b>Incendies signalés et statuts</b> — <a href="https://association-psfdf.fr/pages/carte.html" target="_blank" rel="noopener">Association PSFDF</a></li>
+      <li><b>Incendies signalés et statuts</b> — <a href="https://association-psfdf.fr/pages/carte.html" target="_blank" rel="noopener">Association Prévention et Signalement Feux de Forêt (PSFDF)</a></li>
       <li><b>Vent à 10 m</b> — modèle <a href="https://meteofrance.com/" target="_blank" rel="noopener">AROME HD</a>
           de Météo-France, servi par <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a> (CC BY 4.0)</li>
       <li><b>Fumée</b> — simulation indicative à partir de la puissance radiative FIRMS et du vent AROME,
@@ -4552,6 +4552,7 @@ const PSFDF_LAYERS = [
 const PSFDF_LAYER_IDS = new Set(PSFDF_LAYERS.map(([id]) => id));
 const PSFDF_HIT_LAYERS = PSFDF_LAYERS.map(([id]) => id).reverse();
 const PSFDF_MAX_ZOOM = 9;
+const PSFDF_MAX_AGE_MS = 7 * 86400000;
 const PSFDF_SHORTCUT_STATUSES = new Set(['Hors de contrôle', 'En cours']);
 // `overview` reste utilisé par le graphique FIRMS local et `features` par le
 // contexte des moyens aériens.
@@ -4567,15 +4568,34 @@ const psfdfPanelToggle = document.getElementById('psfdf-panel-toggle');
 let psfdfPanelFeatureId = null;
 
 function psfdfUpdatedTimestamp(value) {
-  const text = String(value || '').trim();
-  const french = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})[ T](\d{1,2}):(\d{2})(?::(\d{2}))?$/);
-  if (french) {
-    const [, day, month, year, hour, minute, second = 0] = french;
-    return new Date(Number(year), Number(month) - 1, Number(day),
-      Number(hour), Number(minute), Number(second)).getTime();
-  }
-  const parsed = Date.parse(text);
-  return Number.isFinite(parsed) ? parsed : NaN;
+  const text = String(value || '').replace(/\u00a0/g, ' ').replace('à', ' ').trim();
+  const match = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
+  if (!match) return NaN;
+  const [, first, second, year, hour = 0, minute = 0, seconds = 0] = match;
+  const candidates = [[second, first], [first, second]].map(([month, day]) => {
+    const date = new Date(Number(year), Number(month) - 1, Number(day),
+      Number(hour), Number(minute), Number(seconds));
+    return date.getFullYear() === Number(year)
+      && date.getMonth() === Number(month) - 1 && date.getDate() === Number(day)
+      ? date.getTime() : NaN;
+  }).filter(Number.isFinite);
+  return candidates.reduce((nearest, candidate) =>
+    Math.abs(candidate - Date.now()) < Math.abs(nearest - Date.now())
+      ? candidate : nearest, candidates[0] ?? NaN);
+}
+
+function currentPsfdf(data) {
+  const now = Date.now();
+  return {
+    ...data,
+    features: (data.features || []).filter(feature => {
+      const p = feature.properties || {};
+      const timestamp = psfdfHasNumber(p.updated_ts)
+        ? Number(p.updated_ts) * 1000 : psfdfUpdatedTimestamp(p.updated);
+      return Number.isFinite(timestamp)
+        && now - timestamp >= 0 && now - timestamp <= PSFDF_MAX_AGE_MS;
+    }),
+  };
 }
 
 function psfdfRelativeLabel(timestamp) {
@@ -5371,7 +5391,9 @@ poll = setInterval(start, 80);
 
 async function init() {
   const data = await dataP;
-  const { manifest, overview, recent, psfdf, timeline, wind: windData, detail } = data;
+  const { manifest, overview, recent, psfdf: rawPsfdf,
+    timeline, wind: windData, detail } = data;
+  const psfdf = currentPsfdf(rawPsfdf);
   Z.manifest = manifest;
   Z.available = new Set(manifest.zones);
   Z.disabled = !!manifest.legacy;

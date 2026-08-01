@@ -30,8 +30,11 @@ https://test1.evan-rngt83060.workers.dev/
 ```
 
 Le collecteur ne republie pas l'historique complet : il conserve uniquement les
-points dont le statut est hors de contrôle, en cours, fixé, maîtrisé ou éteint.
-Les entrées archivées sont exclues.
+points dont le statut est hors de contrôle, en cours, fixé, maîtrisé ou éteint,
+et dont la dernière mise à jour remonte à sept jours au maximum. Les entrées
+archivées ou plus anciennes sont exclues. `Date_MAJ` mélange dans l'API les
+ordres français et américain ; le collecteur valide les deux lectures et garde
+celle qui est cohérente avec l'instant de collecte.
 
 Le volet météo complète les valeurs par un nom de commune obtenu à l'ouverture
 avec le géocodage inverse public de la Géoplateforme :
