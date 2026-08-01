@@ -9,6 +9,7 @@ Notes de repérage + ce que j'ai testé pour de vrai le 28/07/2026 sur le feu du
 | Besoin | Source | Fraîcheur | Résolution |
 |---|---|---|---|
 | **Foyers actifs** | NASA FIRMS (VIIRS 375 m) | ~3 h après le passage, ~6 passages/jour | 375 m |
+| **Statut des incendies suivis** | Association PSFDF | quasi temps réel | point déclaré |
 | **Surface brûlée (périmètre)** | Copernicus EFFIS, WFS | 1–2×/jour | ~250–375 m, seuil ~30 ha |
 | **Intensité minute par minute** | LSA SAF / Meteosat FRP | **15 min** | 3 km (trop grossier pour cartographier) |
 | **Périmètre haute résolution** | Copernicus EMS Rapid Mapping | heures à jours, seulement si activation | ~10 m et mieux |
@@ -17,10 +18,20 @@ Notes de repérage + ce que j'ai testé pour de vrai le 28/07/2026 sur le feu du
 | **Température à 2 m et pluie** | Open-Meteo / AROME HD | horaire, ±18 h | maille 1,5 km, rééchantillonnée à 20 km |
 | **Moyens aériens** | Airplanes.live / ADS-B | quelques secondes | position transpondeur |
 
-Les deux premières lignes et la dernière sont celles implémentées dans
-`fetch_fires.py`. Les deux premières font aussi les deux images que tu m'as
-envoyées : la 1re, c'est FIRMS ; la 2e, c'est le *Current Situation Viewer*
-d'EFFIS.
+FIRMS, PSFDF, EFFIS et Open-Meteo sont collectés par `fetch_fires.py` ; les
+positions ADS-B sont chargées séparément par le navigateur. FIRMS et EFFIS font
+aussi les deux images que tu m'as envoyées : la 1re, c'est FIRMS ; la 2e, c'est
+le *Current Situation Viewer* d'EFFIS.
+
+Le suivi PSFDF est lu depuis l'endpoint JSON utilisé par leur propre carte :
+
+```
+https://test1.evan-rngt83060.workers.dev/
+```
+
+Le collecteur ne republie pas l'historique complet : il conserve uniquement les
+points dont le statut est hors de contrôle, en cours, fixé, maîtrisé ou éteint.
+Les entrées archivées sont exclues.
 
 Le volet météo complète les valeurs par un nom de commune obtenu à l'ouverture
 avec le géocodage inverse public de la Géoplateforme :

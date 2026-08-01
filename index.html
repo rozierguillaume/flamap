@@ -132,10 +132,82 @@
     font: inherit; font-size: 12px; font-weight: 600; line-height: 1.2; cursor: pointer;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
+  #incidents button::before {
+    content: ''; display: inline-block; width: 8px; height: 8px; margin-right: 7px;
+    border-radius: 50%; background: var(--incident-color, var(--front));
+    box-shadow: 0 0 0 1px rgba(255,255,255,.55); vertical-align: 1px;
+  }
   #incidents button:hover, #incidents button:focus-visible {
     background: rgba(25,28,33,.92); border-color: rgba(255,255,255,.25);
     color: var(--ink);
   }
+  #psfdf-panel {
+    position: absolute; z-index: 498; top: 76px; right: 14px;
+    width: 320px; padding: 15px; display: flex; flex-direction: column;
+    max-height: calc(100vh - 168px); overflow: hidden;
+    background: linear-gradient(145deg, var(--psfdf-tint, rgba(13,15,18,.92)),
+                                rgba(13,15,18,.93) 58%);
+    border-width: 1.5px;
+    border-color: var(--psfdf-border, rgba(255,255,255,.10));
+    box-shadow: 0 9px 28px rgba(0,0,0,.20);
+    transition: background .24s ease, border-color .24s ease,
+                box-shadow .24s ease;
+  }
+  #psfdf-panel[hidden] { display: none; }
+  #psfdf-panel header { flex: none; margin-bottom: 11px; }
+  #psfdf-panel h2 { margin: 0; font-size: 16px; line-height: 1.15; }
+  #psfdf-panel .panel-sub { margin: 4px 0 0; color: var(--ink-dim);
+                            font-size: 11.5px; line-height: 1.35; }
+  #psfdf-panel-body { min-height: 0; overflow-y: auto; scrollbar-width: thin; }
+  #psfdf-panel-toggle { display: none; }
+  .psfdf-detail-status i, .psfdf-head-status i {
+    width: 9px; height: 9px; border-radius: 50%; flex: none;
+    box-shadow: 0 0 0 1px rgba(255,255,255,.55);
+  }
+  .psfdf-detail-status { display: flex; align-items: center; gap: 7px;
+                         margin: 0 0 11px 2px; font-size: 12px; font-weight: 650; }
+  .psfdf-panel-heading {
+    min-width: 0; display: flex; align-items: center; gap: 8px;
+  }
+  .psfdf-panel-heading h2 { min-width: 0; flex: 1; }
+  .psfdf-relative {
+    flex: none; padding: 2px 6px; border-radius: 999px;
+    background: rgba(255,255,255,.065); color: #c6c1bb;
+    font-size: 9.5px; font-weight: 600; white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+  .psfdf-head-status { display: none; }
+  .psfdf-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+  .psfdf-stat { padding: 9px; border-radius: 8px; background: rgba(255,255,255,.055); }
+  .psfdf-stat small { display: block; color: var(--ink-dim); font-size: 10px;
+                      text-transform: uppercase; letter-spacing: .045em; }
+  .psfdf-stat b { display: block; margin-top: 3px; font-size: 15px; }
+  .psfdf-note { margin: 10px 0 0; padding-top: 9px;
+                border-top: 1px solid rgba(255,255,255,.1);
+                color: #d8d5d1; font-size: 11.5px; line-height: 1.4; }
+  .psfdf-dates { margin: 10px 0 0; color: var(--ink-dim);
+                 font-size: 10.5px; line-height: 1.45; }
+  .psfdf-more {
+    position: relative; display: grid; place-items: center;
+    margin-top: 12px; padding: 10px 40px 10px 12px;
+    border: 1px solid rgba(255,255,255,.15); border-radius: 8px;
+    background: #24282e; color: var(--ink); text-decoration: none; text-align: center;
+    font-size: 12.5px; font-weight: 700; line-height: 1.15;
+  }
+  .psfdf-more small { display: block; margin-top: 3px; color: var(--ink-dim);
+                      font-size: 10px; font-weight: 600; }
+  .psfdf-more svg {
+    position: absolute; right: 13px; top: 50%; width: 17px; height: 17px;
+    transform: translateY(-50%); fill: none; stroke: currentColor;
+    stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round;
+  }
+  .psfdf-more:hover, .psfdf-more:focus-visible { background: #32373f; }
+  #incidents.layers-open ~ #psfdf-panel,
+  #incidents.credits-open ~ #psfdf-panel,
+  #incidents.activity-open ~ #psfdf-panel,
+  #incidents.weather-open ~ #psfdf-panel,
+  #incidents.updates-open ~ #psfdf-panel,
+  #incidents.export-open ~ #psfdf-panel { display: none; }
 
   /* ---- calques ---- */
   #layers { position: absolute; z-index: 500; top: 54px; right: 58px;
@@ -183,10 +255,18 @@
   #layers-btn[aria-expanded="true"]::after { content: " ⌄"; }
 
   /* ---- barre du bas ---- */
-  #legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12.5px; }
-  #legend span { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
-  #legend i { width: 12px; height: 12px; border-radius: 50%; flex: none; }
+  #legend { display: flex; flex-wrap: wrap; gap: 6px 12px; font-size: 11.5px; }
+  #legend span { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+  #legend i { width: 10px; height: 10px; border-radius: 50%; flex: none; }
   #legend i.poly { border-radius: 3px; }
+  #psfdf-key {
+    width: 100%; padding-top: 5px; border-top: 1px solid rgba(255,255,255,.1);
+    flex-wrap: wrap; gap: 4px 9px !important;
+  }
+  #psfdf-key > b { color: var(--ink-dim); font-size: 10.5px; }
+  #psfdf-key em { display: inline-flex; align-items: center; gap: 4px;
+                  color: #d8d5d1; font-size: 10.5px; font-style: normal; }
+  #psfdf-key i { width: 8px; height: 8px; }
   #legend-btn {
     display: none; font: inherit; font-size: 11.5px; font-weight: 600;
     color: #bcb7b1; text-align: left; cursor: pointer;
@@ -195,7 +275,7 @@
   /* Echelle continue d'anciennete. Le degrade et la position des reperes sont
      poses par `drawAgeKey()` a partir de la table qui peint la carte : une
      seule source, elles ne peuvent pas diverger. */
-  #agekey { align-items: flex-start; width: 100%; }
+  #agekey { align-items: flex-start; width: 180px; flex: 1 1 180px; }
   #ageramp {
     position: relative; display: block; width: 156px; height: 10px;
     border-radius: 5px; margin-bottom: 17px;
@@ -558,24 +638,77 @@
     /* Les trois blocs ancres a gauche gardent une respiration genereuse sans
        ajouter de bande ou de decor par-dessus l'imagerie. */
     #head, #incidents { left: 26px; }
-    #dock { position: absolute; z-index: 500; left: 26px; right: 14px; bottom: 14px;
-            display: flex; align-items: flex-end; gap: 14px; pointer-events: none; }
+    #dock { position: absolute; z-index: 500; left: 0; right: 0; bottom: 14px;
+            height: 62px; pointer-events: none; }
     #dock > * { pointer-events: auto; }
-    #legend { flex-direction: column; gap: 7px; padding: 13px 16px; }
+    #legend {
+      position: absolute; left: 26px; bottom: 0; width: 230px;
+      display: block; padding: 0; overflow: hidden; font-size: 11px;
+      transition: width .22s ease, height .22s ease;
+    }
+    #legend.collapsed {
+      width: 42px; height: 42px;
+    }
+    #legend-head {
+      height: 38px; display: flex; align-items: center;
+      justify-content: space-between; padding: 7px 8px 6px 12px;
+      border-bottom: 1px solid rgba(255,255,255,.08);
+    }
+    #legend-title {
+      color: var(--ink-dim); font-size: 10.5px; font-weight: 650;
+      letter-spacing: .025em; text-transform: uppercase;
+    }
+    #legend-collapse {
+      display: grid; place-items: center; flex: none; width: 26px; height: 26px;
+      padding: 0; border: 0; border-radius: 7px; background: transparent;
+      color: #c9c5c0; cursor: pointer;
+    }
+    #legend-collapse:hover, #legend-collapse:focus-visible {
+      background: rgba(255,255,255,.08); color: var(--ink);
+    }
+    #legend-collapse svg {
+      width: 16px; height: 16px; fill: none; stroke: currentColor;
+      stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+      transition: transform .22s ease;
+    }
+    #legend.collapsed #legend-head {
+      height: 42px; padding: 8px; border-bottom: 0;
+    }
+    #legend.collapsed #legend-title, #legend.collapsed #legend-content {
+      display: none;
+    }
+    #legend.collapsed #legend-collapse svg {
+      transform: rotate(180deg);
+    }
+    #legend-content {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 7px 10px; padding: 9px 12px 11px;
+    }
+    #legend .burnt-key { min-width: 0; }
+    #legend #agekey { grid-column: 1 / -1; width: 100%; min-width: 0; }
     #legend #ageramp { width: 100%; }
-    #timebar { flex: 1; max-width: 620px; margin: 0 auto; padding: 13px 16px; }
+    #legend #psfdf-key {
+      grid-column: 1 / -1; display: grid;
+      grid-template-columns: 1fr 1fr; width: 100%;
+    }
+    #legend #psfdf-key > b { grid-column: 1 / -1; }
+    #legend #tempkey, #legend #windkey { grid-column: 1 / -1; }
+    #timebar {
+      position: absolute; left: 50%; bottom: 0; transform: translateX(-50%);
+      width: min(620px, calc(100vw - 500px)); margin: 0; padding: 13px 16px;
+    }
     /* Le bouton reste dans la ligne du dock, le panneau vient se poser au-dessus
        de lui plutôt qu'à côté : hors du flux, il ne rétrécit pas la réglette en
        s'ouvrant. C'est aussi ce qui rendait la barre du bas inutilisable entre
        721 et 900 px de large, où les 280 px de crédits mangeaient le curseur. */
-    #cr-btn { align-self: flex-end; padding: 8px 12px; }
+    #cr-btn { position: absolute; right: 14px; bottom: 0; padding: 8px 12px; }
     /* Au-dessus de toute la barre, pas seulement du bouton : la réglette est
        centrée dans la place qui reste et, sous 1300 px de large, il n'y a plus
        les 280 px du panneau entre son bord droit et celui de l'écran — il
        viendrait mordre dessus. */
     /* Panneau ancre a droite mais texte a gauche : la liste a besoin d'un bord
        de lecture commun, un alignement a droite casserait les libelles. */
-    #credits { position: absolute; right: 0; bottom: calc(100% + 10px);
+    #credits { position: absolute; right: 14px; bottom: calc(100% + 10px);
                width: 280px; padding: 11px 14px; text-align: left; }
     #updates-panel { position: fixed; z-index: 502; right: 14px; bottom: 84px;
                      width: 350px; max-height: min(570px, calc(100vh - 120px));
@@ -587,44 +720,111 @@
                      width: min(470px, calc(100vw - 28px)); padding: 16px 18px; }
   }
 
+  @media (min-width: 721px) and (max-width: 1180px) {
+    #legend { bottom: 80px; }
+    #timebar { width: min(620px, calc(100vw - 80px)); }
+  }
+
   /* =======================  MOBILE  ======================== */
   @media (max-width: 720px) {
+    #psfdf-panel {
+      position: fixed; z-index: 499; top: 73px; right: 10px; left: 10px;
+      width: auto; max-height: 44px; padding: 0; overflow: hidden;
+      opacity: 0; visibility: hidden; pointer-events: none;
+      transform: translateY(5px);
+      transition: opacity .24s ease, transform .24s ease,
+                  max-height .25s ease, visibility 0s linear .24s;
+    }
+    #psfdf-panel[hidden] { display: none; }
+    body.psfdf-focus #psfdf-panel {
+      opacity: 1; visibility: visible; pointer-events: auto;
+      transform: none; transition-delay: 0s;
+    }
+    #psfdf-panel header {
+      position: relative; min-height: 42px; margin: 0; padding: 8px 39px 8px 12px;
+      display: flex; align-items: center;
+    }
+    #psfdf-panel .psfdf-panel-heading {
+      width: 100%; display: grid; align-items: center;
+      grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 8px;
+    }
+    #psfdf-panel h2 {
+      min-width: 0; overflow: hidden; text-overflow: ellipsis;
+      white-space: nowrap; font-size: 13px;
+    }
+    #psfdf-panel .psfdf-relative {
+      grid-column: 3; justify-self: end; padding: 0; background: transparent;
+      color: #b8b2ac; font-size: 9.5px; font-weight: 550;
+    }
+    #psfdf-panel .panel-sub { display: none; }
+    #psfdf-panel .psfdf-head-status {
+      grid-column: 2; grid-row: 1;
+      display: inline-flex; align-items: center; gap: 5px; flex: none;
+      font-size: 10.5px; font-weight: 650; white-space: nowrap;
+    }
+    #psfdf-panel-toggle {
+      position: absolute; inset: 0; display: block; width: 100%; padding: 0;
+      border: 0; border-radius: inherit; background: transparent; color: var(--ink);
+      cursor: pointer;
+    }
+    #psfdf-panel-toggle svg {
+      position: absolute; right: 12px; top: 13px; width: 16px; height: 16px;
+      fill: none; stroke: currentColor; stroke-width: 2;
+      transition: transform .22s ease;
+    }
+    #psfdf-panel.open { right: 10px; max-height: min(62vh, 480px); }
+    #psfdf-panel.open #psfdf-panel-toggle svg { transform: rotate(180deg); }
+    #psfdf-panel-body { display: none; padding: 0 12px 12px; }
+    #psfdf-panel.open #psfdf-panel-body { display: block; overflow-y: auto; }
+    #psfdf-panel .psfdf-detail-status { display: none; }
     #head { top: 10px; left: 10px; padding: 9px 15px 10px; }
     #head .brand { gap: 8px; }
     #head .mark { width: 36px; }
     #head h1 { font-size: 19px; }
-    #incidents { top: 73px; left: 10px; flex-wrap: nowrap;
-                 max-width: calc(100vw - 72px);
-                 overflow-x: auto; scrollbar-width: none; }
+    #incidents {
+      top: 73px; left: 10px; right: 10px; flex-wrap: nowrap; max-width: none;
+      padding-right: 56px; overflow-x: auto; scrollbar-width: none;
+      transition: opacity .24s ease, transform .24s ease,
+                  visibility 0s linear 0s;
+      -webkit-mask-image: linear-gradient(to right, #000 0,
+        #000 calc(100% - 72px), transparent 100%);
+      mask-image: linear-gradient(to right, #000 0,
+        #000 calc(100% - 72px), transparent 100%);
+    }
+    body.psfdf-focus #incidents {
+      opacity: 0; visibility: hidden; pointer-events: none;
+      transform: translateY(-5px); transition-delay: 0s, 0s, .24s;
+    }
     #incidents::-webkit-scrollbar { display: none; }
-    #incidents button { flex: none; max-width: 220px; font-size: 11.5px; }
+    #incidents button {
+      flex: none; min-height: 40px; max-width: 220px;
+      padding: 9px 11px; font-size: 12px;
+    }
     #incidents.layers-open, #incidents.credits-open, #incidents.activity-open,
     #incidents.weather-open, #incidents.export-open { display: none; }
 
     /* les calques repliés derrière un bouton : sur 375 px de large, le panneau
        ouvert en permanence mangeait le quart supérieur de l'écran */
-    #layers-btn { top: 10px; right: 10px; width: 42px; height: 42px; padding: 0;
+    #layers-btn { position: fixed; top: auto; right: 10px;
+                  width: 42px; height: 42px; padding: 0;
                   color: var(--ink); font-size: 17px; line-height: 1; }
     #layers-btn::after { content: none; }
     #layers-btn .wide { display: none; }
     #layers-btn svg { width: 19px; height: 19px; margin: 0; vertical-align: 0; }
     #layers { top: 60px; right: 10px; padding: 10px 13px; font-size: 12px; }
-    #weather-btn { position: fixed; top: 60px; right: 10px; width: 42px;
+    #weather-btn { position: fixed; top: auto; right: 10px; width: 42px;
                    height: 42px; padding: 0; font-size: 17px; }
     #weather-btn .weather-label { display: none; }
     #weather-btn .weather-icon { margin: 0; }
     #weather-btn::after { content: none; }
     #layers.open ~ #weather-btn { display: none; }
-    #export-btn { position: fixed; top: 60px; right: 60px; bottom: auto;
+    #export-btn { position: fixed; top: auto; right: 10px;
                   width: 42px; height: 42px; }
     #export-btn .export-icon, #export-btn .export-loader { width: 19px; height: 19px; }
     #layers.open ~ #export-btn { display: none; }
     #export-panel { top: 110px; right: 10px; bottom: auto;
                     width: min(270px, calc(100vw - 20px)); }
     #export-toast { top: 110px; right: 10px; bottom: auto; }
-    /* Les raccourcis défilent avant les deux icônes de la seconde rangée. */
-    #incidents { max-width: calc(100vw - 122px); }
-
     /* La fiche doit tenir dans la bande laissée par le dock : `fitPopup()`
        remonte la carte, encore faut-il que la fiche soit assez basse pour y
        entrer. Au-delà, elle défile dans son propre cadre. */
@@ -637,8 +837,8 @@
       position: absolute; z-index: 500; left: 10px; right: 10px;
       bottom: calc(10px + var(--safe-b));
       display: grid; grid-template-columns: 1fr;
-      grid-template-areas: "legend" "timeline";
-      align-items: end; gap: 8px; pointer-events: none;
+      grid-template-areas: "legend" "timeline" "credits";
+      align-items: end; gap: 6px; pointer-events: none;
     }
     #dock > * { pointer-events: auto; }
     #legend {
@@ -647,8 +847,10 @@
       gap: 7px 12px; padding: 10px 12px; font-size: 11.5px;
     }
     #legend:not(.open) { display: none; }
+    #legend-head { display: none; }
+    #legend-content { display: contents; }
     #legend-btn {
-      position: fixed; z-index: 501; right: 10px;
+      position: fixed; z-index: 501; top: auto; right: 10px;
       display: grid; place-items: center;
       width: 42px; height: 42px; padding: 0;
     }
@@ -656,7 +858,8 @@
     /* Les deux emprises s'empilent dans la colonne etroite, le degrade tient
        la colonne large sur leurs deux rangs plutot que de laisser un trou. */
     #legend .burnt-key { grid-column: 1; }
-    #agekey { grid-column: 2; grid-row: 1 / span 2; min-width: 0; }
+    #agekey { grid-column: 2; grid-row: 1 / span 2; width: 100%; min-width: 0; }
+    #psfdf-key { grid-column: 1 / -1; }
     #ageramp { width: 100%; }
     #tempkey { grid-column: 1; }
     #windkey { grid-column: 2; }
@@ -668,16 +871,20 @@
     #clock { font-size: clamp(18px, 5vw, 22px); }
 
     #cr-btn {
-      position: fixed; z-index: 501; top: 10px; right: 60px;
-      height: 42px; padding: 0 11px;
-      color: #a39d97; white-space: nowrap;
+      grid-area: credits; position: static; justify-self: center;
+      height: auto; padding: 0; border: 0; border-radius: 0;
+      background: transparent; box-shadow: none; backdrop-filter: none;
+      -webkit-backdrop-filter: none; color: #aaa49e; white-space: nowrap;
+      font-size: 10.5px; font-weight: 500; text-decoration: underline;
+      text-decoration-color: #625e59; text-underline-offset: 3px;
     }
+    #cr-btn::after { content: none; }
     #cr-btn .wide { display: none; }
     /* Le panneau s'ouvre sous les deux rangées de commandes de l'en-tête, sans
        modifier la hauteur des commandes temporelles en bas. Sa liste peut
        défiler sur les écrans courts plutôt que de passer sous le dock. */
     #credits {
-      position: fixed; z-index: 501; top: 110px; right: 10px; bottom: auto;
+      position: fixed; z-index: 501; top: 60px; right: 10px; bottom: auto;
       width: min(330px, calc(100vw - 20px)); max-height: calc(100vh - 300px);
       overflow: auto; padding: 12px 14px; text-align: left;
     }
@@ -709,7 +916,9 @@
     /* A 320 px, la legende repasse sur trois lignes plutôt que de comprimer le
        degrade. */
     #legend { grid-template-columns: 1fr; }
-    #legend .burnt-key, #agekey, #tempkey, #windkey { grid-column: 1; grid-row: auto; }
+    #legend .burnt-key, #agekey, #tempkey, #windkey, #psfdf-key {
+      grid-column: 1; grid-row: auto;
+    }
   }
 </style>
 
@@ -803,6 +1012,25 @@
   </section>
 </div>
 <div id="incidents" hidden aria-label="Raccourcis vers les incendies importants"></div>
+<aside id="psfdf-panel" class="glass" aria-labelledby="psfdf-panel-title" hidden>
+  <header>
+    <div class="psfdf-panel-heading">
+      <h2 id="psfdf-panel-title">Feux suivis par PSFDF</h2>
+      <time id="psfdf-relative" class="psfdf-relative" hidden></time>
+      <span id="psfdf-head-status" class="psfdf-head-status">
+        <i></i><span>—</span>
+      </span>
+    </div>
+    <p id="psfdf-panel-sub" class="panel-sub">État actuel communiqué par l’association.</p>
+    <button id="psfdf-panel-toggle" type="button" aria-expanded="false"
+            aria-controls="psfdf-panel-body" aria-label="Afficher les détails du feu">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="m6 9 6 6 6-6" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </button>
+  </header>
+  <div id="psfdf-panel-body"></div>
+</aside>
 
 <noscript>
   <p style="position:relative;z-index:600;margin:80px 14px;text-align:center">
@@ -824,6 +1052,8 @@
   </svg><span class="wide">Calques</span>
 </button>
 <div id="layers" class="glass">
+  <label><input type="checkbox" id="ck-psfdf"
+                data-analytics-layer="psfdf" checked> incendies signalés (PSFDF)</label>
   <label><input type="checkbox" id="ck-hotspots" data-analytics-layer="hotspots" checked> foyers détectés</label>
   <fieldset>
     <legend>Sources FIRMS</legend>
@@ -935,18 +1165,36 @@
 
 <div id="dock">
   <div id="legend" class="glass">
-    <span class="burnt-key" title="Périmètre touché par un incendie, recensé par EFFIS et daté au cran affiché. Donnée indicative susceptible d'être révisée"><i class="poly" style="background:var(--burnt);border:1px solid var(--burnt-edge)"></i>périmètre touché</span>
+    <div id="legend-head">
+      <b id="legend-title">Légende</b>
+      <button id="legend-collapse" type="button" aria-expanded="true"
+              aria-label="Replier la légende" title="Replier la légende">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="m15 18-6-6 6-6"></path>
+        </svg>
+      </button>
+    </div>
+    <div id="legend-content">
+    <span class="burnt-key" title="Périmètre touché par un incendie, recensé par EFFIS et daté au cran affiché. Donnée indicative susceptible d'être révisée"><i class="poly" style="background:var(--burnt);border:1px solid var(--burnt-edge)"></i>touché</span>
     <!-- Même famille de bruns, deux crans plus clair : l'emprise NRT est
          assombrie assez pour se lire, pas assez pour passer pour un périmètre
          déjà recensé. Le voile de la carte reste bien plus discret (30 %) qu'un
          aplat de 12 px ne peut le montrer. -->
-    <span class="burnt-key" title="Périmètre potentiellement touché par un incendie, détecté automatiquement par EFFIS en quasi temps réel. Donnée indicative susceptible d'être révisée"><i class="poly" style="background:var(--nrt);border:1px solid var(--nrt-edge)"></i>périmètre potentiellement touché</span>
+    <span class="burnt-key" title="Périmètre potentiellement touché par un incendie, détecté automatiquement par EFFIS en quasi temps réel. Donnée indicative susceptible d'être révisée"><i class="poly" style="background:var(--nrt);border:1px solid var(--nrt-edge)"></i>potentiel</span>
     <!-- l'échelle d'ancienneté : le dégradé et la position des repères sont
          posés par le script, à partir de la rampe qui peint la carte -->
     <span id="agekey" title="Couleur d'un foyer selon son ancienneté, de dix jours à l'instant de la détection">
       <span id="ageramp">
         <b data-age="864000">10 j</b><b data-age="86400">24 h</b><b data-age="0">à l'instant</b>
       </span>
+    </span>
+    <span id="psfdf-key" title="Statut courant des incendies suivis par l’association PSFDF">
+      <b>PSFDF</b>
+      <em title="Hors de contrôle"><i style="background:#2f2933"></i>hors contrôle</em>
+      <em><i style="background:#e33b32"></i>en cours</em>
+      <em><i style="background:#f28c28"></i>fixé</em>
+      <em title="Maîtrisé"><i style="background:#e6c229"></i>maîtr.</em>
+      <em><i style="background:#4a9f62"></i>éteint</em>
     </span>
     <span id="tempkey" hidden>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
@@ -961,6 +1209,7 @@
       </svg>
       <span id="windval">—</span>
     </span>
+    </div>
   </div>
   <button id="legend-btn" class="glass" aria-expanded="false"
           aria-controls="legend" aria-label="Afficher la légende" title="Afficher la légende">
@@ -1008,6 +1257,7 @@
       <li><b>Foyers actifs</b> — <a href="https://firms.modaps.eosdis.nasa.gov/" target="_blank" rel="noopener">NASA FIRMS</a>
           (VIIRS 375 m &amp; MODIS, LANCE/EOSDIS)</li>
       <li><b>Surfaces brûlées</b> — <a href="https://forest-fire.emergency.copernicus.eu/" target="_blank" rel="noopener">Copernicus EFFIS</a></li>
+      <li><b>Incendies signalés et statuts</b> — <a href="https://association-psfdf.fr/pages/carte.html" target="_blank" rel="noopener">Association PSFDF</a></li>
       <li><b>Vent à 10 m</b> — modèle <a href="https://meteofrance.com/" target="_blank" rel="noopener">AROME HD</a>
           de Météo-France, servi par <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a> (CC BY 4.0)</li>
       <li><b>Fumée</b> — simulation indicative à partir de la puissance radiative FIRMS et du vent AROME,
@@ -1025,7 +1275,7 @@
           icônes <a href="https://lucide.dev/" target="_blank" rel="noopener">Lucide</a> (ISC)</li>
     </ul>
     <p class="cr-foot">
-      <a href="https://github.com/rozierguillaume/flamap" target="_blank" rel="noopener">Code source</a> ·
+      <a href="https://github.com/rozierguillaume/flamap" target="_blank" rel="noopener">Code source</a> —
       <a href="/mentions-legales.html">Mentions légales &amp; confidentialité</a>
     </p>
     <span id="updated"></span>
@@ -1328,11 +1578,19 @@ document.getElementById('cr-btn').addEventListener('click', e => {
   }
 });
 
-document.getElementById('legend-btn').addEventListener('click', e => {
-  const open = document.getElementById('legend').classList.toggle('open');
+const legendEl = document.getElementById('legend');
+const legendBtn = document.getElementById('legend-btn');
+legendBtn.addEventListener('click', e => {
+  const open = legendEl.classList.toggle('open');
   e.currentTarget.setAttribute('aria-expanded', open);
   e.currentTarget.setAttribute('aria-label', open ? 'Masquer la légende' : 'Afficher la légende');
   e.currentTarget.title = open ? 'Masquer la légende' : 'Afficher la légende';
+});
+document.getElementById('legend-collapse').addEventListener('click', e => {
+  const open = !legendEl.classList.toggle('collapsed');
+  e.currentTarget.setAttribute('aria-expanded', open);
+  e.currentTarget.setAttribute('aria-label', open ? 'Replier la légende' : 'Déplier la légende');
+  e.currentTarget.title = open ? 'Replier la légende' : 'Déplier la légende';
 });
 
 document.getElementById('layers-btn').addEventListener('click', e => {
@@ -1404,7 +1662,7 @@ const weatherTarget = () => weatherPin || map.getCenter();
 
 function weatherCoordinates(point) {
   return `${Math.abs(point.lat).toFixed(3)}° ${point.lat >= 0 ? 'N' : 'S'}`
-       + ` · ${Math.abs(point.lng).toFixed(3)}° ${point.lng >= 0 ? 'E' : 'O'}`;
+       + `, ${Math.abs(point.lng).toFixed(3)}° ${point.lng >= 0 ? 'E' : 'O'}`;
 }
 
 /* Géocodage inverse mutualisé entre le panneau et la fiche au clic : le service
@@ -1428,7 +1686,7 @@ async function communeAt(lon, lat) {
 }
 
 function renderWeatherPlace(point = weatherTarget()) {
-  weatherPlace.textContent = (weatherCommune ? `${weatherCommune} · ` : '')
+  weatherPlace.textContent = (weatherCommune ? `${weatherCommune} — ` : '')
                            + weatherCoordinates(point);
   weatherTitle.textContent = weatherPin ? 'Météo au point choisi'
                                         : 'Météo au centre de la carte';
@@ -1481,6 +1739,7 @@ function openWeatherAt(lngLat) {
 function setUpdatesOpen(open) {
   updatesPanel.classList.toggle('open', open);
   updatesBtn.setAttribute('aria-expanded', open);
+  document.getElementById('incidents').classList.toggle('updates-open', open);
   if (open) {
     activityPanel.classList.remove('open');
     document.getElementById('incidents').classList.remove('activity-open');
@@ -1506,8 +1765,7 @@ function setActivityOpen(open, selected = null) {
   activityTip.classList.remove('open');
   if (open) {
     setWeatherOpen(false);
-    updatesPanel.classList.remove('open');
-    updatesBtn.setAttribute('aria-expanded', 'false');
+    setUpdatesOpen(false);
     document.getElementById('credits').classList.remove('open');
     document.getElementById('cr-btn').setAttribute('aria-expanded', 'false');
     document.getElementById('layers').classList.remove('open');
@@ -1670,7 +1928,7 @@ function drawWeather() {
        + ` r="4.5" class="temp-dot"/>`;
   svg += svgText(x(peak).toFixed(1), Math.max(12, tempY(temperatures[peak]) - 10).toFixed(1),
     `${Math.round(temperatures[peak])}°`, 'temp-value');
-  svg += svgText(left, 161, 'Vent moyen · rafales', 'axis', 'start');
+  svg += svgText(left, 161, 'Vent moyen et rafales', 'axis', 'start');
   svg += svgText(4, windTop + 4, `${windMax}`, 'axis', 'start');
   svg += svgText(4, windBottom + 4, '0', 'axis', 'start');
   svg += `<path d="${path(rows.map(row => row.gust), windY)}" class="gust-line"/>`;
@@ -1738,12 +1996,12 @@ function showWeatherTip(event) {
     weekday: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Paris',
   }).replace(':', 'h');
   const kind = row.ts <= Date.now() / 1000 ? 'historique' : 'prévision';
-  weatherTip.innerHTML = `<strong>${hour} · ${kind}</strong>`
+  weatherTip.innerHTML = `<strong>${hour} — ${kind}</strong>`
     + `<span class="temperature">${row.temperature.toLocaleString('fr-FR',
       { minimumFractionDigits: 1, maximumFractionDigits: 1 })} °C</span>`
-    + `<span>Vent de ${from} · ${Math.round(row.speed)} km/h</span>`
-    + `<span>Rafales · ${Math.round(row.gust)} km/h</span>`
-    + `<span>Précipitations · ${row.precipitation.toLocaleString('fr-FR',
+    + `<span>Vent de ${from}, ${Math.round(row.speed)} km/h</span>`
+    + `<span>Rafales : ${Math.round(row.gust)} km/h</span>`
+    + `<span>Précipitations : ${row.precipitation.toLocaleString('fr-FR',
       { minimumFractionDigits: 1, maximumFractionDigits: 2 })} mm</span>`;
   weatherTip.style.left = `${x / 430 * rect.width}px`;
   weatherTip.style.top = (event.clientY - rect.top) < rect.height / 2
@@ -1835,7 +2093,7 @@ const fmtClock = ts => {
     { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'Europe/Paris' });
   const time = date.toLocaleTimeString('fr-FR',
     { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Paris' });
-  return `${day} · ${time}`;
+  return `${day} à ${time}`;
 };
 
 /* Sur ordinateur l'heure suit le centre exact de la frise. Sur téléphone la
@@ -1850,7 +2108,11 @@ function placeClock() {
   if (MOBILE) {
     const legendBtn = document.getElementById('legend-btn');
     const clockH = clockEl.getBoundingClientRect().height;
-    legendBtn.style.bottom = `${innerHeight - r.top + 18 + clockH}px`;
+    const stackBottom = innerHeight - r.top + 18 + clockH;
+    legendBtn.style.bottom = `${stackBottom}px`;
+    document.getElementById('export-btn').style.bottom = `${stackBottom + 50}px`;
+    document.getElementById('weather-btn').style.bottom = `${stackBottom + 100}px`;
+    document.getElementById('layers-btn').style.bottom = `${stackBottom + 150}px`;
   }
 }
 addEventListener('resize', placeClock);
@@ -1875,7 +2137,7 @@ let lastObs = 0;
  */
 const FIRMS_SOURCES = ['VIIRS/NOAA-20', 'VIIRS/NOAA-21', 'VIIRS/S-NPP', 'MODIS'];
 const shown = {
-  dated: true, nrt: true,
+  dated: true, nrt: true, psfdf: true,
   hotspots: Object.fromEntries(FIRMS_SOURCES.map(source => [source, true])),
 };
 let atLatest = true;
@@ -1899,6 +2161,14 @@ function applyBurnt() {
   if (map.getLayer('nrt-line')) map.setPaintProperty('nrt-line', 'line-opacity', .55 * k);
 }
 
+function applyPsfdf() {
+  for (const [id] of PSFDF_LAYERS)
+    if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility',
+      shown.psfdf && atLatest ? 'visible' : 'none');
+  if (shown.psfdf) updatePsfdfPanel();
+  else setPsfdfPanelVisible(false);
+}
+
 /* Le filtre ne change que quand l'utilisateur coche une source. Il ne doit
  * surtout pas entrer dans `show()` : le réécrire à chaque frame ferait
  * reparser les milliers de foyers pendant l'animation. */
@@ -1909,10 +2179,6 @@ function applyHotspots() {
   for (const id of ['hotspots-overview', 'hotspots'])
     if (map.getLayer(id)) map.setFilter(id, filter);
 
-  // Les halos et raccourcis d'incidents sont calculés hors de MapLibre : il
-  // faut leur appliquer la même sélection de sources que celle des points.
-  MAJOR.bucket = null;
-  if (steps.length) updateMajorFires(curTs);
   smokeTime(curTs, true, true);
   drawActivity();
 }
@@ -2622,7 +2888,7 @@ function activityPassages() {
   // donc le découper spatialement sans télécharger toute la France.
   if (map.getZoom() < Z.manifest.detail_zoom) {
     const grouped = new Map();
-    for (const feature of MAJOR.overview) {
+    for (const feature of FIRE_CONTEXT.overview) {
       const p = feature.properties;
       if (!enabled(p.source) || !inside(feature.geometry.coordinates)) continue;
       const key = `${p.source}/${p.ts}`;
@@ -2699,7 +2965,7 @@ const primaryActivityLabel = step =>
 const secondaryActivityLabel = step =>
   activityMetric === 'frp' ? countLabel(step.n) : powerLabel(+step.frp || 0);
 const activityLabel = step =>
-  `${fmt(step.ts)} · ${primaryActivityLabel(step)} · ${secondaryActivityLabel(step)} · ${step.label}`;
+  `${fmt(step.ts)} — ${primaryActivityLabel(step)} — ${secondaryActivityLabel(step)} — ${step.label}`;
 
 function showActivityDetail(index) {
   const step = renderedActivity[index];
@@ -2711,7 +2977,7 @@ function showActivityDetail(index) {
   strong.textContent = primaryActivityLabel(step);
   const meta = document.createElement('span');
   const average = renderedActivityAverages[index]?.value || 0;
-  meta.textContent = `${fmt(step.ts)} · ${step.label} · ${secondaryActivityLabel(step)} · ${activityAverageText} : ${activityMetric === 'frp' ? powerLabel(average) : countLabel(Math.round(average))}`;
+  meta.textContent = `${fmt(step.ts)} — ${step.label} — ${secondaryActivityLabel(step)} — ${activityAverageText} : ${activityMetric === 'frp' ? powerLabel(average) : countLabel(Math.round(average))}`;
   activityDetail.replaceChildren(strong, meta);
 }
 
@@ -2719,8 +2985,8 @@ function drawLargeActivity(selected = null) {
   if (!activityPanel.classList.contains('open')) return;
   document.getElementById('activity-scope').textContent =
     activityEl.dataset.scope === 'local'
-      ? `Passages dans la zone visible · échelle adaptée au pic local · ligne jaune : ${activityAverageText}.`
-      : `Passages sur l'ensemble de la France · ligne jaune : ${activityAverageText}.`;
+      ? `Passages dans la zone visible — échelle adaptée au pic local — ligne jaune : ${activityAverageText}.`
+      : `Passages sur l'ensemble de la France — ligne jaune : ${activityAverageText}.`;
   document.getElementById('activity-title').textContent =
     activityMetric === 'frp' ? 'Puissance radiative détectée' : 'Nombre de foyers détectés';
   activityLarge.setAttribute('aria-label',
@@ -2792,7 +3058,7 @@ if (!MOBILE) {
     const step = renderedActivity[+bar.dataset.i];
     if (!step) return;
     activityTip.innerHTML = `<strong>${primaryActivityLabel(step)}</strong>`
-      + `<span>${fmt(step.ts)} · ${step.label}<br>${secondaryActivityLabel(step)}</span>`;
+      + `<span>${fmt(step.ts)} — ${step.label}<br>${secondaryActivityLabel(step)}</span>`;
     activityTip.classList.add('open');
     const r = activityTip.getBoundingClientRect();
     activityTip.style.left = `${Math.min(event.clientX + 12, innerWidth - r.width - 8)}px`;
@@ -2822,7 +3088,7 @@ activityLarge.addEventListener('click', event => {
 function formatUpdate(step) {
   if (step.kind === 'sat') return `${step.n.toLocaleString('fr-FR')} foyers détectés`;
   if (step.kind === 'effis') {
-    const area = step.ha ? ` · ${step.ha.toLocaleString('fr-FR', { maximumFractionDigits: 1 })} ha` : '';
+    const area = step.ha ? ` — ${step.ha.toLocaleString('fr-FR', { maximumFractionDigits: 1 })} ha` : '';
     return step.n ? `${step.n.toLocaleString('fr-FR')} périmètres récupérés${area}` : 'Périmètres de zones brûlées actualisés';
   }
   return 'Prévision de vent actualisée';
@@ -2874,7 +3140,7 @@ function exportDate(value) {
   return date.toLocaleString('fr-FR', {
     timeZone: 'Europe/Paris', day: 'numeric', month: 'long', year: 'numeric',
     hour: '2-digit', minute: '2-digit',
-  }).replace(' à ', ' · ');
+  }).replace(' à ', ', ');
 }
 
 function exportFilename(now, extension = 'png') {
@@ -3035,15 +3301,15 @@ function drawExportFooter(ctx, generatedAt, shownTime = curTs, media = 'Image') 
   ctx.textBaseline = 'alphabetic';
   ctx.font = '500 9.5px "Instrument Sans", sans-serif';
   ctx.fillStyle = 'rgba(232,230,227,.88)';
-  ctx.fillText('Foyers : NASA FIRMS · Périmètres : Copernicus EFFIS · Vent : Météo-France / Open-Meteo', 20, 509);
-  ctx.fillText('Fond : IGN et Sentinel-2 / EOX · Toponymes : OpenStreetMap / OpenFreeMap', 20, 525);
+  ctx.fillText('Foyers : NASA FIRMS — Périmètres : Copernicus EFFIS — Vent : Météo-France / Open-Meteo', 20, 509);
+  ctx.fillText('Fond : IGN et Sentinel-2 / EOX — Toponymes : OpenStreetMap / OpenFreeMap', 20, 525);
 
   const extracted = Z.manifest?.generated_at
     ? Date.parse(Z.manifest.generated_at) : (steps[lastObs]?.ts || 0) * 1000;
   const lines = [
-    `État affiché · ${exportDate(shownTime * 1000)}`,
-    `Données actualisées · ${exportDate(extracted)}`,
-    `${media} généré${media === 'Image' ? 'e' : ''} · ${exportDate(generatedAt)} (Paris)`,
+    `État affiché — ${exportDate(shownTime * 1000)}`,
+    `Données actualisées — ${exportDate(extracted)}`,
+    `${media} généré${media === 'Image' ? 'e' : ''} — ${exportDate(generatedAt)} (Paris)`,
   ];
   ctx.textAlign = 'right';
   ctx.fillStyle = 'rgba(232,230,227,.92)';
@@ -3203,10 +3469,11 @@ function setExportMapTime(exportMap, ts) {
   if (exportMap.getLayer('nrt-line'))
     exportMap.setPaintProperty('nrt-line', 'line-opacity', .55 * k);
 
-  // Ces deux couches n'ont pas d'historique propre. Les conserver figées au
-  // dessus d'une séquence passée ferait croire qu'elles appartiennent au cran.
-  if (exportMap.getLayer('major-halo'))
-    exportMap.setLayoutProperty('major-halo', 'visibility', 'none');
+  // Les statuts PSFDF n'ont pas d'historique propre. Les conserver figés au
+  // dessus d'une séquence passée ferait croire qu'ils appartiennent au cran.
+  for (const [id] of PSFDF_LAYERS)
+    if (exportMap.getLayer(id))
+      exportMap.setLayoutProperty(id, 'visibility', latest ? 'visible' : 'none');
   for (const layer of exportMap.getStyle().layers || [])
     if (layer.id.startsWith('aircraft-'))
       exportMap.setLayoutProperty(layer.id, 'visibility', 'none');
@@ -3378,7 +3645,7 @@ async function exportGifBlob({ includeWind = true, mode = 'instant' } = {}) {
       gif.writeFrame(index, GIF_W, GIF_H, {
         palette, delay: baseDelay + endPause, repeat: frame ? undefined : 0,
       });
-      exportMessage(`Création du GIF · ${frame + 1}/${frameCount}`);
+      exportMessage(`Création du GIF — ${frame + 1}/${frameCount}`);
       if (frame % 2) await new Promise(requestAnimationFrame);
     }
     gif.finish();
@@ -3577,8 +3844,6 @@ function show(ts) {
     ...rampAfter(AGE_OPACITY, APPEAR)];
   for (const id of ['hotspots-overview', 'hotspots'])
     if (map.getLayer(id)) map.setPaintProperty(id, 'circle-opacity', opacity);
-  updateMajorFires(now);
-
   const was = atLatest;
   atLatest = ts >= steps[lastObs].ts;
   // fondu des surfaces brûlées : le basculement ne se fait qu'au franchissement,
@@ -3586,6 +3851,7 @@ function show(ts) {
   if (was !== atLatest) {
     document.body.classList.toggle('past', !atLatest);
     applyBurnt();
+    applyPsfdf();
     aircraftSync();
   }
 
@@ -3717,7 +3983,8 @@ function closeAircraftPopup() {
 
 function nearestAircraftFire(center) {
   let best = null, distance = Infinity;
-  for (const fire of MAJOR.features) {
+  for (const fire of FIRE_CONTEXT.features) {
+    if (fire.properties.status === 'Éteint') continue;
     const d = distanceKm(center, fire.properties.center);
     if (d < distance) { best = fire; distance = d; }
   }
@@ -4038,7 +4305,7 @@ async function refreshAircraft() {
     aircraftLoop();
     const near = fresh.filter(feature => feature.properties.near_fire).length;
     aircraftStatusText(fresh.length
-      ? `${fresh.length} en vol${near ? ` · ${near} près d'un incendie` : ''}`
+      ? `${fresh.length} en vol${near ? `, dont ${near} près d'un incendie` : ''}`
       : 'Aucun appareil suivi actuellement en vol.');
   } catch (error) {
     if (error.name !== 'AbortError' && A.on)
@@ -4166,7 +4433,7 @@ function aircraftPopup(feature, lngLat) {
     [p.near_fire ? `à ${p.fire_distance} km de ${p.fire_name}` : '', ''],
   ];
   for (const values of rows) {
-    const text = values.filter(Boolean).join(' · ');
+    const text = values.filter(Boolean).join(' — ');
     if (!text) continue;
     root.append(document.createElement('br'), document.createTextNode(text));
   }
@@ -4181,8 +4448,8 @@ function aircraftPopup(feature, lngLat) {
       : null;
     age.textContent = (seconds === null ? 'âge du signal inconnu'
       : `signal ADS-B reçu il y a ${seconds} s`)
-      + ` · affichage différé de ${AIRCRAFT_DELAY_MS / 1000} s`
-      + ` · ICAO ${p.hex.toUpperCase()}`;
+      + ` — affichage différé de ${AIRCRAFT_DELAY_MS / 1000} s`
+      + ` — ICAO ${p.hex.toUpperCase()}`;
   };
   // Le compteur de l'âge du signal est rafraîchi par le gestionnaire de fiches.
   return openPopup(lngLat, root, 'aircraft-symbol', updateAge);
@@ -4250,18 +4517,101 @@ function addAircraftLayers() {
   hoverCursor('aircraft-symbol');
 }
 
-/*
- * Sur la vue nationale, les points d'une meme zone active restent difficiles
- * a distinguer du bruit de fond. On regroupe donc les detections des dernieres
- * 72 heures distantes de moins de 30 km. Un groupe devient important s'il
- * porte au moins 25 foyers pres d'un perimetre EFFIS mis a jour depuis moins
- * de 30 jours.
- * Le voisinage EFFIS ecarte les anomalies thermiques fixes et les groupes
- * etrangers presents dans le grand rectangle de collecte FIRMS.
- */
-const MAJOR_WINDOW = 72 * H, MAJOR_KM = 30, MAJOR_MIN = 25;
-const MAJOR = { overview: [], places: [], features: [], bucket: null };
+/* Les incendies éditorialisés par PSFDF remplacent la détection heuristique des
+ * « gros feux ». Leur statut est courant et non historique : les cercles sont
+ * donc masqués quand la frise quitte son dernier cran. */
+const PSFDF_COLORS = {
+  'Hors de contrôle': '#2f2933',
+  'En cours': '#e33b32',
+  'Fixé': '#f28c28',
+  'Maîtrisé': '#e6c229',
+  'Éteint': '#4a9f62',
+};
+// Ordre de peinture, du fond vers le premier plan. Des calques séparés sont
+// plus fiables qu'un `circle-sort-key` composite avec MapLibre 5 et rendent la
+// même priorité explicite pour les clics.
+const PSFDF_LAYERS = [
+  ['psfdf-extinguished', 'Éteint'],
+  ['psfdf-controlled', 'Maîtrisé'],
+  ['psfdf-fixed', 'Fixé'],
+  ['psfdf-active', 'En cours'],
+  ['psfdf-uncontrolled', 'Hors de contrôle'],
+];
+const PSFDF_LAYER_IDS = new Set(PSFDF_LAYERS.map(([id]) => id));
+const PSFDF_HIT_LAYERS = PSFDF_LAYERS.map(([id]) => id).reverse();
+const PSFDF_MAX_ZOOM = 9;
+const PSFDF_SHORTCUT_STATUSES = new Set(['Hors de contrôle', 'En cours']);
+// `overview` reste utilisé par le graphique FIRMS local et `features` par le
+// contexte des moyens aériens.
+const FIRE_CONTEXT = { overview: [], features: [] };
 const incidentsEl = document.getElementById('incidents');
+const psfdfPanel = document.getElementById('psfdf-panel');
+const psfdfPanelTitle = document.getElementById('psfdf-panel-title');
+const psfdfPanelSub = document.getElementById('psfdf-panel-sub');
+const psfdfPanelBody = document.getElementById('psfdf-panel-body');
+const psfdfHeadStatus = document.getElementById('psfdf-head-status');
+const psfdfRelative = document.getElementById('psfdf-relative');
+const psfdfPanelToggle = document.getElementById('psfdf-panel-toggle');
+let psfdfPanelFeatureId = null;
+
+function psfdfUpdatedTimestamp(value) {
+  const text = String(value || '').trim();
+  const french = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})[ T](\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+  if (french) {
+    const [, day, month, year, hour, minute, second = 0] = french;
+    return new Date(Number(year), Number(month) - 1, Number(day),
+      Number(hour), Number(minute), Number(second)).getTime();
+  }
+  const parsed = Date.parse(text);
+  return Number.isFinite(parsed) ? parsed : NaN;
+}
+
+function psfdfRelativeLabel(timestamp) {
+  const minutes = Math.max(0, Math.floor((Date.now() - timestamp) / 60000));
+  if (minutes < 1) return 'à l’instant';
+  if (minutes < 60) return `il y a ${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) {
+    const rest = minutes % 60;
+    return `il y a ${hours}h${rest ? String(rest).padStart(2, '0') : ''}`;
+  }
+  const days = Math.floor(hours / 24), rest = hours % 24;
+  return `il y a ${days}j${rest ? ` ${rest}h` : ''}`;
+}
+
+function refreshPsfdfRelative() {
+  const timestamp = Number(psfdfRelative.dataset.timestamp);
+  if (!Number.isFinite(timestamp)) return;
+  psfdfRelative.textContent = psfdfRelativeLabel(timestamp);
+}
+setInterval(refreshPsfdfRelative, 30000);
+
+function setPsfdfPanelOpen(open) {
+  psfdfPanel.classList.toggle('open', open);
+  psfdfPanelToggle.setAttribute('aria-expanded', open);
+  psfdfPanelToggle.setAttribute('aria-label',
+    open ? 'Masquer les détails du feu' : 'Afficher les détails du feu');
+}
+
+function setPsfdfPanelVisible(visible) {
+  if (!MOBILE) {
+    psfdfPanel.hidden = !visible;
+    return;
+  }
+  // Le panneau reste dans la mise en page pour permettre le fondu inverse.
+  // `visibility` et `inert` le retirent tout de même de la navigation tactile
+  // et clavier une fois l'animation terminée.
+  psfdfPanel.hidden = false;
+  document.body.classList.toggle('psfdf-focus', visible);
+  psfdfPanel.setAttribute('aria-hidden', visible ? 'false' : 'true');
+  incidentsEl.toggleAttribute('inert', visible);
+  incidentsEl.setAttribute('aria-hidden', visible ? 'true' : 'false');
+  if (!visible) setPsfdfPanelOpen(false);
+}
+psfdfPanelToggle.addEventListener('click', () => {
+  if (!MOBILE) return;
+  setPsfdfPanelOpen(!psfdfPanel.classList.contains('open'));
+});
 
 function distanceKm(a, b) {
   const lat = (a[1] + b[1]) / 2 * Math.PI / 180;
@@ -4270,52 +4620,23 @@ function distanceKm(a, b) {
   return Math.hypot(dx, dy);
 }
 
-function geometryCenter(geometry) {
-  const points = [];
-  const walk = value => {
-    if (!Array.isArray(value)) return;
-    if (typeof value[0] === 'number') points.push(value);
-    else for (const child of value) walk(child);
-  };
-  walk(geometry.coordinates);
-  if (!points.length) return null;
-  return [
-    points.reduce((sum, point) => sum + point[0], 0) / points.length,
-    points.reduce((sum, point) => sum + point[1], 0) / points.length,
-  ];
-}
-
-function fireContext(center) {
-  let best = null, maxArea = 0, area = 0;
-  for (const place of MAJOR.places) {
-    const distance = distanceKm(center, place.center);
-    if (distance <= 45) {
-      area += place.area;
-      if (place.area > maxArea) {
-        best = place.name;
-        maxArea = place.area;
-      }
-    }
-  }
-  return { name: best || '', area, maxArea };
-}
-
 function renderIncidentButtons(features) {
   incidentsEl.replaceChildren();
   for (const [index, feature] of features.entries()) {
-    const { center, n, name, area, maxArea } = feature.properties;
+    const { commune, departement, status, surface } = feature.properties;
     const button = document.createElement('button');
     button.type = 'button';
-    const metric = maxArea > 0
-      ? `${Math.round(maxArea).toLocaleString('fr-FR')} ha`
-      : `${n} foyers`;
-    button.textContent = `${name ? name + ' · ' : ''}${metric}`;
-    button.title = `${n} foyers détectés en 72 h`
-      + `${area ? `, ${Math.round(area).toLocaleString('fr-FR')} ha EFFIS à proximité` : ''}`
-      + ' — zoomer sur cette zone';
-    button.setAttribute('aria-label', `Zoomer sur ${name || 'un incendie important'}, ${metric}`);
+    const area = Number(surface);
+    const hasArea = surface !== null && surface !== '' && Number.isFinite(area);
+    const metric = hasArea ? `${nf(area, 1)} ha` : status;
+    const place = departement || commune || 'Incendie';
+    button.textContent = `${place} — ${metric}`;
+    button.style.setProperty('--incident-color', PSFDF_COLORS[status]);
+    button.title = `${commune ? `${commune} — ` : ''}${status}`
+      + `${hasArea ? ` — ${nf(area, 1)} ha` : ''} — zoomer sur cet incendie`;
+    button.setAttribute('aria-label', `Zoomer sur l’incendie de ${place}, ${metric}`);
     button.addEventListener('click', () => {
-      trackUsage('incident-shortcut', { place: name || 'unknown', rank: index + 1 });
+      trackUsage('incident-shortcut', { place, rank: index + 1, status });
       focusIncident(feature);
     });
     incidentsEl.appendChild(button);
@@ -4323,79 +4644,162 @@ function renderIncidentButtons(features) {
   incidentsEl.hidden = !features.length;
 }
 
-function updateMajorFires(now) {
-  const bucket = Math.floor(now / H);
-  if (bucket === MAJOR.bucket || !map.getSource('major-hs')) return;
-  MAJOR.bucket = bucket;
+function psfdfHasNumber(value) {
+  return value !== null && value !== '' && Number.isFinite(Number(value));
+}
 
-  const points = MAJOR.overview
-    .filter(feature => feature.properties.ts > now - MAJOR_WINDOW
-                    && feature.properties.ts <= now
-                    && shown.hotspots[feature.properties.source])
-    .map(feature => ({
-      center: feature.geometry.coordinates,
-      n: +feature.properties.n || 1,
-    }));
+function psfdfResources(p) {
+  const explicitPlanes = ['canadair', 'dash', 'airtractor']
+    .reduce((sum, key) => sum + (psfdfHasNumber(p[key]) ? Number(p[key]) : 0), 0);
+  const explicitHelicopters = ['hbe', 'hbel']
+    .reduce((sum, key) => sum + (psfdfHasNumber(p[key]) ? Number(p[key]) : 0), 0);
+  const planes = psfdfHasNumber(p.avions) ? Number(p.avions) : explicitPlanes;
+  const helicopters = psfdfHasNumber(p.helicopteres)
+    ? Number(p.helicopteres) : explicitHelicopters;
+  const parts = [];
+  if (planes) parts.push(`${nf(planes)} avion${planes > 1 ? 's' : ''}`);
+  if (helicopters) parts.push(`${nf(helicopters)} hélico${helicopters > 1 ? 's' : ''}`);
+  return parts.join(', ') || 'non renseigné';
+}
 
-  // Composantes connexes : un front qui occupe plusieurs cellules de 0,25°
-  // devient un seul signal, sans fusionner deux incendies éloignes.
-  const parent = points.map((_, index) => index);
-  const root = index => {
-    while (parent[index] !== index) {
-      parent[index] = parent[parent[index]];
-      index = parent[index];
+function psfdfStat(label, value) {
+  const box = document.createElement('div');
+  box.className = 'psfdf-stat';
+  const caption = document.createElement('small');
+  caption.textContent = label;
+  const number = document.createElement('b');
+  number.textContent = value;
+  box.append(caption, number);
+  return box;
+}
+
+function renderPsfdfDetail(feature) {
+  if (!feature) return;
+  const featureId = feature.properties.id || feature.properties.commune;
+  if (MOBILE && featureId !== psfdfPanelFeatureId) setPsfdfPanelOpen(false);
+  psfdfPanelFeatureId = featureId;
+  setPsfdfPanelVisible(true);
+  const p = feature.properties;
+  const accent = PSFDF_COLORS[p.status] || '#a8a29c';
+  const accentRgb = accent.match(/[\da-f]{2}/gi).map(part => parseInt(part, 16)).join(',');
+  psfdfPanel.style.setProperty('--psfdf-tint', `rgba(${accentRgb}, .14)`);
+  psfdfPanel.style.setProperty('--psfdf-border', `rgba(${accentRgb}, .48)`);
+  const place = p.commune || 'Incendie signalé';
+  const updatedTimestamp = psfdfHasNumber(p.updated_ts)
+    ? Number(p.updated_ts) * 1000 : psfdfUpdatedTimestamp(p.updated);
+  psfdfRelative.hidden = !Number.isFinite(updatedTimestamp);
+  if (Number.isFinite(updatedTimestamp)) {
+    psfdfRelative.dataset.timestamp = updatedTimestamp;
+    psfdfRelative.dateTime = new Date(updatedTimestamp).toISOString();
+    psfdfRelative.title = p.updated ? `Mis à jour le ${p.updated}` : '';
+    refreshPsfdfRelative();
+  } else {
+    delete psfdfRelative.dataset.timestamp;
+  }
+  psfdfPanelTitle.textContent = MOBILE && p.departement
+    ? `${place} (${p.departement})` : place;
+  psfdfPanelSub.textContent = p.departement
+    ? `${p.departement}, suivi actuel PSFDF` : 'Suivi actuel PSFDF';
+  psfdfHeadStatus.querySelector('i').style.background = accent;
+  psfdfHeadStatus.querySelector('span').textContent = p.status;
+
+  const content = document.createElement('div');
+  const status = document.createElement('div');
+  status.className = 'psfdf-detail-status';
+  const dot = document.createElement('i');
+  dot.style.background = accent;
+  status.append(dot, document.createTextNode(p.status));
+
+  const stats = document.createElement('div');
+  stats.className = 'psfdf-stats';
+  const area = psfdfHasNumber(p.surface) ? `${nf(Number(p.surface), 1)} ha` : 'non renseignée';
+  const personnel = psfdfHasNumber(p.personnel)
+    ? nf(Number(p.personnel)) : 'non renseigné';
+  stats.append(
+    psfdfStat('Surface', area),
+    psfdfStat('Personnel', personnel),
+    psfdfStat('Moyens aériens', psfdfResources(p)),
+    psfdfStat('Département', p.departement || 'Non renseigné'),
+  );
+  content.append(status, stats);
+
+  if (p.other_info) {
+    const note = document.createElement('p');
+    note.className = 'psfdf-note';
+    note.textContent = p.other_info;
+    content.append(note);
+  }
+  const dates = document.createElement('p');
+  dates.className = 'psfdf-dates';
+  dates.textContent = [p.reported ? `Signalé le ${p.reported}` : '',
+                       p.updated ? `Mis à jour le ${p.updated}` : '']
+    .filter(Boolean).join('. ');
+  if (dates.textContent) content.append(dates);
+
+  const link = document.createElement('a');
+  link.className = 'psfdf-more';
+  link.href = `https://association-psfdf.fr/pages/incendie-details.html?id=${encodeURIComponent(p.id)}`;
+  link.target = '_blank';
+  link.rel = 'noopener';
+  link.append(document.createTextNode('Plus d’information'));
+  const source = document.createElement('small');
+  source.textContent = 'Association PSFDF';
+  link.append(source);
+  const externalIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  externalIcon.setAttribute('viewBox', '0 0 24 24');
+  externalIcon.setAttribute('aria-hidden', 'true');
+  const externalPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  externalPath.setAttribute('d', 'M7 17 17 7M7 7h10v10');
+  externalIcon.append(externalPath);
+  link.append(externalIcon);
+  link.addEventListener('click', () => trackUsage('psfdf-more', {
+    place: p.commune || 'unknown', id: p.id || 'unknown',
+  }));
+  content.append(link);
+  psfdfPanelBody.replaceChildren(content);
+}
+
+function psfdfFeatureNearCenter() {
+  const center = map.getCenter();
+  let nearest = null, distance = Infinity;
+  for (const feature of FIRE_CONTEXT.features) {
+    const current = distanceKm([center.lng, center.lat], feature.properties.center);
+    if (current < distance) { nearest = feature; distance = current; }
+  }
+  const limit = Math.max(8, 45 / 2 ** (map.getZoom() - 7));
+  return nearest && distance <= limit ? nearest : null;
+}
+
+function updatePsfdfPanel() {
+  if (!shown.psfdf || !atLatest || !FIRE_CONTEXT.features.length
+      || map.getZoom() < 7) {
+    setPsfdfPanelVisible(false);
+    return;
+  }
+  const nearest = psfdfFeatureNearCenter();
+  if (nearest) renderPsfdfDetail(nearest);
+  else setPsfdfPanelVisible(false);
+}
+
+let psfdfZoomFrame = 0;
+function updatePsfdfPanelDuringZoom() {
+  if (!MOBILE || psfdfZoomFrame) return;
+  psfdfZoomFrame = requestAnimationFrame(() => {
+    psfdfZoomFrame = 0;
+    if (!shown.psfdf || !atLatest || !FIRE_CONTEXT.features.length
+        || map.getZoom() < 7) {
+      setPsfdfPanelVisible(false);
+      return;
     }
-    return index;
-  };
-  const join = (a, b) => {
-    a = root(a); b = root(b);
-    if (a !== b) parent[b] = a;
-  };
-  // Index spatial sommaire : chaque point n'est compare qu'aux cellules
-  // voisines, pas a toute la France. Une cellule de 0,5° est plus large que
-  // les 30 km du regroupement sous nos latitudes.
-  const bins = new Map(), cell = .5;
-  for (let i = 0; i < points.length; i++) {
-    const [lon, lat] = points[i].center;
-    const bx = Math.floor(lon / cell), by = Math.floor(lat / cell);
-    for (let x = bx - 1; x <= bx + 1; x++)
-      for (let y = by - 1; y <= by + 1; y++)
-        for (const j of bins.get(`${x}/${y}`) || [])
-          if (distanceKm(points[i].center, points[j].center) <= MAJOR_KM) join(i, j);
-    const key = `${bx}/${by}`;
-    if (!bins.has(key)) bins.set(key, []);
-    bins.get(key).push(i);
-  }
-
-  const groups = new Map();
-  for (let i = 0; i < points.length; i++) {
-    const key = root(i);
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key).push(points[i]);
-  }
-
-  const features = [...groups.values()].map(group => {
-    const n = group.reduce((sum, point) => sum + point.n, 0);
-    const center = [
-      group.reduce((sum, point) => sum + point.center[0] * point.n, 0) / n,
-      group.reduce((sum, point) => sum + point.center[1] * point.n, 0) / n,
-    ];
-    const { name, area, maxArea } = fireContext(center);
-    const confirmed = name && n >= MAJOR_MIN;
-    return {
-      type: 'Feature',
-      geometry: { type: 'Point', coordinates: center },
-      properties: {
-        center, n, name, area, maxArea, major: !!confirmed,
-        score: Math.max(n, maxArea ? MAJOR_MIN + Math.sqrt(maxArea) : 0),
-      },
-    };
-  }).filter(feature => feature.properties.major)
-    .sort((a, b) => b.properties.score - a.properties.score);
-
-  MAJOR.features = features;
-  map.getSource('major-hs').setData({ type: 'FeatureCollection', features });
-  renderIncidentButtons(features);
+    const nearest = psfdfFeatureNearCenter();
+    if (!nearest) {
+      setPsfdfPanelVisible(false);
+      return;
+    }
+    const featureId = nearest.properties.id || nearest.properties.commune;
+    if (featureId !== psfdfPanelFeatureId) renderPsfdfDetail(nearest);
+    else setPsfdfPanelVisible(true);
+  });
 }
 
 /* Cellules detaillees. Le cache applicatif reste borne ; le cache HTTP garde
@@ -4405,11 +4809,12 @@ const Z = {
   hotspots: [], token: 0, disabled: false,
 };
 
-function focusIncident(feature, duration = 850) {
+function focusIncident(feature, duration = 850, targetZoom = 8.5) {
   stopPlay();
+  if (steps.length) setTime(steps[lastObs].ts);
   map.easeTo({
     center: feature.properties.center,
-    zoom: Math.max(map.getZoom(), 8.5),
+    zoom: Math.max(map.getZoom(), targetZoom),
     duration,
   });
 }
@@ -4686,7 +5091,7 @@ function windPhrase(lon, lat) {
   // Même formulation que la légende, pour qu'on retrouve la lecture du centre.
   // « de » s'élide devant est et ouest : « vent d'ouest », pas « de ouest ».
   const de = /^[aeiou]/.test(from) ? `d'${from}` : `de ${from}`;
-  return `Vent ${de} · ${Math.round(kmh)} km/h (raf. ${Math.round(out.g)} km/h)`;
+  return `Vent ${de}, ${Math.round(kmh)} km/h (raf. ${Math.round(out.g)} km/h)`;
 }
 
 /* Deuxième étage de toutes les fiches : l'air à cet endroit, au cran affiché.
@@ -4700,7 +5105,7 @@ function weatherBlock(root, lngLat, { divider = true, stamp = false } = {}) {
   const wind = windPhrase(lngLat.lng, lngLat.lat);
   block.append(popEl('div', 'wind',
     wind || 'Modèle de vent non couvert à cet endroit.'));
-  if (stamp) block.append(popEl('div', 'row dim', `AROME · au ${fmt(curTs)}`));
+  if (stamp) block.append(popEl('div', 'row dim', `AROME, au ${fmt(curTs)}`));
 
   const button = popEl('button', '', 'Prévisions météo');
   button.addEventListener('click', () => {
@@ -4727,7 +5132,7 @@ function confidenceText(value) {
 function hotspotPopup(feature, lngLat) {
   const p = feature.properties;
   const ts = Number(p.ts);
-  const root = popRoot('Foyer détecté', `${p.source} · ${fmt(ts)}`);
+  const root = popRoot('Foyer détecté', `${p.source} — ${fmt(ts)}`);
   popRow(root, ago(shownTs() - ts));
   const frp = Number(p.frp);
   if (Number.isFinite(frp)) {
@@ -4744,7 +5149,7 @@ function overviewPopup(feature, lngLat) {
   const ts = Number(p.ts);
   const count = Number(p.n) || 0;
   const root = popRoot(`${nf(count)} foyer${count > 1 ? 's' : ''} en une heure`,
-                       `${p.source} · ${fmt(ts)}`);
+                       `${p.source} — ${fmt(ts)}`);
   const frp = Number(p.frp);
   if (Number.isFinite(frp)) {
     const big = popEl('div', 'big', `${nf(frp, 1)} `);
@@ -4793,14 +5198,14 @@ function burntPopup(feature, lngLat) {
   const place = p.COMMUNE || p.PROVINCE || 'Périmètre brûlé';
   const ts = Number(p.ts);
   const root = popRoot(place, [p.COMMUNE ? p.PROVINCE : '', 'périmètre EFFIS']
-    .filter(Boolean).join(' · '));
+    .filter(Boolean).join(' — '));
   const area = Number(p.AREA_HA);
   if (Number.isFinite(area)) {
     const big = popEl('div', 'big', `${nf(area)} `);
     big.append(popEl('span', 'unit', 'ha'));
     root.append(big);
   }
-  if (ts) popRow(root, `Départ le ${fmt(ts)} · ${ago(shownTs() - ts)}`);
+  if (ts) popRow(root, `Départ le ${fmt(ts)} — ${ago(shownTs() - ts)}`);
   const cover = coverBlock(p);
   if (cover) root.append(cover);
   const na2k = Number(p.PERCNA2K);
@@ -4832,9 +5237,11 @@ function weatherPopup(lngLat) {
   return popup;
 }
 
-// Priorité de lecture : ce qui vole, puis ce qui brûle, puis le sol.
-const POP_LAYERS = ['aircraft-symbol', 'hotspots', 'hotspots-overview',
-                    'recent-fill', 'burnt-fill', 'nrt-fill'];
+// Un appareil peut être exactement superposé au point éditorial d'un feu :
+// dans ce cas, le clic vise d'abord la fiche PSFDF. Ailleurs, les appareils
+// gardent leur fiche propre avant les observations satellitaires et le sol.
+const POP_LAYERS = [...PSFDF_HIT_LAYERS, 'aircraft-symbol', 'hotspots',
+                    'hotspots-overview', 'recent-fill', 'burnt-fill', 'nrt-fill'];
 
 function popTarget(event) {
   const layers = POP_LAYERS.filter(id => map.getLayer(id));
@@ -4856,7 +5263,8 @@ function popTarget(event) {
     return !Number.isFinite(ts) || (ts <= now && now - ts <= MAX_AGE);
   };
   for (const id of layers) {
-    const isPoint = id === 'aircraft-symbol' || id.startsWith('hotspots');
+    const isPoint = id === 'aircraft-symbol' || PSFDF_LAYER_IDS.has(id)
+      || id.startsWith('hotspots');
     // Même chose pour les surfaces brûlées : au passé, `applyBurnt()` les rend
     // transparentes sans les masquer.
     if (!isPoint && !atLatest) continue;
@@ -4877,6 +5285,11 @@ function mapClick(event) {
   }
   trackUsage('popup-feature', { layer: hit.id });
   if (hit.id === 'aircraft-symbol') return aircraftPopup(hit.feature, event.lngLat);
+  if (PSFDF_LAYER_IDS.has(hit.id)) {
+    closePopup();
+    renderPsfdfDetail(hit.feature);
+    return;
+  }
   const content = hit.id === 'hotspots' ? hotspotPopup(hit.feature, event.lngLat)
     : hit.id === 'hotspots-overview' ? overviewPopup(hit.feature, event.lngLat)
     : hit.id === 'nrt-fill' ? nrtPopup(event.lngLat)
@@ -4889,11 +5302,11 @@ const dataP = Promise.all([
   json('data/manifest.json'),
   json('data/overview_hotspots.geojson'),
   json('data/burnt_recent.geojson'),
-  json('data/burnt_major.geojson'),
+  json('data/psfdf_fires.geojson').catch(() => EMPTY),
   json('data/timeline.json'),
   json('data/wind_coarse.json?v=2'),
-]).then(([manifest, overview, recent, major, timeline, wind]) => ({
-  manifest, overview, recent, major, timeline, wind, detail: null,
+]).then(([manifest, overview, recent, psfdf, timeline, wind]) => ({
+  manifest, overview, recent, psfdf, timeline, wind, detail: null,
 })).catch(async () => {
   // Le clone conserve les anciens exemples Gironde : il reste affichable avant
   // le premier `python3 fetch_fires.py`, sans simuler le chargement national.
@@ -4907,7 +5320,7 @@ const dataP = Promise.all([
       bbox: meta.bbox, generated_at: meta.generated_at, detail_zoom: 99,
       zones: [], zone_template: '', legacy: true,
     },
-    overview: EMPTY, recent: EMPTY, major: dated,
+    overview: EMPTY, recent: EMPTY, psfdf: EMPTY,
     timeline: buildSteps(hotspots, dated),
     wind, detail: { nrt, dated, hotspots },
   };
@@ -4946,14 +5359,14 @@ poll = setInterval(start, 80);
 
 async function init() {
   const data = await dataP;
-  const { manifest, overview, recent, major, timeline, wind: windData, detail } = data;
+  const { manifest, overview, recent, psfdf, timeline, wind: windData, detail } = data;
   Z.manifest = manifest;
   Z.available = new Set(manifest.zones);
   Z.disabled = !!manifest.legacy;
 
   map.addSource('recent', { type: 'geojson', data: recent });
   map.addSource('overview-hs', { type: 'geojson', data: overview });
-  map.addSource('major-hs', { type: 'geojson', data: EMPTY });
+  map.addSource('psfdf', { type: 'geojson', data: psfdf });
   map.addSource('nrt', { type: 'geojson', data: detail ? detail.nrt : EMPTY });
   map.addSource('dated', { type: 'geojson', data: detail ? detail.dated : EMPTY });
   map.addSource('hs', { type: 'geojson', data: detail ? detail.hotspots : EMPTY });
@@ -4989,19 +5402,6 @@ async function init() {
     paint: { 'line-color': V('--nrt-edge'), 'line-width': 1,
              'line-opacity': .55, 'line-opacity-transition': FADE } });
 
-  // Lecture nationale : halo franc autour des seules concentrations majeures.
-  // Le remplissage diffus localise la zone, le trait reste visible sur les
-  // orthophotos claires comme sombres.
-  map.addLayer({ id: 'major-halo', type: 'circle', source: 'major-hs',
-    maxzoom: manifest.detail_zoom,
-    paint: {
-      'circle-radius': ['interpolate', ['linear'], ['get', 'score'],
-        MAJOR_MIN, 15, 50, 20, 100, 28, 250, 38],
-      'circle-color': V('--hot'), 'circle-opacity': .16,
-      'circle-stroke-color': V('--front'), 'circle-stroke-width': 2.2,
-      'circle-stroke-opacity': .95, 'circle-blur': .12,
-    } });
-
   // Foyers : sort-key sur la date pour que les plus récents passent au-dessus.
   // Transitions à zéro, contrairement aux polygones : la douceur vient déjà de
   // l'expression d'âge, que `show()` réécrit à chaque frame — une transition
@@ -5019,6 +5419,40 @@ async function init() {
     paint: { 'circle-color': V('--front'), 'circle-radius': 4, 'circle-stroke-width': 0,
              'circle-color-transition': NOW, 'circle-radius-transition': NOW,
              'circle-opacity-transition': NOW } });
+  // Une aire devient un rayon par racine carrée. Cette échelle visuelle garde
+  // un feu sans surface renseignée cliquable, sans faire passer 1 000 ha pour
+  // cent fois le diamètre de 10 ha.
+  const psfdfSizeRadius = scale => ['*', scale,
+    ['interpolate', ['linear'],
+      ['sqrt', ['max', 0, ['coalesce', ['get', 'surface'], 0]]],
+      0, 8, 10, 11, 31.63, 16, 100, 26,
+    ],
+  ];
+  for (const [id, status] of PSFDF_LAYERS) map.addLayer({
+    id, type: 'circle', source: 'psfdf', maxzoom: PSFDF_MAX_ZOOM,
+    filter: ['==', ['get', 'status'], status],
+    paint: {
+      // La taille visuelle suit la surface PSFDF. Lorsqu'un rapprochement EFFIS
+      // existe, son rayon kilométrique peut l'agrandir mais jamais le réduire.
+      // Une expression composite MapLibre doit garder `zoom` au niveau
+      // supérieur ; l'enfouir dans `max` rendait tous les disques invisibles.
+      'circle-radius': ['interpolate', ['exponential', 2], ['zoom'],
+        4, ['max', psfdfSizeRadius(1),
+                    ['*', ['coalesce', ['get', 'effis_radius_km'], 0], .30]],
+        7, ['max', psfdfSizeRadius(1.3),
+                    ['*', ['coalesce', ['get', 'effis_radius_km'], 0], 2.4]],
+        10, ['max', psfdfSizeRadius(1.7),
+                     ['*', ['coalesce', ['get', 'effis_radius_km'], 0], 19.2]],
+        13, ['max', psfdfSizeRadius(2.2),
+                     ['*', ['coalesce', ['get', 'effis_radius_km'], 0], 153.6]],
+      ],
+      'circle-color': PSFDF_COLORS[status],
+      'circle-opacity': .20,
+      'circle-stroke-color': PSFDF_COLORS[status],
+      'circle-stroke-width': 2.5,
+      'circle-stroke-opacity': .98,
+      'circle-blur': .04,
+    } });
   // Les appareils restent au-dessus des foyers et des surfaces : à basse
   // altitude, plusieurs peuvent se superposer exactement au front actif.
   addAircraftLayers();
@@ -5064,15 +5498,28 @@ async function init() {
     activityMetric = 'count';
     activityMetricInputs.find(input => input.value === 'count').checked = true;
   }
-  MAJOR.overview = overview.features;
+  FIRE_CONTEXT.overview = overview.features;
   S.overview = overview.features.length ? overview.features
     : (detail ? detail.hotspots.features : []);
   S.sources = S.overview;
-  MAJOR.places = major.features.map(feature => ({
-    center: geometryCenter(feature.geometry),
-    name: feature.properties.PROVINCE || feature.properties.COMMUNE || '',
-    area: +feature.properties.AREA_HA || 0,
-  })).filter(place => place.center && place.name);
+  FIRE_CONTEXT.features = psfdf.features.map(feature => {
+    feature.properties.center = feature.geometry.coordinates;
+    feature.properties.name = feature.properties.commune
+      || feature.properties.departement || 'un incendie signalé';
+    return feature;
+  });
+  const shortcuts = FIRE_CONTEXT.features
+    .filter(feature => PSFDF_SHORTCUT_STATUSES.has(feature.properties.status))
+    .sort((a, b) => {
+      const left = a.properties.surface, right = b.properties.surface;
+      const leftArea = left !== null && left !== '' && Number.isFinite(Number(left))
+        ? Number(left) : -1;
+      const rightArea = right !== null && right !== '' && Number.isFinite(Number(right))
+        ? Number(right) : -1;
+      return rightArea - leftArea;
+    });
+  renderIncidentButtons(shortcuts);
+  updatePsfdfPanel();
   addForecast(W.data);
   // Le pas d'une seconde garde atteignables les publications EFFIS, dont
   // LASTUPDATE n'est pas nécessairement aligné sur une minute.
@@ -5093,15 +5540,20 @@ async function init() {
   }
 
   if (!HAS_MAP_HASH) {
-    if (MAJOR.features.length) focusIncident(MAJOR.features[0]);
+    // Le premier cadrage privilégie la lecture du feu principal, tout en
+    // restant sous le zoom 9 où ses disques PSFDF s'effacent.
+    if (shortcuts.length) focusIncident(shortcuts[0], 850, 8.8);
     else fitFrance(0);
   }
 
   // Un seul aiguillage pour tous les clics : voir la section « FICHES AU CLIC ».
   // Le fond de carte est cliquable lui aussi, il répond par la météo du point.
   map.on('click', mapClick);
-  for (const id of ['recent-fill', 'burnt-fill', 'nrt-fill', 'hotspots',
-                    'hotspots-overview']) hoverCursor(id);
+  map.on('zoom', updatePsfdfPanelDuringZoom);
+  map.on('moveend', updatePsfdfPanel);
+  map.on('resize', updatePsfdfPanel);
+  for (const id of ['recent-fill', 'burnt-fill', 'nrt-fill', ...PSFDF_HIT_LAYERS,
+                    'hotspots', 'hotspots-overview']) hoverCursor(id);
 
   // le conteneur peut avoir été mesuré à zéro avant la mise en page
   map.resize();
@@ -5147,6 +5599,9 @@ document.getElementById('ck-dated').addEventListener('change', e => {
 });
 document.getElementById('ck-nrt').addEventListener('change', e => {
   shown.nrt = e.target.checked; applyBurnt();
+});
+document.getElementById('ck-psfdf').addEventListener('change', e => {
+  shown.psfdf = e.target.checked; applyPsfdf();
 });
 const hotspotsCheck = document.getElementById('ck-hotspots');
 const sourceChecks = [...document.querySelectorAll('.ck-source')];

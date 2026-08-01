@@ -195,6 +195,7 @@ jobs:
           manifest = json.load(open('data/manifest.json'))
           timeline = json.load(open('data/timeline.json'))
           overview = json.load(open('data/overview_hotspots.geojson'))
+          psfdf = json.load(open('data/psfdf_fires.geojson'))
           weather = json.load(open('data/weather_forecast.json'))
           zone_paths = list(pathlib.Path('data/zones').glob('*.json'))
           expected = {f"{zone_id}.json" for zone_id in manifest['zones']}
@@ -203,6 +204,11 @@ jobs:
                 f"polygones datés, {len(zone_paths)} zones")
           if not manifest['hotspot_count'] or not timeline or actual != expected:
               sys.exit("export national incomplet, déploiement annulé")
+          allowed = {'Hors de contrôle', 'En cours', 'Fixé', 'Maîtrisé', 'Éteint'}
+          if (psfdf.get('type') != 'FeatureCollection'
+                  or any(feature.get('properties', {}).get('status') not in allowed
+                         for feature in psfdf.get('features', []))):
+              sys.exit("export PSFDF invalide")
           passages = [step for step in timeline if step['kind'] == 'sat']
           if (not passages
               or any(not isinstance(step.get('frp'), (int, float)) for step in passages)
@@ -250,7 +256,8 @@ jobs:
              apple-touch-icon.png icon-192.png icon-512.png \
              site.webmanifest robots.txt sitemap.xml _site/
           cp data/manifest.json data/overview_hotspots.geojson \
-             data/burnt_recent.geojson data/burnt_major.geojson \
+             data/burnt_recent.geojson \
+             data/psfdf_fires.geojson \
              data/timeline.json \
              data/wind_coarse.json data/weather_forecast.json _site/data/
           # Repris du site publié, pas produit ici : absent avant la première

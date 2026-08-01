@@ -15,6 +15,7 @@ fond satellite :
 |---|---|---|
 | **Terre brûlée** | polygones Copernicus EFFIS | aplat sombre |
 | **Foyers** | détections FIRMS des 10 derniers jours | échelle continue, du jaune clair au brun sombre |
+| **Incendies signalés** | suivi de l'association PSFDF | cercle coloré selon le statut courant |
 | **Fumée simulée** | foyers FIRMS récents + vent AROME HD | panaches diffus qui suivent le champ de vent |
 | **Vent à 10 m** | modèle AROME HD via Open-Meteo | nappe de particules blanches |
 | **Moyens aériens** | positions ADS-B Airplanes.live | appareils suivis, cap et fiche de vol |
@@ -54,18 +55,27 @@ symboles distincts.
 Le bouton `i` à droite de la frise ouvre le journal des 40 dernières mises à
 jour : heure, source et volume de données reçu.
 
-Sur la vue nationale, les détections des dernières 72 heures sont regroupées
-spatialement. Un groupe reçoit un halo et un raccourci lorsqu'il compte au
-moins 25 foyers près d'un périmètre EFFIS mis à jour dans les 30 derniers
-jours. Le voisinage EFFIS
-écarte notamment les anomalies thermiques industrielles et les groupes
-étrangers inclus dans le rectangle de collecte FIRMS. Il s'agit de seuils
-fixes, pas d'un classement limité à trois incendies. Cliquer sur un raccourci
-charge directement sa zone détaillée. Son libellé donne le département et, en
-priorité, la superficie du plus grand périmètre EFFIS voisin ; le nombre de
-foyers sert de repli si cette superficie manque. La position et le zoom sont
-conservés dans le fragment `#map=` de l'URL, qui peut donc être copié pour
-partager exactement la vue courante.
+Les cercles de statut viennent du suivi de l'association PSFDF : hors de
+contrôle, en cours, fixé, maîtrisé ou éteint. Ces données décrivent l'état
+courant et disparaissent donc lorsque la frise montre le passé. Leur rayon
+visuel suit la racine carrée de la surface déclarée, donc leur aire reste
+proportionnelle à la taille du feu. Les disques disparaissent à partir du zoom
+9 pour dégager les foyers satellitaires et les périmètres détaillés.
+Lorsqu'un périmètre EFFIS récent est détecté à proximité du point déclaré, le
+disque est recentré et agrandi pour englober cette emprise ; sans correspondance,
+il reste aux coordonnées publiées par l'association. Les raccourcis du haut
+affichent le département et ne retiennent que les incendies hors de contrôle ou en cours, classés
+par surface décroissante. Cliquer sur un raccourci ramène au dernier cran puis
+zoome sur l'incendie. Sur ordinateur, le panneau latéral reste masqué à
+l'échelle nationale ; à partir du zoom 7, il affiche la fiche du feu le
+plus proche du centre avec sa surface, les moyens engagés et un lien vers la
+fiche de l'association. Sur téléphone, à partir du zoom 7, cette fiche prend la
+forme d'un bandeau replié qui remplace en fondu les raccourcis et que l'on
+touche pour afficher les détails. En dézoomant, les raccourcis réapparaissent
+avec la même transition. La
+position et le zoom sont conservés dans le fragment
+`#map=` de l'URL, qui peut donc être copié pour partager exactement la vue
+courante.
 
 ## Démarrage
 
@@ -74,7 +84,7 @@ python3 fetch_fires.py
 ```
 
 Écrit un aperçu national léger (`manifest.json`, foyers agrégés, EFFIS récent,
-contexte EFFIS à 30 jours pour les grands feux, frise et vent grossier), puis
+incendies suivis par PSFDF, frise et vent grossier), puis
 environ 176 paquets dans `data/zones/`.
 Bibliothèque standard uniquement, aucune clé d'API.
 
@@ -209,8 +219,7 @@ jours de la frise.
 - foyers FIRMS regroupés par cellule de 0,25°, heure et satellite, avec leur
   nombre et leur FRP totale ;
 - périmètres EFFIS français mis à jour dans les sept derniers jours ;
-- périmètres EFFIS des trente derniers jours, utilisés seulement pour confirmer
-  les grands feux ;
+- incendies non archivés suivis par l'association PSFDF ;
 - vent national 15 × 15 ;
 - grille de température à 20 km sur ±12 h, pour la légende et le volet météo ;
 - manifest et frise nationale.
@@ -229,7 +238,7 @@ affiché : la nappe ne présente ni trou ni bord carré.
 
 ## Comment ça marche
 
-**Récupération** (`fetch_fires.py`) — trois sources, trois protocoles :
+**Récupération** (`fetch_fires.py`) — quatre sources publiques :
 
 - NASA FIRMS expose des flux CSV régionaux publics (24 h / 48 h / 7 j) qui ne
   demandent pas de clé. Le script en télécharge quatre en parallèle, avec une
@@ -240,6 +249,11 @@ affiché : la nappe ne présente ni trou ni bord carré.
   datés de la saison (`modis.ba.poly.season`) et le produit NRT
   (`effis.nrt.ba.poly`), et ajoute deux epochs (`ts`, `lu`) exploitables
   directement par le curseur.
+- L'association PSFDF expose à sa carte un endpoint JSON public. Le collecteur
+  en extrait les incendies non archivés, normalise les cinq statuts affichés et
+  rapproche chaque point des périmètres EFFIS récents voisins. L'heure de mise
+  à jour est convertie depuis le fuseau de Paris pour alimenter l'âge relatif
+  de la fiche sans dépendre du fuseau du visiteur.
 - Open-Meteo sert le modèle **AROME HD** de Météo-France en JSON, sans clé. Le
   script demande 225 points pour le champ national de vent, environ 2 570 pour
   les grilles fines à 20 km des cellules actives, et environ 4 290 pour la
@@ -319,8 +333,8 @@ Le site est publié par GitHub Pages avec trois workflows :
 
 - [`update-fire-deploy.yml`](.github/workflows/update-fire-deploy.yml) exécute
   `fetch_fires.py` toutes les 30 minutes (et lors d'une modification du
-  collecteur) : foyers, périmètres, vent national et vent fin des cellules
-  actives ;
+  collecteur) : foyers, périmètres, statuts PSFDF, vent national et vent fin
+  des cellules actives ;
 - [`update-weather-deploy.yml`](.github/workflows/update-weather-deploy.yml)
   exécute `fetch_fires.py --thermal` toutes les 6 heures et ne produit que
   `data/thermal.json`, la grille de température à 20 km ;

@@ -29,10 +29,12 @@ import os
 import shutil
 import sys
 import time
+import unicodedata
 import urllib.error
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "data")
@@ -46,10 +48,7 @@ DETAIL_ZOOM = 7
 OVERVIEW_DEG = 0.25
 OVERVIEW_H = 1
 # Les contours affiches dans l'apercu national restent bornes a sept jours.
-# Pour confirmer un incendie important, leur contexte reste utile trente jours :
-# l'activite FIRMS des 72 dernieres heures garantit que le feu est encore suivi.
 RECENT_DAYS = 7
-MAJOR_EFFIS_DAYS = 30
 HOTSPOT_DAYS = 10
 
 FIRMS_BASE = "https://firms.modaps.eosdis.nasa.gov/data/active_fire"
@@ -61,6 +60,22 @@ FIRMS_FEEDS = [
 ]
 
 EFFIS_WFS = "https://maps.effis.emergency.copernicus.eu/effis"
+
+PSFDF_API = "https://test1.evan-rngt83060.workers.dev/"
+PSFDF_TIMEOUT = 30
+# Le point PSFDF vise souvent la commune plutôt que le front. Un périmètre
+# EFFIS récent situé dans cette couronne est considéré comme le même feu ; les
+# morceaux distants de moins de trois kilomètres sont ensuite regroupés.
+PSFDF_EFFIS_MATCH_KM = 15
+PSFDF_EFFIS_CLUSTER_GAP_KM = 3
+PSFDF_STATUSES = {
+    "hors de controle": "Hors de contrôle",
+    "en cours": "En cours",
+    "fixe": "Fixé",
+    "maitrise": "Maîtrisé",
+    "eteint": "Éteint",
+}
+PARIS_TZ = ZoneInfo("Europe/Paris")
 
 OPEN_METEO = "https://api.open-meteo.com/v1/forecast"
 WIND_MODEL = "meteofrance_arome_france_hd"
@@ -127,6 +142,95 @@ def write_json(path, data, compact=True):
 
 def fc(features):
     return {"type": "FeatureCollection", "features": features}
+
+
+# ---------------------------------------------------------------------------
+# PSFDF — incendies suivis par l'association
+# ---------------------------------------------------------------------------
+
+def psfdf_status(value):
+    """Ramène les variantes accentuées ou non aux cinq statuts affichés."""
+    text = unicodedata.normalize("NFD", str(value or "").strip().lower())
+    key = "".join(char for char in text if unicodedata.category(char) != "Mn")
+    return PSFDF_STATUSES.get(key)
+
+
+def psfdf_number(value):
+    text = str(value or "").strip().replace("\u00a0", "").replace(" ", "")
+    if not text:
+        return None
+    try:
+        number = float(text.replace(",", "."))
+    except ValueError:
+        return None
+    return number if math.isfinite(number) else None
+
+
+def psfdf_timestamp(value):
+    """Convertit l'heure locale PSFDF en epoch pour un affichage relatif fiable."""
+    text = str(value or "").strip()
+    if not text:
+        return None
+    for pattern in ("%d/%m/%Y %H:%M:%S", "%d/%m/%Y %H:%M"):
+        try:
+            parsed = datetime.strptime(text, pattern).replace(tzinfo=PARIS_TZ)
+            return int(parsed.timestamp())
+        except ValueError:
+            pass
+    return None
+
+
+def fetch_psfdf(bbox):
+    """Extrait le petit état courant utile du volumineux historique PSFDF."""
+    west, south, east, north = bbox
+    payload = json.loads(get(PSFDF_API, timeout=PSFDF_TIMEOUT))
+    if not isinstance(payload, list):
+        raise ValueError("la réponse PSFDF n'est pas un tableau")
+
+    features = []
+    for row in payload:
+        if not isinstance(row, dict):
+            continue
+        status = psfdf_status(row.get("Statut"))
+        if not status:
+            continue
+        lon = psfdf_number(row.get("Longitude"))
+        lat = psfdf_number(row.get("Latitude"))
+        if (lon is None or lat is None
+                or not (west <= lon <= east and south <= lat <= north)):
+            continue
+        features.append({
+            "type": "Feature",
+            "geometry": {"type": "Point", "coordinates": [lon, lat]},
+            "properties": {
+                "id": str(row.get("ID") or row.get("rowNumber") or ""),
+                "status": status,
+                "commune": str(row.get("Commune") or "").strip(),
+                "departement": str(row.get("Département") or "").strip(),
+                "reported": str(row.get("Date_signalement") or "").strip(),
+                "updated": str(row.get("Date_MAJ") or "").strip(),
+                "updated_ts": psfdf_timestamp(row.get("Date_MAJ")),
+                "surface": psfdf_number(row.get("Surface")),
+                "surface_type": str(row.get("Surface_Type") or "").strip(),
+                "personnel": psfdf_number(row.get("Personnel")),
+                "helicopteres": psfdf_number(row.get("Hélicoptère")),
+                "avions": psfdf_number(row.get("Avion")),
+                "canadair": psfdf_number(row.get("Canadair")),
+                "dash": psfdf_number(row.get("Dash")),
+                "airtractor": psfdf_number(row.get("AirTractor")),
+                "hbe": psfdf_number(row.get("HBE")),
+                "hbel": psfdf_number(row.get("HBEL")),
+                "other_info": str(row.get("Autres_infos") or "").strip(),
+            },
+        })
+
+    # Ordre stable pour faciliter le diagnostic d'un export et son diff local.
+    features.sort(key=lambda feature: (
+        list(PSFDF_STATUSES.values()).index(feature["properties"]["status"]),
+        -(feature["properties"]["surface"] or 0),
+        feature["properties"]["commune"],
+    ))
+    return fc(features)
 
 
 # ---------------------------------------------------------------------------
@@ -483,6 +587,96 @@ def feature_bounds(feature):
     lon = [point[0] for point in points]
     lat = [point[1] for point in points]
     return min(lon), min(lat), max(lon), max(lat)
+
+
+def geographic_distance_km(a, b):
+    """Distance locale suffisante pour les rapprochements métropolitains."""
+    latitude = math.radians((a[1] + b[1]) / 2)
+    dx = (a[0] - b[0]) * math.cos(latitude) * 111.32
+    dy = (a[1] - b[1]) * 110.57
+    return math.hypot(dx, dy)
+
+
+def point_bounds_distance_km(point, bounds):
+    west, south, east, north = bounds
+    nearest = [min(max(point[0], west), east),
+               min(max(point[1], south), north)]
+    return geographic_distance_km(point, nearest)
+
+
+def bounds_gap_km(left, right):
+    """Distance entre deux bboxes, nulle quand elles se touchent."""
+    lon_gap = max(left[0] - right[2], right[0] - left[2], 0)
+    lat_gap = max(left[1] - right[3], right[1] - left[3], 0)
+    latitude = math.radians((left[1] + left[3] + right[1] + right[3]) / 4)
+    return math.hypot(lon_gap * math.cos(latitude) * 111.32,
+                      lat_gap * 110.57)
+
+
+def align_psfdf_to_effis(psfdf, recent_effis):
+    """Centre et dimensionne les disques PSFDF sur les périmètres EFFIS proches.
+
+    Le premier périmètre est le plus proche du point déclaré par l'association.
+    On ne lui rattache ensuite que les morceaux voisins de ce premier groupe :
+    cette croissance évite d'englober un autre incendie simplement parce qu'il
+    se trouve dans la même couronne de quinze kilomètres autour de la commune.
+    """
+    fires = psfdf.get("features", [])
+    indexed = [(feature, feature_bounds(feature))
+               for feature in recent_effis.get("features", [])]
+    # Attribution exclusive : deux communes proches ne doivent pas dessiner
+    # deux disques identiques autour du même périmètre EFFIS.
+    assigned = {index: [] for index in range(len(fires))}
+    for feature, bounds in indexed:
+        distances = [
+            point_bounds_distance_km(fire["geometry"]["coordinates"], bounds)
+            for fire in fires
+        ]
+        if not distances:
+            continue
+        nearest = min(range(len(distances)), key=distances.__getitem__)
+        if distances[nearest] <= PSFDF_EFFIS_MATCH_KM:
+            assigned[nearest].append((feature, bounds, distances[nearest]))
+
+    matched_fires = 0
+    for fire_index, fire in enumerate(fires):
+        original = list(fire["geometry"]["coordinates"])
+        candidates = assigned[fire_index]
+        if not candidates:
+            continue
+
+        seed = min(candidates, key=lambda candidate: candidate[2])
+        selected = [seed]
+        remaining = [candidate for candidate in candidates if candidate is not seed]
+        changed = True
+        while changed:
+            changed = False
+            for candidate in remaining[:]:
+                if any(bounds_gap_km(candidate[1], current[1])
+                       <= PSFDF_EFFIS_CLUSTER_GAP_KM for current in selected):
+                    selected.append(candidate)
+                    remaining.remove(candidate)
+                    changed = True
+
+        points = [point for feature, _, _ in selected
+                  for point in geometry_points(feature["geometry"])]
+        west = min(point[0] for point in points)
+        south = min(point[1] for point in points)
+        east = max(point[0] for point in points)
+        north = max(point[1] for point in points)
+        center = [(west + east) / 2, (south + north) / 2]
+        # Une petite marge empêche le contour coloré de tangenter le contour
+        # EFFIS à cause des arrondis de projection côté navigateur.
+        radius = max(geographic_distance_km(center, point) for point in points) * 1.08
+
+        fire["geometry"]["coordinates"] = [round(value, 6) for value in center]
+        fire["properties"].update({
+            "original_center": original,
+            "effis_radius_km": round(max(radius, .25), 2),
+            "effis_matches": len(selected),
+        })
+        matched_fires += 1
+    return matched_fires
 
 
 def tile_id(ix, iy):
@@ -1025,9 +1219,18 @@ def main():
     print("\nCopernicus EFFIS - surfaces brulees")
     burnt = fetch_burnt(bbox)
     recent = burnt_since(burnt["burnt_dated"], latest, RECENT_DAYS)
-    major_burnt = burnt_since(
-        burnt["burnt_dated"], latest, MAJOR_EFFIS_DAYS
-    )
+
+    print("\nAssociation PSFDF - incendies suivis")
+    try:
+        psfdf = fetch_psfdf(bbox)
+        print(f"  {len(psfdf['features'])} incendies non archivés")
+        matched = align_psfdf_to_effis(psfdf, recent)
+        print(f"  {matched} disques ajustés sur un périmètre EFFIS récent")
+    except Exception as error:
+        # Cette couche éditoriale enrichit la carte mais ne doit pas empêcher la
+        # publication des observations satellitaires si son API est indisponible.
+        print(f"  ! PSFDF indisponible ({error})", file=sys.stderr)
+        psfdf = fc([])
 
     print("\nOpen-Meteo / AROME HD - vent a 10 m")
     coarse_box = wind_box(bbox)
@@ -1108,13 +1311,14 @@ def main():
         "overview_count": len(overview["features"]),
         "dated_count": len(burnt["burnt_dated"]["features"]),
         "nrt_count": len(burnt["burnt_nrt"]["features"]),
+        "psfdf_count": len(psfdf["features"]),
         "fine_wind_zones": [tile_id(*key) for key in sorted(fine_wind)],
         "wind_model": coarse_wind["model"],
     }
 
     write_json(os.path.join(OUT, "overview_hotspots.geojson"), overview)
     write_json(os.path.join(OUT, "burnt_recent.geojson"), recent)
-    write_json(os.path.join(OUT, "burnt_major.geojson"), major_burnt)
+    write_json(os.path.join(OUT, "psfdf_fires.geojson"), psfdf)
     write_json(os.path.join(OUT, "timeline.json"), timeline)
     write_json(os.path.join(OUT, "wind_coarse.json"), coarse)
     write_json(os.path.join(OUT, "weather_forecast.json"), weather)
