@@ -811,20 +811,24 @@
     #layers-btn::after { content: none; }
     #layers-btn .wide { display: none; }
     #layers-btn svg { width: 19px; height: 19px; margin: 0; vertical-align: 0; }
-    #layers { top: 60px; right: 10px; padding: 10px 13px; font-size: 12px; }
+    /* La colonne de 42 px reste reservee aux quatre commandes : le panneau
+       s'ouvre a leur gauche, sans recouvrir son bouton ni faire disparaitre
+       les commandes suivantes. */
+    #layers { position: fixed; top: 60px; right: 62px;
+              max-height: calc(100vh - 130px); overflow-y: auto;
+              padding: 10px 13px; font-size: 12px; }
     #weather-btn { position: fixed; top: auto; right: 10px; width: 42px;
                    height: 42px; padding: 0; font-size: 17px; }
     #weather-btn .weather-label { display: none; }
     #weather-btn .weather-icon { margin: 0; }
     #weather-btn::after { content: none; }
-    #layers.open ~ #weather-btn { display: none; }
     #export-btn { position: fixed; top: auto; right: 10px;
                   width: 42px; height: 42px; }
     #export-btn .export-icon, #export-btn .export-loader { width: 19px; height: 19px; }
-    #layers.open ~ #export-btn { display: none; }
-    #export-panel { top: 110px; right: 10px; bottom: auto;
-                    width: min(270px, calc(100vw - 20px)); }
-    #export-toast { top: 110px; right: 10px; bottom: auto; }
+    #export-panel { top: auto; right: 62px;
+                    width: min(270px, calc(100vw - 72px));
+                    max-height: calc(100vh - 130px); overflow-y: auto; }
+    #export-toast { top: auto; right: 62px; }
     /* La fiche doit tenir dans la bande laissée par le dock : `fitPopup()`
        remonte la carte, encore faut-il que la fiche soit assez basse pour y
        entrer. Au-delà, elle défile dans son propre cadre. */
@@ -2110,7 +2114,15 @@ function placeClock() {
     const clockH = clockEl.getBoundingClientRect().height;
     const stackBottom = innerHeight - r.top + 18 + clockH;
     legendBtn.style.bottom = `${stackBottom}px`;
-    document.getElementById('export-btn').style.bottom = `${stackBottom + 50}px`;
+    const exportBottom = stackBottom + 50;
+    document.getElementById('export-btn').style.bottom = `${exportBottom}px`;
+    /* Les panneaux flottants suivent la pile mesuree : le dock peut changer
+       de hauteur avec la legende ou les credits sans renvoyer l'export en haut
+       de l'ecran. */
+    const exportPanel = document.getElementById('export-panel');
+    exportPanel.style.bottom = `${exportBottom}px`;
+    exportPanel.style.maxHeight = `${Math.max(innerHeight - exportBottom - 60, 160)}px`;
+    document.getElementById('export-toast').style.bottom = `${exportBottom}px`;
     document.getElementById('weather-btn').style.bottom = `${stackBottom + 100}px`;
     document.getElementById('layers-btn').style.bottom = `${stackBottom + 150}px`;
   }
