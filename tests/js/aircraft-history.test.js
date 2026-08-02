@@ -6,7 +6,7 @@ import { loadInlineContext, plain } from './inline-function-loader.js';
 
 
 const appSource = fs.readFileSync(
-  new URL('../../index.html', import.meta.url),
+  new URL('../../js/app.js', import.meta.url),
   'utf8',
 );
 

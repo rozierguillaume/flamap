@@ -487,12 +487,12 @@ cas de régression.
 
 ### Lot 3 — Extraction mécanique des assets
 
-- [ ] Déplacer le CSS inline, sans réordonner une règle, vers `css/app.css`.
-- [ ] Déplacer le grand script inline, sans le modulariser, vers `js/app.js`.
-- [ ] Conserver MapLibre et l'ordre d'exécution actuels pendant ce déplacement.
-- [ ] Adapter les trois workflows, leurs filtres de chemins et l'assemblage de
+- [x] Déplacer le CSS inline, sans réordonner une règle, vers `css/app.css`.
+- [x] Déplacer le grand script inline, sans le modulariser, vers `js/app.js`.
+- [x] Conserver MapLibre et l'ordre d'exécution actuels pendant ce déplacement.
+- [x] Adapter les trois workflows, leurs filtres de chemins et l'assemblage de
       l'artefact pour inclure `css/` et `js/`.
-- [ ] Vérifier que `index.html` ne contient plus que le HTML et les petits blocs
+- [x] Vérifier que `index.html` ne contient plus que le HTML et les petits blocs
       indispensables au `<head>`.
 
 Critère de sortie : diff mécanique, comportement et mesures identiques.
@@ -660,7 +660,7 @@ de performance respectés.
 | 0 | terminé | `codex/refactor-0-socle` | 2026-08-01 | Références et protocole dans `docs/refactor/lot-0-baseline.md` ; captures 1440/375 px ; trois séries mémoire, deux lectures finales ; syntaxe Python/JS et console vérifiées ; doubles relectures comportement/performance. |
 | 1 | terminé | `codex/refactor-1-correctifs` | 2026-08-02 | Points du lot vérifiés séparément ; avions conservés actifs par défaut sur décision explicite de l'utilisateur, avec 1 requête d'historique et 2 requêtes Airplanes.live observées dans les 5 premières secondes ; syntaxe Python/JS, bloc Python du workflow et `git diff --check` valides ; échec des données forcé et état d'erreur contrôlé ; initialisation finale à 401 ms, carte prête à 1 331 ms et aucune requête de données supplémentaire ; rendu desktop 1440 px et console contrôlés ; relecture à froid sans régression confirmée ; validation mobile 375 px confirmée par l'utilisateur. |
 | 2 | terminé | `codex/refactor-2-tests-ci` | 2026-08-02 | Fixtures locales FIRMS, EFFIS, PSFDF et météo ; garde réseau actif avant l'import du collecteur ; 11 tests Python et 7 tests JavaScript purs valides sous Python 3.12 et Node 22, y compris sous plusieurs fuseaux ; syntaxe Python/JS, YAML et `git diff --check` valides ; doubles relectures comportement et CI/performance sans constat résiduel. Après validation du lot, correction séparée demandée explicitement : les 30 minutes de traces d'avions sont conservées et rendues dès l'amorçage VPS, avec 3 tests de non-régression et documentation alignée. |
-| 3 | à faire | | | |
+| 3 | terminé | `codex/refactor-3-assets` | 2026-08-02 | CSS et JavaScript extraits byte à byte (empreintes identiques aux blocs inline) ; ordre MapLibre et exécution classique conservés ; trois workflows adaptés et artefact local contrôlé ; 11 tests Python et 7 tests JavaScript, syntaxe Python/JS, YAML et `git diff --check` valides ; assets servis en 200 avec les bons types MIME ; 11 requêtes de données inchangées ; médianes courtes à 633 ms pour l'initialisation et 1 492 ms pour la carte prête ; lecture longue : `show()` à 0,75/0,70/0,90 ms moyenne/médiane/p95, aucune frame perdue, mémoire médiane à 26 510 731 octets (+4,3 %) ; rendu et console contrôlés à 1440, 820, 375 et 320 px ; relecture à froid sans régression confirmée. Le navigateur intégré garde `visibilityState=visible` entre ses onglets : le scénario réellement masqué n'y est pas reproductible, mais le démarrage et son listener sont inchangés dans l'extraction. |
 | 4 | à faire | | | |
 | 5 | à faire | | | |
 | 6 | à faire | | | |
@@ -695,6 +695,10 @@ implémenter opportunément dans un diff d'extraction.
   les éléments réellement uniques.
 - Ne mémoïser les lectures de styles calculés qu'après mesure et seulement pour
   les tokens garantis immuables.
+- Les trois assemblages de publication omettent actuellement `fonts/`, alors
+  que le front précharge `fonts/instrument-sans-latin.woff2` ; traiter ce défaut
+  préexistant dans un lot correctif explicite, sans le mêler à l'extraction des
+  assets du lot 3.
 
 ---
 

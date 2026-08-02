@@ -3,7 +3,7 @@ import vm from 'node:vm';
 
 
 const source = fs.readFileSync(
-  new URL('../../index.html', import.meta.url),
+  new URL('../../js/app.js', import.meta.url),
   'utf8',
 );
 
@@ -20,13 +20,13 @@ export function loadInlineContext(name, endMarker, setup = '', globals = {}) {
   const start = starts.length ? Math.min(...starts) : -1;
   const end = source.indexOf(endMarker, start);
   if (start < 0 || end < 0) {
-    throw new Error(`fonction inline introuvable : ${name}`);
+    throw new Error(`fonction du monolithe introuvable : ${name}`);
   }
   const context = { ...globals };
   vm.runInNewContext(
     `${setup}\n${source.slice(start, end)}\nglobalThis.loaded = ${name};`,
     context,
-    { filename: 'index.html' },
+    { filename: 'js/app.js' },
   );
   return { callable: context.loaded, context };
 }
