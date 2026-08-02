@@ -550,10 +550,10 @@ Critère de sortie : budgets de frames et mémoire respectés.
 
 ### Lot 9 — Foyers et surfaces brûlées
 
-- [ ] Extraire rampes, installation des couches et mises à jour des foyers.
-- [ ] Extraire installation et fondu des surfaces brûlées.
-- [ ] Conserver les expressions MapLibre et leur ordre à l'identique.
-- [ ] Tester les fonctions pures de rampe et les instants de bascule.
+- [x] Extraire rampes, installation des couches et mises à jour des foyers.
+- [x] Extraire installation et fondu des surfaces brûlées.
+- [x] Conserver les expressions MapLibre et leur ordre à l'identique.
+- [x] Tester les fonctions pures de rampe et les instants de bascule.
 
 Critère de sortie : rendu visuel et coût de `show()` inchangés.
 
@@ -666,7 +666,7 @@ de performance respectés.
 | 6 | terminé | `codex/refactor-6-state` | 2026-08-02 | Store sans DOM ni MapLibre, snapshots et frise immuables, abonnements synchrones sans boucle ; seuls frise, dernier instant observé, heure courante et visibilité transversale sont migrés. 11 tests Python et 22 tests JS, syntaxe, YAML, artefact et `git diff --check` valides ; listeners, rAF, `fetch`, `setFilter` et appels à `applyBurnt()` inchangés. Rendu et interactions contrôlés à 1440/820/375/320 px, 10 requêtes de données présentes plus le 404 thermique attendu. Taille brute/gzip à +1,43/+1,41 % sur le lot 5. Comparaison directe 120 Hz : `show()` à 1,34/1,30/1,50 ms moyenne/médiane/p95 contre 1,30/1,30/1,50 ms au lot 5, 14 frames manquées contre 35 ; mémoire à 30,6–30,9 Mo contre 45,1 Mo au lot 5. Relecture à froid sans régression confirmée. Le masquage réel d'onglet reste non reproductible dans le navigateur intégré ; le listener `visibilitychange` et son ordre sont inchangés. |
 | 7 | terminé | `codex/refactor-7-data-zones` | 2026-08-02 | Client JSON, chargement initial et contrôleur de zones extraits avec cache et état privés ; ordre des requêtes, repli PSFDF, repli legacy, jeton anti-course, fusion et déduplication conservés. 9 nouveaux tests couvrent succès et données MapLibre, cache LRU, zone absente, mouvement rapide et legacy ; 11 tests Python et 31 tests JS, syntaxe, YAML et `git diff --check` valides. Les trois workflows publient les modules ; front brut/gzip à +0,69/+1,44 % sur le lot 6. Mode legacy, lecture et largeur du curseur, console, canvas et rendu contrôlés à 1440/820/375/320 px ; relecture à froid corrigée puis rejouée sans constat résiduel. |
 | 8 | terminé | `codex/refactor-8-wind-smoke` | 2026-08-02 | Contrôleurs vent et fumée extraits avec grilles, particules, dimensions et rAF privés ; lecture du vent injectée dans la fumée et APIs ciblées pour météo, zones et export. Un nouveau test contrôle DPR, arrêt/reprise et absence de boucle dupliquée : 32 tests JS et 11 tests Python valides, syntaxe et `git diff --check` contrôlés. rAF, annulations, listeners, `fetch` et `setFilter` inchangés ; 11 requêtes de données. Front brut/gzip à +1,71/+2,81 % sur le lot 7. Banc long : initialisation 678 ms, carte prête 1 569 ms, aucune frame manquée sur 30 s, `show()` à 1,18/1,20/1,40 ms moyenne/médiane/p95, mémoire médiane à 27 612 567 octets utilisés et 33 486 208 octets alloués. Redimensionnement, zoom, lecture, arrêt/reprise des effets, console et rendu contrôlés à 1440/820/375/320 px ; relecture à froid corrigée puis rejouée sans constat résiduel. Le navigateur intégré ne rend toujours pas l'onglet réellement masqué ; le listener `visibilitychange`, son ordre et les gardes `document.hidden` ont été conservés et relus. |
-| 9 | à faire | | | |
+| 9 | terminé | `codex/refactor-9-fires-burnt` | 2026-08-02 | Rampes, expressions, filtres et couches des foyers extraits dans `features/fires.js` ; couches, visibilité et fondu EFFIS extraits dans `features/burnt.js`. Quatre nouveaux tests portent le total à 36 tests JS, avec 11 tests Python ; syntaxe, YAML et `git diff --check` valides. Ordre des couches, appels `setFilter`, `applyBurnt()`, listeners, rAF et requêtes inchangés ; 11 requêtes de données au banc. Comparaison isolée lot 8/lot 9 à 120 Hz : `show()` à 0,827/0,800/1,000 ms contre 0,820/0,800/1,000 ms moyenne/médiane/p95, 14 contre 15 frames manquées sur 3 600. La mémoire absolue du processus était contaminée par les séries précédentes, mais la répétition directe lot 9/lot 8 ne montre aucune hausse (43,9 contre 44,7 Mo utilisés ; 100 contre 101 Mo alloués). Front brut/gzip à +0,07/+0,32 % sur le lot 8. Passage passé/dernier instant, bascules foyers/EFFIS, export, console, canvas et rendu 1440/820/375/320 px contrôlés ; double relecture à froid sans constat résiduel. L'omission préexistante des modules `fx/` dans le workflow météo est consignée dans « Repéré en chemin ». |
 | 10 | à faire | | | |
 | 11 | à faire | | | |
 | 12 | à faire | | | |
@@ -699,6 +699,10 @@ implémenter opportunément dans un diff d'extraction.
   que le front précharge `fonts/instrument-sans-latin.woff2` ; traiter ce défaut
   préexistant dans un lot correctif explicite, sans le mêler à l'extraction des
   assets du lot 3.
+- `update-weather-deploy.yml` reprend le front depuis une liste explicite qui
+  omet déjà `js/fx/wind.js` et `js/fx/smoke.js` depuis le lot 8 ; traiter ce
+  défaut préexistant dans un lot correctif explicite, sans le mêler à
+  l'extraction des foyers et surfaces brûlées du lot 9.
 
 ---
 
