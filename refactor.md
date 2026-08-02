@@ -475,12 +475,12 @@ déplacement architectural.
 
 ### Lot 2 — Filet de tests et CI
 
-- [ ] Créer les fixtures minimales FIRMS, EFFIS, PSFDF et météo.
-- [ ] Tester les dates PSFDF, `swap_axes`, les agrégats, la frise, les bornes
+- [x] Créer les fixtures minimales FIRMS, EFFIS, PSFDF et météo.
+- [x] Tester les dates PSFDF, `swap_axes`, les agrégats, la frise, les bornes
       géographiques et les exports météo.
-- [ ] Préparer les tests JavaScript purs sans `package.json`.
-- [ ] Ajouter `.github/workflows/checks.yml`.
-- [ ] Exécuter les tests sans réseau.
+- [x] Préparer les tests JavaScript purs sans `package.json`.
+- [x] Ajouter `.github/workflows/checks.yml`.
+- [x] Exécuter les tests sans réseau.
 
 Critère de sortie : les règles métier les plus risquées échouent clairement en
 cas de régression.
@@ -659,7 +659,7 @@ de performance respectés.
 |---:|---|---|---|---|
 | 0 | terminé | `codex/refactor-0-socle` | 2026-08-01 | Références et protocole dans `docs/refactor/lot-0-baseline.md` ; captures 1440/375 px ; trois séries mémoire, deux lectures finales ; syntaxe Python/JS et console vérifiées ; doubles relectures comportement/performance. |
 | 1 | terminé | `codex/refactor-1-correctifs` | 2026-08-02 | Points du lot vérifiés séparément ; avions conservés actifs par défaut sur décision explicite de l'utilisateur, avec 1 requête d'historique et 2 requêtes Airplanes.live observées dans les 5 premières secondes ; syntaxe Python/JS, bloc Python du workflow et `git diff --check` valides ; échec des données forcé et état d'erreur contrôlé ; initialisation finale à 401 ms, carte prête à 1 331 ms et aucune requête de données supplémentaire ; rendu desktop 1440 px et console contrôlés ; relecture à froid sans régression confirmée ; validation mobile 375 px confirmée par l'utilisateur. |
-| 2 | à faire | | | |
+| 2 | terminé | `codex/refactor-2-tests-ci` | 2026-08-02 | Fixtures locales FIRMS, EFFIS, PSFDF et météo ; garde réseau actif avant l'import du collecteur ; 11 tests Python et 4 tests JavaScript purs valides sous Python 3.12 et Node 22, y compris sous plusieurs fuseaux ; syntaxe Python/JS, YAML et `git diff --check` valides ; sources applicatives inchangées ; doubles relectures comportement et CI/performance sans constat résiduel. |
 | 3 | à faire | | | |
 | 4 | à faire | | | |
 | 5 | à faire | | | |
