@@ -3,7 +3,7 @@ import vm from 'node:vm';
 
 
 const source = fs.readFileSync(
-  new URL('../../js/app.js', import.meta.url),
+  new URL('../../js/main.js', import.meta.url),
   'utf8',
 );
 
@@ -26,7 +26,7 @@ export function loadInlineContext(name, endMarker, setup = '', globals = {}, sou
   vm.runInNewContext(
     `${setup}\n${sourceText.slice(start, end)}\nglobalThis.loaded = ${name};`,
     context,
-    { filename: 'js/app.js' },
+    { filename: 'js/main.js' },
   );
   return { callable: context.loaded, context };
 }

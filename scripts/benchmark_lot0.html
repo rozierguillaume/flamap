@@ -48,7 +48,7 @@ app.addEventListener('load', async () => {
   let win = null;
   try {
   win = app.contentWindow;
-  const { getMeasurementApi } = await win.eval('import("/js/app.js")');
+  const { getMeasurementApi } = await win.eval('import("/js/main.js")');
   const measurement = getMeasurementApi();
   result.environment = {
     userAgent: win.navigator.userAgent,
