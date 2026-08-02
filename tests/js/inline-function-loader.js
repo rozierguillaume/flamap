@@ -12,19 +12,19 @@ const source = fs.readFileSync(
  * Les marqueurs rendent la copie impossible : le test évalue bien la source
  * courante et échoue explicitement quand l'extraction future la déplace.
  */
-export function loadInlineContext(name, endMarker, setup = '', globals = {}) {
+export function loadInlineContext(name, endMarker, setup = '', globals = {}, sourceText = source) {
   const starts = [
-    source.indexOf(`function ${name}(`),
-    source.indexOf(`async function ${name}(`),
+    sourceText.indexOf(`function ${name}(`),
+    sourceText.indexOf(`async function ${name}(`),
   ].filter(index => index >= 0);
   const start = starts.length ? Math.min(...starts) : -1;
-  const end = source.indexOf(endMarker, start);
+  const end = sourceText.indexOf(endMarker, start);
   if (start < 0 || end < 0) {
     throw new Error(`fonction du monolithe introuvable : ${name}`);
   }
   const context = { ...globals };
   vm.runInNewContext(
-    `${setup}\n${source.slice(start, end)}\nglobalThis.loaded = ${name};`,
+    `${setup}\n${sourceText.slice(start, end)}\nglobalThis.loaded = ${name};`,
     context,
     { filename: 'js/app.js' },
   );

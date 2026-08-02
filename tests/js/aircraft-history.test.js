@@ -5,8 +5,8 @@ import test from 'node:test';
 import { loadInlineContext, plain } from './inline-function-loader.js';
 
 
-const appSource = fs.readFileSync(
-  new URL('../../js/app.js', import.meta.url),
+const aircraftSource = fs.readFileSync(
+  new URL('../../js/features/aircraft.js', import.meta.url),
   'utf8',
 );
 
@@ -40,7 +40,7 @@ const setup = `
   const setTimeout = () => 1;
   const clearTimeout = () => {};
   Date.now = () => historyPayload.now;
-  const fetch = async () => ({ ok: true, json: async () => historyPayload });
+  const fetchImpl = async () => ({ ok: true, json: async () => historyPayload });
   const aircraftLoop = () => {};
 `;
 
@@ -49,16 +49,17 @@ const loaded = loadInlineContext(
   'function aircraftPose',
   setup,
   { historyPayload },
+  aircraftSource,
 );
 
 
 test('la conservation couvre toute la trace de trente minutes', () => {
   assert.match(
-    appSource,
+    aircraftSource,
     /const AIRCRAFT_TRACK_KEEP_MS = AIRCRAFT_TRAIL_MS;/,
   );
   assert.match(
-    appSource,
+    aircraftSource,
     /const AIRCRAFT_HISTORY_MAX_POINTS = 500;/,
   );
 });
@@ -101,6 +102,8 @@ const loadedFrame = loadInlineContext(
   'aircraftFrame',
   'function aircraftLoop',
   frameSetup,
+  {},
+  aircraftSource,
 );
 
 test('une trace historique se peint sans position courante', () => {

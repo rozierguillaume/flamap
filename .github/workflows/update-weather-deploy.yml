@@ -138,6 +138,7 @@ jobs:
                        'css/app.css', 'js/app.js', 'js/state.js',
                        'js/data/client.js', 'js/data/initial.js',
                        'js/data/zones.js',
+                       'js/features/aircraft.js',
                        'js/features/burnt.js', 'js/features/fires.js',
                        'js/features/psfdf.js',
                        'js/features/weather.js',
