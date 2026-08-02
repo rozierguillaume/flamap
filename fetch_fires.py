@@ -20,13 +20,9 @@ Usage :
     python3 fetch_fires.py west south east north
 """
 
-import json
 import math
 import os
-import shutil
 import sys
-import time
-import urllib.error
 from datetime import datetime, timezone
 
 from flamap.geo import (
@@ -80,7 +76,6 @@ from flamap.psfdf import (
     psfdf_timestamp as _psfdf_timestamp,
 )
 from flamap.meteo import (
-    DeadlineExceeded,
     build_wind as _build_wind,
     fetch_fine_winds as _fetch_fine_winds,
     fetch_thermal as _fetch_thermal,
@@ -98,6 +93,8 @@ from flamap.meteo import (
     wind_holes as _wind_holes,
     wind_subset as _wind_subset,
 )
+from flamap.validation import validate_thermal
+from flamap.writer import publish_export, publish_json
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "data")
@@ -152,17 +149,6 @@ OPEN_METEO_TIMEOUT = 30
 # EX_TEMPFAIL : le workflow reconnaît ce cas externe et conserve le site actif.
 
 EMPTY_FC = {"type": "FeatureCollection", "features": []}
-
-
-def write_json(path, data, compact=True):
-    with open(path, "w", encoding="utf-8") as output:
-        json.dump(
-            data,
-            output,
-            ensure_ascii=False,
-            separators=(",", ":") if compact else None,
-            indent=None if compact else 2,
-        )
 
 
 def fc(features):
@@ -420,14 +406,15 @@ def main_thermal(bbox):
     AROME HD ne sort une nouvelle echeance que toutes les 3 h — l'interroger
     douze fois par jour ne gagnait rien et alimentait les bridages.
     """
-    os.makedirs(OUT, exist_ok=True)
     print(f"bbox {bbox}\n")
     print("Open-Meteo / AROME HD - temperature a 2 m")
     thermal = fetch_thermal(wind_box(bbox), THERMAL_SPACING_KM)
     now = datetime.now(timezone.utc).timestamp()
     export = thermal_export(thermal, now)
     export["generated_at"] = datetime.now(timezone.utc).isoformat()
-    write_json(os.path.join(OUT, "thermal.json"), export)
+    publish_json(
+        os.path.join(OUT, "thermal.json"), export, validate=validate_thermal
+    )
     print(f"\n-> {export['nt']} heures, grille {export['nx']}x{export['ny']}")
     print(f"-> ecrit dans {OUT}/thermal.json")
 
@@ -446,7 +433,6 @@ def main():
     if thermal_only:
         return main_thermal(bbox)
 
-    os.makedirs(OUT, exist_ok=True)
     print(f"bbox {bbox}\n")
 
     print("NASA FIRMS - foyers actifs")
@@ -517,15 +503,10 @@ def main():
     nrt_cells = partition_features(burnt["burnt_nrt"]["features"])
     cells = tile_range(bbox)
 
-    if os.path.isdir(ZONES_OUT):
-        shutil.rmtree(ZONES_OUT)
-    os.makedirs(ZONES_OUT)
-
-    zone_ids = []
+    zone_payloads = {}
     for ix, iy in cells:
         name = tile_id(ix, iy)
-        zone_ids.append(name)
-        payload = {
+        zone_payloads[name] = {
             "id": name,
             "bbox": [ix, iy, ix + TILE_DEG, iy + TILE_DEG],
             "hotspots": fc(hotspot_cells.get((ix, iy), [])),
@@ -533,7 +514,7 @@ def main():
             "burnt_nrt": fc(nrt_cells.get((ix, iy), [])),
             "wind": fine_wind.get((ix, iy)),
         }
-        write_json(os.path.join(ZONES_OUT, f"{name}.json"), payload)
+    zone_ids = list(zone_payloads)
 
     generated = datetime.now(timezone.utc).isoformat()
     timeline = build_timeline(hotspots, burnt["burnt_dated"])
@@ -559,14 +540,16 @@ def main():
         "wind_model": coarse_wind["model"],
     }
 
-    write_json(os.path.join(OUT, "overview_hotspots.geojson"), overview)
-    write_json(os.path.join(OUT, "burnt_recent.geojson"), recent)
-    write_json(os.path.join(OUT, "psfdf_fires.geojson"), psfdf)
-    write_json(os.path.join(OUT, "timeline.json"), timeline)
-    write_json(os.path.join(OUT, "social_timeline.json"), social_timeline)
-    write_json(os.path.join(OUT, "wind_coarse.json"), coarse)
-    write_json(os.path.join(OUT, "weather_forecast.json"), weather)
-    write_json(os.path.join(OUT, "manifest.json"), manifest, compact=False)
+    publish_export(OUT, {
+        "overview_hotspots.geojson": overview,
+        "burnt_recent.geojson": recent,
+        "psfdf_fires.geojson": psfdf,
+        "timeline.json": timeline,
+        "social_timeline.json": social_timeline,
+        "wind_coarse.json": coarse,
+        "weather_forecast.json": weather,
+        "manifest.json": manifest,
+    }, zone_payloads)
     # `thermal.json` appartient au workflow meteo : ne jamais l'ecrire ici, sous
     # peine de le remplacer par un champ vieux de plusieurs heures.
 
