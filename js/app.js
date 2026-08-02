@@ -1,6 +1,9 @@
 import { ago, confidenceText, fmt, fmtClock, nf } from './util/format.js';
-import { aircraftBearing, aircraftCurve, distanceKm, zoneId } from './util/geo.js';
+import { aircraftBearing, aircraftCurve, distanceKm } from './util/geo.js';
 import { gridAt, gridBilinear, windAtGrid } from './util/grid.js';
+import { EMPTY, json } from './data/client.js';
+import { loadInitialData } from './data/initial.js';
+import { createZonesController } from './data/zones.js';
 import { createActivityController } from './timeline/activity.js';
 import { createTimelineController } from './timeline/controller.js';
 import { addForecast, buildSteps } from './timeline/model.js';
@@ -559,8 +562,9 @@ function drawWeather() {
   for (const y of [tempTop, tempBottom, windTop, windBottom, precipTop, precipBottom])
     svg += `<line x1="${left}" y1="${y}" x2="${right}" y2="${y}" class="grid"/>`;
   const now = Date.now() / 1000;
-  const updated = Z.manifest && Z.manifest.generated_at
-    ? Date.parse(Z.manifest.generated_at) / 1000 : NaN;
+  const manifest = zonesController.getManifest();
+  const updated = manifest && manifest.generated_at
+    ? Date.parse(manifest.generated_at) / 1000 : NaN;
   if (updated >= rows[0].ts && updated <= rows[rows.length - 1].ts) {
     const markerX = timeX(updated);
     const hour = new Date(updated * 1000).toLocaleTimeString('fr-FR',
@@ -1192,7 +1196,8 @@ const WIND_BLEND_KM = 35;
 function windAt(lon, lat, out) {
   const coarse = {};
   const hasCoarse = windAtGrid(W.data, W.cur, lon, lat, coarse);
-  if (Z.manifest && map.getZoom() >= Z.manifest.detail_zoom) {
+  const manifest = zonesController.getManifest();
+  if (manifest && map.getZoom() >= manifest.detail_zoom) {
     let weight = 0, blend = 0, fineU = 0, fineV = 0, fineG = 0;
     for (const tile of W.tiles.values()) {
       const fine = {};
@@ -1385,10 +1390,10 @@ const activityController = createActivityController({
   firmsSources: FIRMS_SOURCES,
   getSteps: () => getState().steps,
   getContext: () => ({
-    disabled: Z.disabled,
-    manifest: Z.manifest,
+    disabled: zonesController.isDisabled(),
+    manifest: zonesController.getManifest(),
     overview: FIRE_CONTEXT.overview,
-    hotspots: Z.hotspots,
+    hotspots: zonesController.getHotspots(),
     shownHotspots: getState().layerVisibility.hotspots,
   }),
   fmt,
@@ -1650,8 +1655,9 @@ function drawExportFooter(ctx, generatedAt, shownTime = timelineController.getTi
   ctx.fillText('Foyers : NASA FIRMS — Périmètres : Copernicus EFFIS — Vent : Météo-France / Open-Meteo', 20, 509);
   ctx.fillText('Fond : IGN et Sentinel-2 / EOX — Toponymes : OpenStreetMap / OpenFreeMap', 20, 525);
 
-  const extracted = Z.manifest?.generated_at
-    ? Date.parse(Z.manifest.generated_at) : getState().lastObservedTime * 1000;
+  const manifestGeneratedAt = zonesController.getManifest()?.generated_at;
+  const extracted = manifestGeneratedAt
+    ? Date.parse(manifestGeneratedAt) : getState().lastObservedTime * 1000;
   const lines = [
     `État affiché — ${exportDate(shownTime * 1000)}`,
     `Données actualisées — ${exportDate(extracted)}`,
@@ -2241,13 +2247,6 @@ function lockWidths() {
   const px = document.documentElement.style;
   px.setProperty('--wind-w', Math.ceil(wind) + 2 + 'px');
 }
-
-const EMPTY = { type: 'FeatureCollection', features: [] };
-const json = async url => {
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(`${response.status} ${url}`);
-  return response.json();
-};
 
 /*
  * Moyens aériens : catalogue ICAO24 partagé par des observateurs ADS-B pendant
@@ -3061,7 +3060,7 @@ function psfdfActivityArea(feature) {
 
   const searchLimit = Math.min(PSFDF_ACTIVITY_MAX_RADIUS_KM,
     Math.max(15, radius * 2.2));
-  const distances = Z.hotspots
+  const distances = zonesController.getHotspots()
     .map(hotspot => distanceKm(center, hotspot.geometry.coordinates))
     .filter(distance => distance <= searchLimit)
     .sort((a, b) => a - b);
@@ -3336,13 +3335,6 @@ function updatePsfdfPanelDuringZoom() {
   });
 }
 
-/* Cellules detaillees. Le cache applicatif reste borne ; le cache HTTP garde
- * les octets des cellules visitees sans laisser leurs gros objets JS en vie. */
-const Z = {
-  manifest: null, available: new Set(), cache: new Map(), visible: new Set(),
-  hotspots: [], token: 0, disabled: false,
-};
-
 function focusIncident(feature, duration = 850, targetZoom = 8.5) {
   timelineController.stop();
   const { lastObservedTime, steps } = getState();
@@ -3374,59 +3366,16 @@ document.getElementById('home-btn').addEventListener('click', () => {
   fitFrance();
 });
 
-function visibleZoneIds() {
-  if (!Z.manifest || map.getZoom() < Z.manifest.detail_zoom) return [];
-  const bounds = map.getBounds(), box = Z.manifest.bbox;
-  const west = Math.max(bounds.getWest(), box[0]);
-  const east = Math.min(bounds.getEast(), box[2]);
-  const south = Math.max(bounds.getSouth(), box[1]);
-  const north = Math.min(bounds.getNorth(), box[3]);
-  if (east <= west || north <= south) return [];
-  const ids = [];
-  for (let y = Math.floor(south); y <= Math.floor(north - 1e-9); y++)
-    for (let x = Math.floor(west); x <= Math.floor(east - 1e-9); x++) {
-      const id = zoneId(x, y);
-      if (Z.available.has(id)) ids.push(id);
-    }
-  return ids;
-}
-
-function loadZone(id) {
-  if (Z.cache.has(id)) {
-    const hit = Z.cache.get(id);
-    Z.cache.delete(id); Z.cache.set(id, hit);
-    return hit;
-  }
-  const url = Z.manifest.zone_template.replace('{id}', id);
-  const promise = json(url).catch(error => {
-    Z.cache.delete(id);
-    throw error;
-  });
-  Z.cache.set(id, promise);
-  return promise;
-}
-
-function mergedZones(zones, key, dedupe) {
-  const features = [], seen = new Set();
-  for (const zone of zones) for (const feature of zone[key].features) {
-    const id = feature.properties && feature.properties._id;
-    if (dedupe && id) {
-      if (seen.has(id)) continue;
-      seen.add(id);
-    }
-    features.push(feature);
-  }
-  return { type: 'FeatureCollection', features };
-}
-
 /* Le niveau national emploie les cellules agrégées ; dès que les paquets
  * détaillés sont disponibles, chaque pixel FIRMS récent devient un émetteur.
  * Le changement de jeu de sources ne vide jamais les particules existantes :
  * elles gardent leur position géographique pendant et après le zoom. */
 function smokeUseVisibleSources() {
-  const detailed = Z.manifest && map.getZoom() >= Z.manifest.detail_zoom
-                && Z.hotspots.length;
-  S.sources = detailed ? Z.hotspots : S.overview;
+  const manifest = zonesController.getManifest();
+  const hotspots = zonesController.getHotspots();
+  const detailed = manifest && map.getZoom() >= manifest.detail_zoom
+                && hotspots.length;
+  S.sources = detailed ? hotspots : S.overview;
   if (detailed) {
     // En panoramique, les panaches déjà loin hors champ ne doivent pas occuper
     // tout le budget et empêcher la nouvelle zone visible d'émettre. Une marge
@@ -3451,65 +3400,38 @@ function smokeUseVisibleSources() {
   }
 }
 
-async function loadVisibleZones() {
-  if (Z.disabled || !map.getSource('hs')) return;
-  const ids = visibleZoneIds(), token = ++Z.token;
-  Z.visible = new Set(ids);
-  if (!ids.length) {
-    document.body.classList.remove('loading-detail');
-    Z.hotspots = [];
+const zonesController = createZonesController({
+  getViewport: () => ({ zoom: map.getZoom(), bounds: map.getBounds() }),
+  hasDetailSource: () => !!map.getSource('hs'),
+  setLoading: loading => document.body.classList.toggle('loading-detail', loading),
+  clearDetail: reason => {
     map.getSource('hs').setData(EMPTY);
     map.getSource('dated').setData(EMPTY);
     map.getSource('nrt').setData(EMPTY);
     W.tiles = new Map();
     smokeUseVisibleSources();
-    windTime(W.ts, true);
+    if (reason === 'empty') windTime(W.ts, true);
     drawActivity();
-    return;
-  }
-
-  document.body.classList.add('loading-detail');
-  try {
-    const zones = await Promise.all(ids.map(loadZone));
-    if (token !== Z.token) return;
-    const hotspots = mergedZones(zones, 'hotspots', false);
-    Z.hotspots = hotspots.features;
+  },
+  applyDetail: ({ zones, hotspots, merge }) => {
     W.tiles = new Map(zones.map(zone => [zone.id, zone.wind]));
     for (const tile of W.tiles.values()) windGridTime(tile, W.ts);
     smokeUseVisibleSources();
     map.getSource('hs').setData(hotspots);
-    map.getSource('dated').setData(mergedZones(zones, 'burnt_dated', true));
-    map.getSource('nrt').setData(mergedZones(zones, 'burnt_nrt', true));
+    map.getSource('dated').setData(merge('burnt_dated', true));
+    map.getSource('nrt').setData(merge('burnt_nrt', true));
     windTime(W.ts, true);
     wctx.clearRect(0, 0, W.w, W.h);
     drawActivity();
-  } catch (error) {
-    console.warn('Détail indisponible', error);
-    if (token === Z.token) {
-      Z.hotspots = [];
-      map.getSource('hs').setData(EMPTY);
-      map.getSource('dated').setData(EMPTY);
-      map.getSource('nrt').setData(EMPTY);
-      W.tiles = new Map();
-      smokeUseVisibleSources();
-      drawActivity();
-    }
-  } finally {
-    if (token === Z.token) {
-      document.body.classList.remove('loading-detail');
-      // Le chargement des pixels FIRMS précis peut élargir l'emprise estimée
-      // du feu : rafraîchir la fiche une fois ces données disponibles.
-      const { atLatest, layerVisibility } = getState();
-      if (layerVisibility.psfdf && atLatest) updatePsfdfPanel();
-    }
-  }
-
-  while (Z.cache.size > 20) {
-    const oldest = [...Z.cache.keys()].find(id => !Z.visible.has(id));
-    if (!oldest) break;
-    Z.cache.delete(oldest);
-  }
-}
+  },
+  afterDetail: () => {
+    // Le chargement des pixels FIRMS précis peut élargir l'emprise estimée
+    // du feu : rafraîchir la fiche une fois ces données disponibles.
+    const { atLatest, layerVisibility } = getState();
+    if (layerVisibility.psfdf && atLatest) updatePsfdfPanel();
+  },
+});
+const loadVisibleZones = () => zonesController.loadVisibleZones();
 
 /* =====================================================================
  * FICHES AU CLIC
@@ -3809,34 +3731,7 @@ function mapClick(event) {
   openPopup(event.lngLat, content, hit.id);
 }
 
-// Les donnees nationales partent tout de suite, sans attendre MapLibre.
-const dataP = Promise.all([
-  json('data/manifest.json'),
-  json('data/overview_hotspots.geojson'),
-  json('data/burnt_recent.geojson'),
-  json('data/psfdf_fires.geojson').catch(() => EMPTY),
-  json('data/timeline.json'),
-  json('data/wind_coarse.json?v=2'),
-]).then(([manifest, overview, recent, psfdf, timeline, wind]) => ({
-  manifest, overview, recent, psfdf, timeline, wind, detail: null,
-})).catch(async () => {
-  // Le clone conserve les anciens exemples Gironde : il reste affichable avant
-  // le premier `python3 fetch_fires.py`, sans simuler le chargement national.
-  const [nrt, dated, hotspots, meta, wind] = await Promise.all([
-    json('data/burnt_nrt.geojson'), json('data/burnt_dated.geojson'),
-    json('data/hotspots.geojson'), json('data/meta.json'),
-    json('data/wind.json').catch(() => null),
-  ]);
-  return {
-    manifest: {
-      bbox: meta.bbox, generated_at: meta.generated_at, detail_zoom: 99,
-      zones: [], zone_template: '', legacy: true,
-    },
-    overview: EMPTY, recent: EMPTY, psfdf: EMPTY,
-    timeline: buildSteps(hotspots, dated),
-    wind, detail: { nrt, dated, hotspots },
-  };
-});
+const dataP = loadInitialData(buildSteps);
 
 /* Le badge de température lit le champ fin : il ne peut donc plus attendre
  * l'ouverture du volet météo. Les deux fichiers partent en parallèle des données
@@ -3878,9 +3773,7 @@ async function init() {
   const { manifest, overview, recent, psfdf: rawPsfdf,
     timeline, wind: windData, detail } = data;
   const psfdf = currentPsfdf(rawPsfdf);
-  Z.manifest = manifest;
-  Z.available = new Set(manifest.zones);
-  Z.disabled = !!manifest.legacy;
+  zonesController.configure(manifest);
 
   map.addSource('recent', { type: 'geojson', data: recent });
   map.addSource('overview-hs', { type: 'geojson', data: overview });

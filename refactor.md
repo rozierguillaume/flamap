@@ -532,10 +532,10 @@ par un abonnement.
 
 ### Lot 7 — Chargement des données et des zones
 
-- [ ] Extraire le client JSON et le chargement initial.
-- [ ] Extraire le cache LRU, les zones visibles, la fusion et la déduplication.
-- [ ] Conserver le jeton anti-course et tous les replis.
-- [ ] Tester cache, zone absente, mouvement rapide et mode legacy.
+- [x] Extraire le client JSON et le chargement initial.
+- [x] Extraire le cache LRU, les zones visibles, la fusion et la déduplication.
+- [x] Conserver le jeton anti-course et tous les replis.
+- [x] Tester cache, zone absente, mouvement rapide et mode legacy.
 
 Critère de sortie : mêmes requêtes, mêmes données MapLibre, cache toujours borné.
 
@@ -664,7 +664,7 @@ de performance respectés.
 | 4 | terminé | `codex/refactor-4-utilitaires` | 2026-08-02 | `app.js` passé en module natif ; utilitaires de formatage, grille et géométrie extraits mécaniquement et couverts par 11 nouveaux tests (18 JS au total). API de mesure gelée, état privé et banc lot 0 adapté ; 11 requêtes de données et séquence avions inchangées. Front propriétaire à 277 645 octets bruts (+0,76 %) et 83 577 octets gzip (+2,56 %). Comparaison directe lot 3/lot 4 à 120 Hz : initialisation 555/545,9 ms, carte prête 1 701,1/1 703,1 ms, 3 600 frames et 14 manquées dans les deux cas, `show()` 1,175/1,152 ms de moyenne et 1,3/1,3 ms au p95, aucune hausse mémoire. 11 tests Python, syntaxe, YAML, artefact, `git diff --check`, fuseaux UTC/Honolulu et rendu 1440/820/375/320 px contrôlés ; doubles relectures à froid sans constat. |
 | 5 | terminé | `codex/refactor-5-timeline` | 2026-08-02 | Modèle de frise, prévisions, warp et contrôleurs de lecture/activité extraits ; 21 tests JS et 11 tests Python valides, dont timestamps irréguliers, bornage EFFIS, prévisions et moyennes mobiles compte/FRP ; syntaxe, YAML, bloc Python du workflow météo, fuseaux UTC/Honolulu et `git diff --check` contrôlés. Les trois workflows publient les nouveaux modules ; 11 requêtes de données inchangées. Front propriétaire brut à 282 927 octets (+1,9 % sur le lot 4). Banc complet : initialisation 845,5 ms, carte prête 1 816,9 ms, aucune frame perdue sur 30 s, `show()` à 1,02/1,00/1,20 ms moyenne/médiane/p95, mémoire médiane à 25 366 145 octets après cinq minutes. Lecture, pause, curseur et largeurs vérifiés ; graphiques national et PSFDF, métriques compte/FRP et rendu 1440/820/375/320 px contrôlés. Double relecture à froid : aucune régression comportementale ; lecture de l'état de lecture sortie de la boucle des particules après constat performance, correctif confirmé. Comme aux lots 3 et 4, le navigateur intégré ne permet pas de rendre réellement l'onglet masqué ; le listener `visibilitychange` et son ordre ont été conservés et relus. |
 | 6 | terminé | `codex/refactor-6-state` | 2026-08-02 | Store sans DOM ni MapLibre, snapshots et frise immuables, abonnements synchrones sans boucle ; seuls frise, dernier instant observé, heure courante et visibilité transversale sont migrés. 11 tests Python et 22 tests JS, syntaxe, YAML, artefact et `git diff --check` valides ; listeners, rAF, `fetch`, `setFilter` et appels à `applyBurnt()` inchangés. Rendu et interactions contrôlés à 1440/820/375/320 px, 10 requêtes de données présentes plus le 404 thermique attendu. Taille brute/gzip à +1,43/+1,41 % sur le lot 5. Comparaison directe 120 Hz : `show()` à 1,34/1,30/1,50 ms moyenne/médiane/p95 contre 1,30/1,30/1,50 ms au lot 5, 14 frames manquées contre 35 ; mémoire à 30,6–30,9 Mo contre 45,1 Mo au lot 5. Relecture à froid sans régression confirmée. Le masquage réel d'onglet reste non reproductible dans le navigateur intégré ; le listener `visibilitychange` et son ordre sont inchangés. |
-| 7 | à faire | | | |
+| 7 | terminé | `codex/refactor-7-data-zones` | 2026-08-02 | Client JSON, chargement initial et contrôleur de zones extraits avec cache et état privés ; ordre des requêtes, repli PSFDF, repli legacy, jeton anti-course, fusion et déduplication conservés. 9 nouveaux tests couvrent succès et données MapLibre, cache LRU, zone absente, mouvement rapide et legacy ; 11 tests Python et 31 tests JS, syntaxe, YAML et `git diff --check` valides. Les trois workflows publient les modules ; front brut/gzip à +0,69/+1,44 % sur le lot 6. Mode legacy, lecture et largeur du curseur, console, canvas et rendu contrôlés à 1440/820/375/320 px ; relecture à froid corrigée puis rejouée sans constat résiduel. |
 | 8 | à faire | | | |
 | 9 | à faire | | | |
 | 10 | à faire | | | |
