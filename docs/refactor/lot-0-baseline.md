@@ -43,11 +43,11 @@ passage à l'initialisation et aux cinq secondes de réseau qui la suivent. Gard
 l'onglet visible : masquer l'onglet suspend volontairement les animations. Le
 banc coupe les couches et retire son iframe après la mesure ou après une erreur.
 
-Le banc accède aux bindings privés `map`, `show` et `playing` du monolithe par
-`eval`. C'est volontairement un outil de caractérisation de l'état initial. Le
-lot 4 porte explicitement son adaptation à une API de mesure du module avant de
-rendre ces bindings privés ; aucune comparaison de `show()` ne doit être faite
-entre-temps avec un banc qui échoue ou ne compte plus les mêmes appels.
+Depuis le lot 4, le banc importe dans l'iframe l'API de mesure explicite et
+immuable renvoyée par `getMeasurementApi()`. L'état de la carte, `show()` et
+l'état de lecture restent privés au module ; seules des lectures et les bornes
+de début/fin de mesure sont exposées. Les durées continuent à couvrir le corps
+complet de chaque appel à `show()` pendant la lecture.
 
 ## Budgets de référence
 

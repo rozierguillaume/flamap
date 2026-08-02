@@ -1,3 +1,8 @@
+import { ago, confidenceText, fmt, fmtClock, nf } from './util/format.js';
+import { aircraftBearing, aircraftCurve, distanceKm, zoneId } from './util/geo.js';
+import { gridAt, gridBilinear, windAtGrid } from './util/grid.js';
+
+
 const MOBILE = matchMedia('(max-width: 720px)').matches;
 const H = 3600, DAY = 86400;
 const V = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
@@ -476,39 +481,6 @@ function setActivityOpen(open, selected = null) {
 }
 document.getElementById('activity-panel-close').addEventListener('click', () => setActivityOpen(false));
 
-/* Interpolation bilinéaire sur une grille régulière. La géométrie (`bbox`,
- * `nx`, `ny`) est passée à part de la nappe lue : depuis que la température a
- * sa propre grille, bien plus fine que celle du vent, un même point de la carte
- * ne tombe plus sur les mêmes mailles selon le champ interrogé. */
-function gridBilinear(grid, values, lon, lat) {
-  if (!grid || !values) return null;
-  const gx = (lon - grid.bbox[0]) / (grid.bbox[2] - grid.bbox[0]) * (grid.nx - 1);
-  const gy = (lat - grid.bbox[1]) / (grid.bbox[3] - grid.bbox[1]) * (grid.ny - 1);
-  if (!(gx >= 0 && gy >= 0 && gx <= grid.nx - 1 && gy <= grid.ny - 1)) return null;
-  const ix = Math.min(gx | 0, grid.nx - 2), iy = Math.min(gy | 0, grid.ny - 2);
-  const fx = gx - ix, fy = gy - iy, k = iy * grid.nx + ix;
-  const cells = [values[k], values[k + 1], values[k + grid.nx], values[k + grid.nx + 1]];
-  if (!cells.every(Number.isFinite)) return null;
-  return (cells[0] * (1 - fx) + cells[1] * fx) * (1 - fy)
-       + (cells[2] * (1 - fx) + cells[3] * fx) * fy;
-}
-
-/* Interpole une nappe d'une grille horaire à un instant quelconque. Le champ
- * thermique et le vent sont collectés par deux workflows de cadences
- * différentes : ils n'ont ni le même pas d'espace, ni la même base de temps, et
- * ne se lisent donc jamais au même indice de ligne. */
-function gridAt(grid, key, lon, lat, ts) {
-  if (!grid?.[key]) return null;
-  const x = (ts - grid.t0) / grid.dt;
-  const last = grid[key].length - 1;
-  if (!(x >= 0 && x <= last)) return null;
-  const k = Math.min(x | 0, last - 1), f = x - k;
-  const a = gridBilinear(grid, grid[key][k], lon, lat);
-  const b = gridBilinear(grid, grid[key][k + 1], lon, lat);
-  if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
-  return a + (b - a) * f;
-}
-
 /* Température et pluie au pas de 20 km quand `thermal.json` couvre l'instant
  * demandé. Sinon la grille du vent prend le relais : plus grossière — elle
  * lisse les reliefs et sous-estime les plaines de plusieurs degrés — mais elle
@@ -782,17 +754,6 @@ addEventListener('keydown', event => {
   }
 });
 
-const fmt = ts => new Date(ts * 1000).toLocaleString('fr-FR',
-  { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Paris' });
-const fmtClock = ts => {
-  const date = new Date(ts * 1000);
-  const day = date.toLocaleDateString('fr-FR',
-    { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'Europe/Paris' });
-  const time = date.toLocaleTimeString('fr-FR',
-    { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Paris' });
-  return `${day} à ${time}`;
-};
-
 /* Sur ordinateur l'heure suit le centre exact de la frise. Sur téléphone la
  * frise ouvre la feuille du bas : l'heure se pose juste au-dessus, sur la carte.
  * Les hauteurs changent avec le vent et l'ouverture des crédits, d'où la mesure
@@ -825,6 +786,7 @@ new ResizeObserver(placeClock).observe(document.getElementById('dock'));
 new ResizeObserver(placeClock).observe(document.getElementById('timebar'));
 
 let steps = [], playing = null;
+let showMeasurement = null;
 // instant affiché, en secondes epoch : la frise est parcourue en continu, ce
 // n'est plus un numéro de cran
 let curTs = 0;
@@ -846,6 +808,24 @@ const shown = {
   hotspots: Object.fromEntries(FIRMS_SOURCES.map(source => [source, true])),
 };
 let atLatest = true;
+
+const measurementApi = Object.freeze({
+  mapReady: () => !map.isMoving() && map.areTilesLoaded(),
+  playbackRunning: () => !!playing,
+  startShowTiming() {
+    if (showMeasurement) throw new Error('mesure de show() déjà active');
+    showMeasurement = [];
+  },
+  stopShowTiming() {
+    const durations = showMeasurement || [];
+    showMeasurement = null;
+    return durations;
+  },
+});
+
+export function getMeasurementApi() {
+  return measurementApi;
+}
 
 /* La case à cocher coupe la couche net ; le passage au passé, lui, se fait en
  * fondu (transitions déclarées à la création des couches). Deux leviers
@@ -1206,21 +1186,6 @@ function smokeLoop() {
     cancelAnimationFrame(S.raf); S.raf = null;
     sctx.clearRect(0, 0, S.w, S.h);
   }
-}
-
-function windAtGrid(d, g, lon, lat, out) {
-  if (!d || !g) return false;
-  const gx = (lon - d.bbox[0]) / (d.bbox[2] - d.bbox[0]) * (d.nx - 1);
-  const gy = (lat - d.bbox[1]) / (d.bbox[3] - d.bbox[1]) * (d.ny - 1);
-  if (!(gx >= 0 && gy >= 0 && gx <= d.nx - 1 && gy <= d.ny - 1)) return false;
-
-  const i = Math.min(gx | 0, d.nx - 2), j = Math.min(gy | 0, d.ny - 2);
-  const fx = gx - i, fy = gy - j, k = j * d.nx + i;
-  const bil = a => (a[k] * (1 - fx) + a[k + 1] * fx) * (1 - fy)
-                 + (a[k + d.nx] * (1 - fx) + a[k + d.nx + 1] * fx) * fy;
-
-  out.u = bil(g.u); out.v = bil(g.v); out.g = bil(g.gust);
-  return true;
 }
 
 function temperatureAt(lon, lat) {
@@ -2528,6 +2493,7 @@ function appearAt(ts) {
 }
 
 function show(ts) {
+  const measuredAt = showMeasurement ? performance.now() : null;
   const APPEAR = appearAt(ts);
   // le feu ne se prolonge pas dans la prévision : au-delà du dernier passage
   // satellite il reste dans son dernier état observé, le vieillir jusqu'à demain
@@ -2594,6 +2560,7 @@ function show(ts) {
   if (clock !== clockEl.textContent) clockEl.textContent = clock;
   windTime(ts);
   smokeTime(ts);
+  if (showMeasurement) showMeasurement.push(performance.now() - measuredAt);
 }
 
 /*
@@ -2879,23 +2846,6 @@ async function loadAircraftHistory() {
     clearTimeout(timeout);
     A.historyLoading = false;
   }
-}
-
-function aircraftCurve(p0, p1, p2, p3, t) {
-  const t2 = t * t, t3 = t2 * t;
-  return [0, 1].map(axis => .5 * (
-    2 * p1[axis]
-    + (-p0[axis] + p2[axis]) * t
-    + (2 * p0[axis] - 5 * p1[axis] + 4 * p2[axis] - p3[axis]) * t2
-    + (-p0[axis] + 3 * p1[axis] - 3 * p2[axis] + p3[axis]) * t3
-  ));
-}
-
-function aircraftBearing(from, to) {
-  const lat = (from[1] + to[1]) / 2 * Math.PI / 180;
-  const east = (to[0] - from[0]) * Math.cos(lat);
-  const north = to[1] - from[1];
-  return (Math.atan2(east, north) * 180 / Math.PI + 360) % 360;
 }
 
 function aircraftPose(track, ts, fallbackHeading = 0) {
@@ -3375,13 +3325,6 @@ psfdfPanelToggle.addEventListener('click', () => {
   setPsfdfPanelOpen(!psfdfPanel.classList.contains('open'));
 });
 
-function distanceKm(a, b) {
-  const lat = (a[1] + b[1]) / 2 * Math.PI / 180;
-  const dx = (a[0] - b[0]) * Math.cos(lat) * 111.32;
-  const dy = (a[1] - b[1]) * 110.57;
-  return Math.hypot(dx, dy);
-}
-
 function renderIncidentButtons(features) {
   incidentsEl.replaceChildren();
   for (const [index, feature] of features.entries()) {
@@ -3774,9 +3717,6 @@ document.getElementById('home-btn').addEventListener('click', () => {
   fitFrance();
 });
 
-const signed = value => `${value >= 0 ? '+' : '-'}${String(Math.abs(value)).padStart(2, '0')}`;
-const zoneId = (x, y) => `x${signed(x)}_y${signed(y)}`;
-
 function visibleZoneIds() {
   if (!Z.manifest || map.getZoom() < Z.manifest.detail_zoom) return [];
   const bounds = map.getBounds(), box = Z.manifest.bbox;
@@ -4000,25 +3940,6 @@ function popRow(root, text, cls = 'row') {
   return root;
 }
 
-const nf = (value, digits = 0) =>
-  Number(value).toLocaleString('fr-FR', { maximumFractionDigits: digits });
-
-/* Ancienneté relative au cran affiché, pas à l'heure murale : c'est ce que la
- * couleur du foyer raconte quand on remonte la frise. */
-function ago(seconds) {
-  if (!Number.isFinite(seconds) || seconds < 0) return '';
-  if (seconds < 90) return "à l'instant";
-  const minutes = Math.round(seconds / 60);
-  if (minutes < 60) return `il y a ${minutes} min`;
-  const hours = Math.floor(seconds / 3600);
-  if (hours < 24) {
-    const rest = Math.round((seconds - hours * 3600) / 60);
-    return `il y a ${hours} h${rest ? ' ' + String(rest).padStart(2, '0') : ''}`;
-  }
-  const days = Math.round(seconds / DAY);
-  return `il y a ${days} jour${days > 1 ? 's' : ''}`;
-}
-
 // instant réellement représenté : la prévision de vent ne vieillit pas le feu
 const shownTs = () => Math.min(curTs, steps.length ? steps[lastObs].ts : curTs);
 
@@ -4056,17 +3977,6 @@ function weatherBlock(root, lngLat, { divider = true, stamp = false } = {}) {
   block.append(button);
   root.append(block);
   return root;
-}
-
-/* La confiance FIRMS est une classe pour VIIRS (l/n/h) et un pourcentage pour
- * MODIS : les deux formats arrivent dans le même champ. */
-function confidenceText(value) {
-  const text = String(value ?? '').toLowerCase();
-  const words = { l: 'faible', low: 'faible', n: 'nominale', nominal: 'nominale',
-                  h: 'haute', high: 'haute' };
-  if (words[text]) return `confiance ${words[text]}`;
-  const number = Number(text);
-  return Number.isFinite(number) && text !== '' ? `confiance ${number} %` : '';
 }
 
 function hotspotPopup(feature, lngLat) {

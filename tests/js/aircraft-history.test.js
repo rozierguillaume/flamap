@@ -46,7 +46,7 @@ const setup = `
 
 const loaded = loadInlineContext(
   'loadAircraftHistory',
-  'function aircraftCurve',
+  'function aircraftPose',
   setup,
   { historyPayload },
 );

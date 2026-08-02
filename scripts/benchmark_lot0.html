@@ -48,6 +48,8 @@ app.addEventListener('load', async () => {
   let win = null;
   try {
   win = app.contentWindow;
+  const { getMeasurementApi } = await win.eval('import("/js/app.js")');
+  const measurement = getMeasurementApi();
   result.environment = {
     userAgent: win.navigator.userAgent,
     viewport: [win.innerWidth, win.innerHeight],
@@ -71,7 +73,7 @@ app.addEventListener('load', async () => {
   })();
 
   const visualDeadline = performance.now() + 30000;
-  while (!win.eval('!map.isMoving() && map.areTilesLoaded()')) {
+  while (!measurement.mapReady()) {
     if (performance.now() > visualDeadline)
       throw new Error('carte non stabilisée après 30 s');
     await sleep(25);
@@ -101,71 +103,51 @@ app.addEventListener('load', async () => {
   });
   result.idleRefreshIntervalMs = median(idleFrameTimes
     .slice(1).map((value, index) => value - idleFrameTimes[index]));
-  win.__lot0IdleRefreshIntervalMs = result.idleRefreshIntervalMs;
   result.memoryBeforeFiveMinutes = memory(win);
 
-  win.eval(`
-    window.__lot0 = {
-      originalShow: show,
-      showDurations: [],
-      frameTimes: [],
-      probeRaf: 0,
-      referenceIntervalMs: window.__lot0IdleRefreshIntervalMs,
-      started: performance.now()
-    };
-    show = function lot0MeasuredShow(ts) {
-      const before = performance.now();
-      try { return window.__lot0.originalShow(ts); }
-      finally { window.__lot0.showDurations.push(performance.now() - before); }
-    };
-    function lot0Frame(now) {
-      window.__lot0.frameTimes.push(now);
-      if (!playing) document.getElementById('play').click();
-      window.__lot0.probeRaf = requestAnimationFrame(lot0Frame);
-    }
-    document.getElementById('play').click();
-    window.__lot0.probeRaf = requestAnimationFrame(lot0Frame);
-  `);
+  measurement.startShowTiming();
+  const frameTimes = [];
+  let probeRaf = 0;
+  const lot0Frame = now => {
+    frameTimes.push(now);
+    if (!measurement.playbackRunning()) win.document.getElementById('play').click();
+    probeRaf = win.requestAnimationFrame(lot0Frame);
+  };
+  win.document.getElementById('play').click();
+  probeRaf = win.requestAnimationFrame(lot0Frame);
 
   await sleep(30000);
-  result.playback = win.eval(`(() => {
-    cancelAnimationFrame(window.__lot0.probeRaf);
-    if (playing) document.getElementById('play').click();
-    show = window.__lot0.originalShow;
-    const frames = window.__lot0.frameTimes;
-    const durations = window.__lot0.showDurations;
-    const deltas = frames.slice(1).map((value, index) => value - frames[index]);
-    const sortedDeltas = [...deltas].sort((a, b) => a - b);
-    const sortedShow = [...durations].sort((a, b) => a - b);
-    const percentile = (values, ratio) => values.length
-      ? values[Math.min(Math.floor(values.length * ratio), values.length - 1)] : null;
-    const elapsed = frames.length > 1 ? frames.at(-1) - frames[0] : 0;
-    const refreshIntervalMs = percentile(sortedDeltas, .5);
-    const expectedIntervals = window.__lot0.referenceIntervalMs
-      ? Math.round(elapsed / window.__lot0.referenceIntervalMs) : 0;
-    const missedFrames = Math.max(
-      0, expectedIntervals - Math.max(frames.length - 1, 0));
-    const summary = {
-      elapsedMs: elapsed,
-      frames: frames.length,
-      referenceIntervalMs: window.__lot0.referenceIntervalMs,
-      refreshIntervalMs,
-      missedFrames,
-      missedFramePoints: expectedIntervals
-        ? missedFrames / expectedIntervals * 100 : null,
-      frameMedianMs: percentile(sortedDeltas, .5),
-      frameP95Ms: percentile(sortedDeltas, .95),
-      showCalls: durations.length,
-      showMeanMs: durations.length
-        ? durations.reduce((sum, value) => sum + value, 0) / durations.length : null,
-      showMedianMs: percentile(sortedShow, .5),
-      showP95Ms: percentile(sortedShow, .95),
-      showMaxMs: durations.length ? Math.max(...durations) : null,
-    };
-    window.__lot0 = null;
-    window.__lot0IdleRefreshIntervalMs = null;
-    return summary;
-  })()`);
+  win.cancelAnimationFrame(probeRaf);
+  if (measurement.playbackRunning()) win.document.getElementById('play').click();
+  const showDurations = measurement.stopShowTiming();
+  const deltas = frameTimes.slice(1).map((value, index) => value - frameTimes[index]);
+  const sortedDeltas = [...deltas].sort((a, b) => a - b);
+  const sortedShow = [...showDurations].sort((a, b) => a - b);
+  const percentile = (values, ratio) => values.length
+    ? values[Math.min(Math.floor(values.length * ratio), values.length - 1)] : null;
+  const elapsed = frameTimes.length > 1 ? frameTimes.at(-1) - frameTimes[0] : 0;
+  const refreshIntervalMs = percentile(sortedDeltas, .5);
+  const expectedIntervals = result.idleRefreshIntervalMs
+    ? Math.round(elapsed / result.idleRefreshIntervalMs) : 0;
+  const missedFrames = Math.max(
+    0, expectedIntervals - Math.max(frameTimes.length - 1, 0));
+  result.playback = {
+    elapsedMs: elapsed,
+    frames: frameTimes.length,
+    referenceIntervalMs: result.idleRefreshIntervalMs,
+    refreshIntervalMs,
+    missedFrames,
+    missedFramePoints: expectedIntervals
+      ? missedFrames / expectedIntervals * 100 : null,
+    frameMedianMs: percentile(sortedDeltas, .5),
+    frameP95Ms: percentile(sortedDeltas, .95),
+    showCalls: showDurations.length,
+    showMeanMs: showDurations.length
+      ? showDurations.reduce((sum, value) => sum + value, 0) / showDurations.length : null,
+    showMedianMs: percentile(sortedShow, .5),
+    showP95Ms: percentile(sortedShow, .95),
+    showMaxMs: showDurations.length ? Math.max(...showDurations) : null,
+  };
 
   await sleep(210000);
   const memorySamples = [];

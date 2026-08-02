@@ -499,14 +499,14 @@ Critère de sortie : diff mécanique, comportement et mesures identiques.
 
 ### Lot 4 — Utilitaires purs
 
-- [ ] Passer `js/app.js` en module ES natif.
-- [ ] Adapter le banc du lot 0 à une API de mesure explicite avant que `show`
+- [x] Passer `js/app.js` en module ES natif.
+- [x] Adapter le banc du lot 0 à une API de mesure explicite avant que `show`
       et l'état de lecture deviennent privés au module ; ne pas exposer d'objet
       mutable global pour cela.
-- [ ] Extraire `util/format.js`, `util/grid.js` et `util/geo.js`.
-- [ ] Extraire uniquement les fonctions sans DOM, MapLibre ou état global.
-- [ ] Ajouter des tests de caractérisation pour chaque fonction extraite.
-- [ ] Conserver les signatures et résultats numériques.
+- [x] Extraire `util/format.js`, `util/grid.js` et `util/geo.js`.
+- [x] Extraire uniquement les fonctions sans DOM, MapLibre ou état global.
+- [x] Ajouter des tests de caractérisation pour chaque fonction extraite.
+- [x] Conserver les signatures et résultats numériques.
 
 Critère de sortie : utilitaires testés, aucune nouvelle dépendance circulaire.
 
@@ -661,7 +661,7 @@ de performance respectés.
 | 1 | terminé | `codex/refactor-1-correctifs` | 2026-08-02 | Points du lot vérifiés séparément ; avions conservés actifs par défaut sur décision explicite de l'utilisateur, avec 1 requête d'historique et 2 requêtes Airplanes.live observées dans les 5 premières secondes ; syntaxe Python/JS, bloc Python du workflow et `git diff --check` valides ; échec des données forcé et état d'erreur contrôlé ; initialisation finale à 401 ms, carte prête à 1 331 ms et aucune requête de données supplémentaire ; rendu desktop 1440 px et console contrôlés ; relecture à froid sans régression confirmée ; validation mobile 375 px confirmée par l'utilisateur. |
 | 2 | terminé | `codex/refactor-2-tests-ci` | 2026-08-02 | Fixtures locales FIRMS, EFFIS, PSFDF et météo ; garde réseau actif avant l'import du collecteur ; 11 tests Python et 7 tests JavaScript purs valides sous Python 3.12 et Node 22, y compris sous plusieurs fuseaux ; syntaxe Python/JS, YAML et `git diff --check` valides ; doubles relectures comportement et CI/performance sans constat résiduel. Après validation du lot, correction séparée demandée explicitement : les 30 minutes de traces d'avions sont conservées et rendues dès l'amorçage VPS, avec 3 tests de non-régression et documentation alignée. |
 | 3 | terminé | `codex/refactor-3-assets` | 2026-08-02 | CSS et JavaScript extraits byte à byte (empreintes identiques aux blocs inline) ; ordre MapLibre et exécution classique conservés ; trois workflows adaptés et artefact local contrôlé ; 11 tests Python et 7 tests JavaScript, syntaxe Python/JS, YAML et `git diff --check` valides ; assets servis en 200 avec les bons types MIME ; 11 requêtes de données inchangées ; médianes courtes à 633 ms pour l'initialisation et 1 492 ms pour la carte prête ; lecture longue : `show()` à 0,75/0,70/0,90 ms moyenne/médiane/p95, aucune frame perdue, mémoire médiane à 26 510 731 octets (+4,3 %) ; rendu et console contrôlés à 1440, 820, 375 et 320 px ; relecture à froid sans régression confirmée. Le navigateur intégré garde `visibilityState=visible` entre ses onglets : le scénario réellement masqué n'y est pas reproductible, mais le démarrage et son listener sont inchangés dans l'extraction. |
-| 4 | à faire | | | |
+| 4 | terminé | `codex/refactor-4-utilitaires` | 2026-08-02 | `app.js` passé en module natif ; utilitaires de formatage, grille et géométrie extraits mécaniquement et couverts par 11 nouveaux tests (18 JS au total). API de mesure gelée, état privé et banc lot 0 adapté ; 11 requêtes de données et séquence avions inchangées. Front propriétaire à 277 645 octets bruts (+0,76 %) et 83 577 octets gzip (+2,56 %). Comparaison directe lot 3/lot 4 à 120 Hz : initialisation 555/545,9 ms, carte prête 1 701,1/1 703,1 ms, 3 600 frames et 14 manquées dans les deux cas, `show()` 1,175/1,152 ms de moyenne et 1,3/1,3 ms au p95, aucune hausse mémoire. 11 tests Python, syntaxe, YAML, artefact, `git diff --check`, fuseaux UTC/Honolulu et rendu 1440/820/375/320 px contrôlés ; doubles relectures à froid sans constat. |
 | 5 | à faire | | | |
 | 6 | à faire | | | |
 | 7 | à faire | | | |
