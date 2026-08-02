@@ -146,7 +146,10 @@ jobs:
                        'js/util/grid.js',
                        'js/timeline/activity.js',
                        'js/timeline/controller.js',
-                       'js/timeline/model.js'):
+                       'js/timeline/model.js',
+                       'js/ui/panel-manager.js',
+                       'js/ui/popup-router.js',
+                       'js/ui/popup-view.js'):
               files.append((name, name))
           for zone_id in manifest['zones']:
               encoded = urllib.parse.quote(str(zone_id), safe='')

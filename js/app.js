@@ -24,6 +24,9 @@ import { CARD, createWindController } from './fx/wind.js';
 import { createActivityController } from './timeline/activity.js';
 import { createTimelineController } from './timeline/controller.js';
 import { addForecast, buildSteps } from './timeline/model.js';
+import { createPanelManager } from './ui/panel-manager.js';
+import { createPopupRouter } from './ui/popup-router.js';
+import { createPopupView, popEl, popRoot, popRow } from './ui/popup-view.js';
 import {
   getState,
   setCurrentTime,
@@ -222,18 +225,28 @@ const map = new maplibregl.Map({
 });
 if (!MOBILE) map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
 map.touchZoomRotate.disableRotation();
+const panelManager = createPanelManager();
+const popupView = createPopupView({
+  map, maplibregl, dock: document.getElementById('dock'),
+});
+const closePopup = () => popupView.close();
+const openPopup = (...args) => popupView.open(...args);
 
 document.getElementById('cr-btn').addEventListener('click', e => {
   const open = document.getElementById('credits').classList.toggle('open');
   e.currentTarget.setAttribute('aria-expanded', open);
   document.getElementById('incidents').classList.toggle('credits-open', open);
   if (open) {
+    panelManager.activate('credits', () => {
     setUpdatesOpen(false);
     setActivityOpen(false);
     setWeatherOpen(false);
     document.getElementById('layers').classList.remove('open');
     document.getElementById('layers-btn').setAttribute('aria-expanded', 'false');
     document.getElementById('incidents').classList.remove('layers-open');
+    });
+  } else {
+    panelManager.deactivate('credits');
   }
 });
 
@@ -257,6 +270,7 @@ document.getElementById('layers-btn').addEventListener('click', e => {
   e.currentTarget.setAttribute('aria-expanded', open);
   document.getElementById('incidents').classList.toggle('layers-open', open);
   if (open) {
+    panelManager.activate('layers', () => {
     trackUsage('layers-open');
     setUpdatesOpen(false);
     setActivityOpen(false);
@@ -264,6 +278,9 @@ document.getElementById('layers-btn').addEventListener('click', e => {
     document.getElementById('credits').classList.remove('open');
     document.getElementById('cr-btn').setAttribute('aria-expanded', 'false');
     document.getElementById('incidents').classList.remove('credits-open');
+    });
+  } else {
+    panelManager.deactivate('layers');
   }
 });
 
@@ -297,6 +314,8 @@ const weatherController = createWeatherController({
   closeUpdates: () => setUpdatesOpen(false),
   isActivityOpen: () => activityPanel.classList.contains('open'),
   closeActivity: () => setActivityOpen(false),
+  activatePanel: () => panelManager.activate('weather', () => {}),
+  deactivatePanel: () => panelManager.deactivate('weather'),
   trackUsage,
   elements: {
     panel: document.getElementById('weather-panel'),
@@ -326,6 +345,7 @@ function setUpdatesOpen(open) {
   updatesBtn.setAttribute('aria-expanded', open);
   document.getElementById('incidents').classList.toggle('updates-open', open);
   if (open) {
+    panelManager.activate('updates', () => {
     activityPanel.classList.remove('open');
     document.getElementById('incidents').classList.remove('activity-open');
     setWeatherOpen(false);
@@ -334,6 +354,9 @@ function setUpdatesOpen(open) {
     document.getElementById('layers').classList.remove('open');
     document.getElementById('layers-btn').setAttribute('aria-expanded', 'false');
     document.getElementById('incidents').classList.remove('credits-open', 'layers-open');
+    });
+  } else {
+    panelManager.deactivate('updates');
   }
 }
 updatesBtn.addEventListener('click', () => {
@@ -349,6 +372,7 @@ function setActivityOpen(open, selected = null) {
   document.getElementById('incidents').classList.toggle('activity-open', open);
   activityTip.classList.remove('open');
   if (open) {
+    panelManager.activate('activity', () => {
     setWeatherOpen(false);
     setUpdatesOpen(false);
     document.getElementById('credits').classList.remove('open');
@@ -356,9 +380,11 @@ function setActivityOpen(open, selected = null) {
     document.getElementById('layers').classList.remove('open');
     document.getElementById('layers-btn').setAttribute('aria-expanded', 'false');
     document.getElementById('incidents').classList.remove('credits-open', 'layers-open');
+    });
     activityController.drawLarge(selected);
     document.getElementById('activity-panel-close').focus();
   } else if (wasOpen) {
+    panelManager.deactivate('activity');
     activityEl.focus({ preventScroll: true });
   }
 }
@@ -1133,6 +1159,7 @@ function setExportOpen(open) {
   exportBtn.setAttribute('aria-expanded', open);
   document.getElementById('incidents').classList.toggle('export-open', open);
   if (open) {
+    panelManager.activate('export', () => {
     exportWind.disabled = !windController.hasCurrent();
     setUpdatesOpen(false);
     setActivityOpen(false);
@@ -1142,8 +1169,11 @@ function setExportOpen(open) {
     document.getElementById('layers').classList.remove('open');
     document.getElementById('layers-btn').setAttribute('aria-expanded', 'false');
     document.getElementById('incidents').classList.remove('credits-open', 'layers-open');
+    });
     requestAnimationFrame(() => exportKindButtons
       .find(button => button.dataset.exportKind === exportKind)?.focus());
+  } else {
+    panelManager.deactivate('export');
   }
 }
 
@@ -1300,7 +1330,7 @@ aircraftController = createAircraftController({
   nearestActiveFeature: (...args) => psfdfController.nearestActiveFeature(...args),
   openPopup,
   closePopup,
-  isPopupKind: kind => POP.kind === kind,
+  isPopupKind: kind => popupView.isKind(kind),
   hoverCursor,
   elements: {
     check: document.getElementById('ck-aircraft'),
@@ -1385,81 +1415,17 @@ const loadVisibleZones = () => zonesController.loadVisibleZones();
  * n'était cliquable nulle part. L'ordre de priorité est explicite ici, et ce
  * qui ne touche aucune couche tombe sur la sonde météo.
  * ===================================================================== */
-const POP = { popup: null, timer: null, kind: null };
-
-function closePopup() {
-  if (POP.popup) POP.popup.remove();   // le gestionnaire 'close' fait le ménage
-}
 
 /* Le dock (frise, légende) et le bandeau du haut sont des panneaux posés sur la
  * carte : MapLibre ne les connaît pas et laisserait la fiche filer dessous, ce
  * qui est fatal sur téléphone où la barre du bas occupe un bon tiers de l'écran.
  * On remonte donc la carte de ce qu'il faut — la fiche suit son point. */
-function fitPopup(popup) {
-  const element = popup.getElement();
-  if (!element) return;
-  const view = map.getContainer().getBoundingClientRect();
-  const dock = document.getElementById('dock').getBoundingClientRect();
-  const rect = element.getBoundingClientRect();
-  const floor = Math.min(view.bottom, dock.top) - 10;
-  const ceiling = view.top + 10;
-  let dy = 0;
-  if (rect.bottom > floor) dy = rect.bottom - floor;
-  // Une fiche plus haute que la bande disponible : on privilégie son en-tête.
-  if (rect.top - dy < ceiling) dy = rect.top - ceiling;
-  if (Math.abs(dy) > 2) map.panBy([0, dy], { duration: 240 });
-}
-
-function openPopup(lngLat, content, kind, tick) {
-  closePopup();
-  // Ancrage figé : sans lui, MapLibre le recalcule pendant le recadrage de
-  // `fitPopup()` et la fiche saute d'un côté à l'autre de son point.
-  const anchor = map.project(lngLat).y > map.getContainer().clientHeight * .45
-    ? 'bottom' : 'top';
-  const popup = new maplibregl.Popup({ closeButton: true, maxWidth: '290px', anchor })
-    .setLngLat(lngLat)
-    .setDOMContent(content)
-    .addTo(map);
-  fitPopup(popup);
-  POP.popup = popup;
-  POP.kind = kind;
-  if (tick) {
-    tick();
-    POP.timer = setInterval(tick, 1000);
-  }
-  popup.on('close', () => {
-    if (POP.popup !== popup) return;
-    clearInterval(POP.timer);
-    POP.popup = null; POP.timer = null; POP.kind = null;
-  });
-  return popup;
-}
-
 /* Le curseur de lecture, pas la main du lien : sur une carte, la main promet une
  * navigation alors qu'on ouvre une mesure au point visé. Le réticule dit
  * « je relève ici », et il reste distinct de la main ouverte du déplacement. */
 function hoverCursor(id) {
   map.on('mouseenter', id, () => map.getCanvas().style.cursor = 'crosshair');
   map.on('mouseleave', id, () => map.getCanvas().style.cursor = '');
-}
-
-const popEl = (tag, cls, text) => {
-  const node = document.createElement(tag);
-  if (cls) node.className = cls;
-  if (text !== undefined) node.textContent = text;
-  return node;
-};
-
-function popRoot(title, subtitle) {
-  const root = popEl('div', 'pop');
-  root.append(popEl('b', '', title));
-  if (subtitle) root.append(popEl('span', 'sub', subtitle));
-  return root;
-}
-
-function popRow(root, text, cls = 'row') {
-  if (text) root.append(popEl('div', cls, text));
-  return root;
 }
 
 // instant réellement représenté : la prévision de vent ne vieillit pas le feu
@@ -1598,7 +1564,7 @@ function weatherPopup(lngLat) {
   const popup = openPopup(lngLat, root, 'weather');
   // Le nom de la commune arrive après coup : la fiche est déjà lisible sans lui.
   communeAt(lngLat.lng, lngLat.lat).then(name => {
-    if (!name || POP.popup !== popup) return;
+    if (!name || !popupView.isCurrent(popup)) return;
     root.querySelector('b').textContent = name;
   }).catch(() => {});
   return popup;
@@ -1610,61 +1576,37 @@ function weatherPopup(lngLat) {
 const POP_LAYERS = [...PSFDF_HIT_LAYERS, 'aircraft-symbol', 'hotspots',
                     'hotspots-overview', 'recent-fill', 'burnt-fill', 'nrt-fill'];
 
-function popTarget(event) {
-  const { atLatest } = getState();
-  const layers = POP_LAYERS.filter(id => map.getLayer(id));
-  if (!layers.length) return null;
-  // Un foyer fait quelques pixels de rayon : au doigt, un point exact ne
-  // l'atteint presque jamais. La tolérance ne vaut que pour les symboles et les
-  // disques — un polygone, on est dedans ou on ne l'est pas.
-  const pad = MOBILE ? 13 : 8;
-  const box = [[event.point.x - pad, event.point.y - pad],
-               [event.point.x + pad, event.point.y + pad]];
-  const near = map.queryRenderedFeatures(box, { layers });
-  const under = map.queryRenderedFeatures(event.point, { layers });
-  const now = shownTs();
-  // Hors de la fenêtre d'ancienneté, un foyer est peint à opacité nulle mais
-  // reste « rendu » pour MapLibre : sans ce test, on ouvrirait la fiche d'un
-  // point invisible (voir le commentaire de `show()` sur l'absence de filtre).
-  const visible = feature => {
-    const ts = Number(feature.properties.ts);
-    return !Number.isFinite(ts) || (ts <= now && now - ts <= MAX_AGE);
-  };
-  for (const id of layers) {
-    const isPoint = id === 'aircraft-symbol' || isPsfdfLayer(id)
-      || id.startsWith('hotspots');
-    // Même chose pour les surfaces brûlées : au passé, `applyBurnt()` les rend
-    // transparentes sans les masquer.
-    if (!isPoint && !atLatest) continue;
-    const found = (isPoint ? near : under)
-      .filter(feature => feature.layer.id === id)
-      .find(feature => id === 'aircraft-symbol' || visible(feature));
-    if (found) return { id, feature: found };
-  }
-  return null;
-}
-
-function mapClick(event) {
-  const hit = popTarget(event);
-  if (!hit) {
+const popupRouter = createPopupRouter({
+  map,
+  mobile: MOBILE,
+  layers: POP_LAYERS,
+  isPointLayer: id => id === 'aircraft-symbol' || isPsfdfLayer(id)
+    || id.startsWith('hotspots'),
+  isAlwaysVisible: id => id === 'aircraft-symbol',
+  getAtLatest: () => getState().atLatest,
+  getShownTime: shownTs,
+  maxAge: MAX_AGE,
+  onGround: event => {
     trackUsage('popup-ground');
     weatherPopup(event.lngLat);
-    return;
-  }
-  trackUsage('popup-feature', { layer: hit.id });
-  if (hit.id === 'aircraft-symbol')
-    return aircraftController.renderPopup(hit.feature, event.lngLat);
-  if (isPsfdfLayer(hit.id)) {
-    closePopup();
-    psfdfController.renderDetail(hit.feature);
-    return;
-  }
-  const content = hit.id === 'hotspots' ? hotspotPopup(hit.feature, event.lngLat)
-    : hit.id === 'hotspots-overview' ? overviewPopup(hit.feature, event.lngLat)
-    : hit.id === 'nrt-fill' ? nrtPopup(event.lngLat)
-    : burntPopup(hit.feature, event.lngLat);
-  openPopup(event.lngLat, content, hit.id);
-}
+  },
+  onFeature: (hit, event) => {
+    trackUsage('popup-feature', { layer: hit.id });
+    if (hit.id === 'aircraft-symbol')
+      return aircraftController.renderPopup(hit.feature, event.lngLat);
+    if (isPsfdfLayer(hit.id)) {
+      closePopup();
+      psfdfController.renderDetail(hit.feature);
+      return;
+    }
+    const content = hit.id === 'hotspots' ? hotspotPopup(hit.feature, event.lngLat)
+      : hit.id === 'hotspots-overview' ? overviewPopup(hit.feature, event.lngLat)
+      : hit.id === 'nrt-fill' ? nrtPopup(event.lngLat)
+      : burntPopup(hit.feature, event.lngLat);
+    openPopup(event.lngLat, content, hit.id);
+  },
+});
+const mapClick = event => popupRouter.click(event);
 
 const dataP = loadInitialData(buildSteps);
 

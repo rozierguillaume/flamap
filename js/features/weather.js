@@ -28,6 +28,8 @@ export function createWeatherController({
   closeUpdates,
   isActivityOpen,
   closeActivity,
+  activatePanel = () => {},
+  deactivatePanel = () => {},
   trackUsage,
   elements,
 }) {
@@ -347,6 +349,7 @@ export function createWeatherController({
     weatherBtn.setAttribute('aria-expanded', open);
     incidents.classList.toggle('weather-open', open);
     if (open) {
+      activatePanel();
       closeUpdates();
       if (isActivityOpen()) closeActivity();
       credits.classList.remove('open');
@@ -358,6 +361,7 @@ export function createWeatherController({
       if (weatherData) drawWeather(); else loadWeather();
       weatherClose.focus();
     } else if (wasOpen) {
+      deactivatePanel();
       weatherPlaceRequest++;
       setWeatherPin(null);
       weatherBtn.focus({ preventScroll: true });
