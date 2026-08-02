@@ -10,9 +10,71 @@ import {
   rampAt,
   zoomScaleFor,
 } from '../../js/features/fires.js';
+import { createWeatherController, weatherCoordinates } from '../../js/features/weather.js';
 
 
 const colors = { front: '#1', hot: '#2', recent: '#3', old: '#4' };
+
+function fakeElement() {
+  const classes = new Set();
+  const attributes = new Map();
+  return {
+    attributes,
+    classList: {
+      add: (...names) => names.forEach(name => classes.add(name)),
+      contains: name => classes.has(name),
+      remove: (...names) => names.forEach(name => classes.delete(name)),
+      toggle(name, force) {
+        const enabled = force === undefined ? !classes.has(name) : force;
+        if (enabled) classes.add(name); else classes.delete(name);
+        return enabled;
+      },
+    },
+    addEventListener() {},
+    focus() {},
+    getBoundingClientRect: () => ({ left: 0, top: 0, width: 430, height: 424 }),
+    hidden: false,
+    innerHTML: '',
+    querySelector: () => null,
+    setAttribute: (name, value) => attributes.set(name, String(value)),
+    style: { left: '', top: '' },
+    textContent: '',
+    title: '',
+  };
+}
+
+function weatherHarness({ loadJson, fetchImpl, gridValueAt = () => null } = {}) {
+  const elements = Object.fromEntries([
+    'panel', 'button', 'chart', 'tip', 'place', 'status', 'title', 'follow',
+    'close', 'incidents', 'credits', 'creditsButton', 'layers', 'layersButton',
+  ].map(name => [name, fakeElement()]));
+  const mapListeners = [];
+  const tempKey = fakeElement(), tempValue = fakeElement();
+  const controller = createWeatherController({
+    map: {
+      getCenter: () => ({ lng: .5, lat: .5 }),
+      on: (name, listener) => mapListeners.push([name, listener]),
+    },
+    maplibregl: { LngLat: { convert: value => value }, Marker: class {} },
+    loadJson,
+    fetchImpl,
+    cardinals: Array(16).fill('nord'),
+    fmt: value => String(value),
+    getManifest: () => null,
+    gridValueAt,
+    getWindTime: () => 150,
+    legacyTemperatureAt: () => 23,
+    temperatureMetadata: () => ({ dated: true, ts: 100 }),
+    getTempKey: () => tempKey,
+    getTempValue: () => tempValue,
+    closeUpdates() {},
+    isActivityOpen: () => false,
+    closeActivity() {},
+    trackUsage() {},
+    elements,
+  });
+  return { controller, elements, mapListeners, tempKey, tempValue };
+}
 
 test('les rampes de foyers conservent leurs bornes et interpolations', () => {
   const desktop = createAgeRamps({ mobile: false, ...colors });
@@ -84,4 +146,62 @@ test('les contrôleurs installent les couches dans l’ordre historique', () => 
     'nrt-fill', 'recent-fill', 'recent-line', 'burnt-fill', 'burnt-line', 'nrt-line',
     'hotspots-overview', 'hotspots',
   ]);
+});
+
+test('le contrôleur météo conserve coordonnées, cache et listener de déplacement', async () => {
+  const urls = [];
+  const { controller, mapListeners } = weatherHarness({
+    loadJson: async () => assert.fail('chargement météo inattendu'),
+    fetchImpl: async url => {
+      urls.push(String(url));
+      return {
+        ok: true,
+        json: async () => ({ features: [{ properties: { city: 'Paris' } }] }),
+      };
+    },
+  });
+
+  assert.equal(weatherCoordinates({ lng: -1.25, lat: 44.5 }), '44.500° N, 1.250° O');
+  assert.equal(await controller.communeAt(2.3522, 48.8566), 'Paris');
+  assert.equal(await controller.communeAt(2.3522, 48.8566), 'Paris');
+  assert.equal(urls.length, 1);
+  assert.match(urls[0], /lon=2\.352200&lat=48\.856600&limit=1/);
+  assert.deepEqual(mapListeners.map(([name]) => name), ['moveend']);
+});
+
+test('le contrôleur météo charge les deux grilles une fois et garde les replis', async () => {
+  const requested = [];
+  const thermal = {
+    bbox: [0, 0, 1, 1], nx: 2, ny: 2, nt: 2, t0: 100, dt: 100,
+    temperature: [[10, 10, 10, 10], [20, 20, 20, 20]],
+    precipitation: [[0, 0, 0, 0], [1, 1, 1, 1]],
+  };
+  const forecast = {
+    bbox: [0, 0, 1, 1], nx: 2, ny: 2, nt: 2, t0: 100, dt: 100,
+    u: [[1, 1, 1, 1], [1, 1, 1, 1]],
+    v: [[1, 1, 1, 1], [1, 1, 1, 1]],
+    gust: [[10, 10, 10, 10], [10, 10, 10, 10]],
+  };
+  const { controller, elements, tempValue } = weatherHarness({
+    loadJson: async url => {
+      requested.push(url);
+      return url.includes('thermal') ? thermal : forecast;
+    },
+    fetchImpl: async () => assert.fail('géocodage inattendu'),
+  });
+
+  controller.startData();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(requested, [
+    'data/weather_forecast.json?v=4',
+    'data/thermal.json',
+  ]);
+  assert.equal(controller.temperatureAt(.5, .5), 15);
+  assert.equal(controller.temperatureAt(2, 2), 23);
+  assert.equal(tempValue.textContent, '15 °C');
+  controller.setOpen(true);
+  assert.match(elements.chart.innerHTML, /class="temp-line"/);
+  assert.match(elements.chart.innerHTML, /class="gust-line"/);
+  assert.match(elements.chart.innerHTML, /class="precip-bar/);
+  assert.match(elements.chart.attributes.get('aria-label'), /Historique et prévisions météo/);
 });
