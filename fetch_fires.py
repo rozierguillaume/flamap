@@ -20,9 +20,7 @@ Usage :
     python3 fetch_fires.py west south east north
 """
 
-import csv
 import hashlib
-import io
 import json
 import math
 import os
@@ -31,7 +29,6 @@ import sys
 import time
 import unicodedata
 import urllib.error
-from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
@@ -44,6 +41,25 @@ from flamap.geo import (
     swap_axes,
 )
 from flamap.http import get
+from flamap.firms import (
+    FIRMS_ATTEMPTS,
+    FIRMS_BASE,
+    FIRMS_FEEDS,
+    FIRMS_TIMEOUT,
+    HOTSPOT_DAYS,
+    OVERVIEW_DEG,
+    OVERVIEW_H,
+    TEMPORARY_SOURCE_FAILURE,
+    aggregate_hotspots as _aggregate_hotspots,
+    download_firms_feed as _download_firms_feed,
+    extend_hotspot_history as _extend_hotspot_history,
+    fetch_hotspots as _fetch_hotspots,
+)
+from flamap.timeline import (
+    SOCIAL_DAYS,
+    build_social_timeline as _build_social_timeline,
+    build_timeline,
+)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "data")
@@ -54,20 +70,8 @@ ZONES_OUT = os.path.join(OUT, "zones")
 DEFAULT_BBOX = (-5.5, 41.0, 10.0, 51.5)
 TILE_DEG = 1.0
 DETAIL_ZOOM = 7
-OVERVIEW_DEG = 0.25
-OVERVIEW_H = 1
 # Les contours affiches dans l'apercu national restent bornes a sept jours.
 RECENT_DAYS = 7
-HOTSPOT_DAYS = 10
-SOCIAL_DAYS = 14
-
-FIRMS_BASE = "https://firms.modaps.eosdis.nasa.gov/data/active_fire"
-FIRMS_FEEDS = [
-    ("VIIRS/NOAA-20", f"{FIRMS_BASE}/noaa-20-viirs-c2/csv/J1_VIIRS_C2_Europe_7d.csv"),
-    ("VIIRS/NOAA-21", f"{FIRMS_BASE}/noaa-21-viirs-c2/csv/J2_VIIRS_C2_Europe_7d.csv"),
-    ("VIIRS/S-NPP", f"{FIRMS_BASE}/suomi-npp-viirs-c2/csv/SUOMI_VIIRS_C2_Europe_7d.csv"),
-    ("MODIS", f"{FIRMS_BASE}/modis-c6.1/csv/MODIS_C6_1_Europe_7d.csv"),
-]
 
 EFFIS_WFS = "https://maps.effis.emergency.copernicus.eu/effis"
 
@@ -120,8 +124,6 @@ FINE_WIND_DEADLINE = 8 * 60
 # emporter foyers et perimetres avec elles.
 THERMAL_DEADLINE = 6 * 60
 FIRMS_FINE_MIN = 50
-FIRMS_TIMEOUT = 60
-FIRMS_ATTEMPTS = 2
 WIND_REQUEST_PAUSE = 6
 # Une reponse saine arrive en moins d'une seconde. Un timeout genereux ne protege
 # donc rien : il fixe le prix d'un incident. A 180 s, cinq poignees de main
@@ -129,7 +131,6 @@ WIND_REQUEST_PAUSE = 6
 # entiere sur son plafond de 25 min.
 OPEN_METEO_TIMEOUT = 30
 # EX_TEMPFAIL : le workflow reconnaît ce cas externe et conserve le site actif.
-TEMPORARY_SOURCE_FAILURE = 75
 
 EMPTY_FC = {"type": "FeatureCollection", "features": []}
 
@@ -147,6 +148,48 @@ def write_json(path, data, compact=True):
 
 def fc(features):
     return {"type": "FeatureCollection", "features": features}
+
+
+# Facades de compatibilite : les scripts et tests qui ajustent les constantes
+# de la CLI continuent a agir sur les fonctions extraites.
+def download_firms_feed(label, url):
+    return _download_firms_feed(
+        label,
+        url,
+        http_get=get,
+        timeout=FIRMS_TIMEOUT,
+        attempts=FIRMS_ATTEMPTS,
+    )
+
+
+def fetch_hotspots(bbox):
+    return _fetch_hotspots(
+        bbox,
+        feeds=FIRMS_FEEDS,
+        download=download_firms_feed,
+        failure_code=TEMPORARY_SOURCE_FAILURE,
+    )
+
+
+def extend_hotspot_history(hotspots, bbox):
+    return _extend_hotspot_history(
+        hotspots,
+        bbox,
+        zones_out=ZONES_OUT,
+        hotspot_days=HOTSPOT_DAYS,
+    )
+
+
+def aggregate_hotspots(hotspots):
+    return _aggregate_hotspots(
+        hotspots,
+        overview_deg=OVERVIEW_DEG,
+        overview_h=OVERVIEW_H,
+    )
+
+
+def build_social_timeline(timeline):
+    return _build_social_timeline(timeline, out=OUT, social_days=SOCIAL_DAYS)
 
 
 # ---------------------------------------------------------------------------
@@ -282,268 +325,6 @@ def fetch_psfdf(bbox):
         feature["properties"]["commune"],
     ))
     return fc(features)
-
-
-# ---------------------------------------------------------------------------
-# FIRMS
-# ---------------------------------------------------------------------------
-
-def download_firms_feed(label, url):
-    for attempt in range(FIRMS_ATTEMPTS):
-        try:
-            return get(url, timeout=FIRMS_TIMEOUT).decode("utf-8"), None
-        except Exception as error:
-            if attempt == FIRMS_ATTEMPTS - 1:
-                return None, error
-            print(f"  ! {label} indisponible, nouvel essai dans 5 s",
-                  file=sys.stderr)
-            time.sleep(5)
-
-
-def fetch_hotspots(bbox):
-    west, south, east, north = bbox
-    features = []
-
-    # Les quatre fichiers sont indépendants. Les télécharger ensemble réduit
-    # surtout le coût d'un incident réseau du runner : les timeouts ne
-    # s'additionnent plus pendant huit minutes avant d'annuler l'export.
-    with ThreadPoolExecutor(max_workers=len(FIRMS_FEEDS)) as executor:
-        downloads = list(executor.map(
-            lambda feed: download_firms_feed(*feed),
-            FIRMS_FEEDS,
-        ))
-
-    if not any(raw is not None for raw, _ in downloads):
-        for (label, _), (_, error) in zip(FIRMS_FEEDS, downloads):
-            print(f"  ! {label} : {error}", file=sys.stderr)
-        print("tous les flux FIRMS sont indisponibles : mise à jour reportée",
-              file=sys.stderr)
-        raise SystemExit(TEMPORARY_SOURCE_FAILURE)
-
-    for (label, _), (raw, error) in zip(FIRMS_FEEDS, downloads):
-        if raw is None:
-            print(f"  ! {label} : {error}", file=sys.stderr)
-            continue
-
-        count = 0
-        for row in csv.DictReader(io.StringIO(raw)):
-            lon, lat = float(row["longitude"]), float(row["latitude"])
-            if not (west <= lon <= east and south <= lat <= north):
-                continue
-
-            hhmm = row["acq_time"].zfill(4)
-            when = datetime.strptime(
-                f"{row['acq_date']} {hhmm}", "%Y-%m-%d %H%M"
-            ).replace(tzinfo=timezone.utc)
-            features.append({
-                "type": "Feature",
-                "geometry": {"type": "Point", "coordinates": [lon, lat]},
-                "properties": {
-                    "source": label,
-                    "t": when.isoformat(),
-                    "ts": int(when.timestamp()),
-                    "brightness": float(
-                        row.get("bright_ti4") or row.get("brightness") or 0
-                    ),
-                    "frp": float(row["frp"]),
-                    "confidence": row["confidence"],
-                    "daynight": row["daynight"],
-                    "scan": float(row["scan"]),
-                    "track": float(row["track"]),
-                },
-            })
-            count += 1
-        print(f"  {label}: {count} detections")
-
-    features.sort(key=lambda feature: feature["properties"]["ts"])
-    return fc(features)
-
-
-def extend_hotspot_history(hotspots, bbox):
-    """Complete les 7 jours FIRMS avec l'historique du deploiement precedent."""
-    if not os.path.isdir(ZONES_OUT) or not hotspots["features"]:
-        return hotspots
-
-    west, south, east, north = bbox
-    latest = hotspots["features"][-1]["properties"]["ts"]
-    cutoff = latest - HOTSPOT_DAYS * 86400
-    keys = {
-        (
-            feature["properties"]["source"],
-            feature["properties"]["ts"],
-            *feature["geometry"]["coordinates"],
-        )
-        for feature in hotspots["features"]
-    }
-    kept = 0
-    for name in os.listdir(ZONES_OUT):
-        if not name.endswith(".json"):
-            continue
-        try:
-            with open(os.path.join(ZONES_OUT, name), encoding="utf-8") as source:
-                previous = json.load(source)
-        except (OSError, ValueError):
-            continue
-        for feature in previous.get("hotspots", {}).get("features", []):
-            prop = feature.get("properties", {})
-            coordinates = feature.get("geometry", {}).get("coordinates", [])
-            if len(coordinates) < 2:
-                continue
-            lon, lat = coordinates[:2]
-            ts = prop.get("ts", 0)
-            key = (prop.get("source"), ts, lon, lat)
-            if (
-                cutoff <= ts <= latest
-                and west <= lon <= east
-                and south <= lat <= north
-                and key not in keys
-            ):
-                hotspots["features"].append(feature)
-                keys.add(key)
-                kept += 1
-
-    hotspots["features"].sort(key=lambda feature: feature["properties"]["ts"])
-    if kept:
-        print(
-            f"  historique conserve : {kept} detections "
-            f"(fenetre de {HOTSPOT_DAYS} jours)"
-        )
-    return hotspots
-
-
-def aggregate_hotspots(hotspots):
-    """Une feature par cellule de 0,25 degre, heure et satellite."""
-    groups = {}
-    seconds = OVERVIEW_H * 3600
-    for feature in hotspots["features"]:
-        lon, lat = feature["geometry"]["coordinates"]
-        prop = feature["properties"]
-        key = (
-            math.floor(lon / OVERVIEW_DEG),
-            math.floor(lat / OVERVIEW_DEG),
-            prop["ts"] // seconds,
-            prop["source"],
-        )
-        if key not in groups:
-            groups[key] = {
-                "type": "Feature",
-                "geometry": {
-                    "type": "Point",
-                    "coordinates": [
-                        round((key[0] + 0.5) * OVERVIEW_DEG, 4),
-                        round((key[1] + 0.5) * OVERVIEW_DEG, 4),
-                    ],
-                },
-                "properties": {
-                    "ts": key[2] * seconds,
-                    "source": prop["source"],
-                    "n": 0,
-                    "frp": 0,
-                    "overview": 1,
-                },
-            }
-        groups[key]["properties"]["n"] += 1
-        groups[key]["properties"]["frp"] += prop["frp"]
-    for feature in groups.values():
-        feature["properties"]["frp"] = round(feature["properties"]["frp"], 2)
-    features = sorted(groups.values(), key=lambda feature: feature["properties"]["ts"])
-    return fc(features)
-
-
-def build_timeline(hotspots, dated):
-    """Passages nationaux exacts, independants des donnees detaillees chargees."""
-    steps = []
-    current_by_source = {}
-    gap = 25 * 60
-    for feature in hotspots["features"]:
-        prop = feature["properties"]
-        current = current_by_source.get(prop["source"])
-        if (
-            current
-            and prop["ts"] - current["last"] <= gap
-        ):
-            current["n"] += 1
-            current["frp"] += prop["frp"]
-            current["last"] = prop["ts"]
-            continue
-        current = {
-            "ts": prop["ts"],
-            "last": prop["ts"],
-            "kind": "sat",
-            "label": prop["source"],
-            "n": 1,
-            "frp": prop["frp"],
-        }
-        current_by_source[prop["source"]] = current
-        steps.append(current)
-
-    first = steps[0]["ts"] if steps else 0
-    # Une publication EFFIS peut mettre a jour plusieurs perimetres. Les
-    # regrouper donne a la frise, et au journal d'information, une mesure utile
-    # de chaque reponse du service plutot qu'une simple date repetitive.
-    effis_updates = {}
-    for feature in dated["features"]:
-        prop = feature["properties"]
-        stamp = prop.get("lu")
-        if not stamp or stamp < first:
-            continue
-        update = effis_updates.setdefault(stamp, {"n": 0, "ha": 0})
-        update["n"] += 1
-        try:
-            update["ha"] += float(prop.get("AREA_HA") or 0)
-        except (TypeError, ValueError):
-            pass
-    for stamp, update in effis_updates.items():
-        steps.append({"ts": stamp, "kind": "effis", "label": "EFFIS",
-                      "n": update["n"], "ha": round(update["ha"], 1)})
-
-    for step in steps:
-        step.pop("last", None)
-        if step["kind"] == "sat":
-            step["frp"] = round(step["frp"], 2)
-    return sorted(steps, key=lambda step: step["ts"])
-
-
-def build_social_timeline(timeline):
-    """Conserve quatorze jours de passages pour la carte de publication.
-
-    La frise cartographique reste volontairement bornee a dix jours. Ce petit
-    historique agrege est prolonge a chaque collecte sans conserver les lourds
-    pixels FIRMS correspondants. Un passage du flux courant remplace l'ancien
-    passage du meme satellite situe dans la meme fenetre orbitale.
-    """
-    current = [dict(step) for step in timeline if step.get("kind") == "sat"]
-    if not current:
-        return []
-    latest = max(step["ts"] for step in current)
-    cutoff = latest - SOCIAL_DAYS * 86400
-    path = os.path.join(OUT, "social_timeline.json")
-    previous = []
-    try:
-        with open(path, encoding="utf-8") as source:
-            loaded = json.load(source)
-        if isinstance(loaded, list):
-            previous = loaded
-    except (OSError, ValueError):
-        pass
-
-    gap = 25 * 60
-    merged = list(current)
-    current_by_source = {}
-    for step in current:
-        current_by_source.setdefault(step.get("label"), []).append(step["ts"])
-    for step in previous:
-        if (
-            step.get("kind") != "sat"
-            or not isinstance(step.get("ts"), (int, float))
-            or step["ts"] < cutoff
-            or any(abs(step["ts"] - stamp) <= gap
-                   for stamp in current_by_source.get(step.get("label"), []))
-        ):
-            continue
-        merged.append(step)
-    return sorted((step for step in merged if step["ts"] >= cutoff),
-                  key=lambda step: step["ts"])
 
 
 # ---------------------------------------------------------------------------
