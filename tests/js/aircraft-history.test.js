@@ -34,7 +34,7 @@ const setup = `
     tracks: new Map(), features: [],
   };
   globalThis.testAircraftState = A;
-  let atLatest = true;
+  const getState = () => ({ atLatest: true });
   const document = { hidden: false };
   const AbortController = class { constructor() { this.signal = {}; } abort() {} };
   const setTimeout = () => 1;
@@ -87,7 +87,7 @@ const frameSetup = `
     ]]]),
   };
   globalThis.testFrameState = A;
-  let atLatest = true;
+  const getState = () => ({ atLatest: true });
   const document = { hidden: false };
   Date.now = () => 1_800_000;
   const aircraftPose = () => null;

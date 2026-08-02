@@ -4,6 +4,12 @@ import { gridAt, gridBilinear, windAtGrid } from './util/grid.js';
 import { createActivityController } from './timeline/activity.js';
 import { createTimelineController } from './timeline/controller.js';
 import { addForecast, buildSteps } from './timeline/model.js';
+import {
+  getState,
+  setCurrentTime,
+  setLayerVisibility,
+  setTimeline,
+} from './state.js';
 
 
 const MOBILE = matchMedia('(max-width: 720px)').matches;
@@ -773,11 +779,7 @@ addEventListener('resize', placeClock);
 new ResizeObserver(placeClock).observe(document.getElementById('dock'));
 new ResizeObserver(placeClock).observe(document.getElementById('timebar'));
 
-let steps = [];
 let showMeasurement = null;
-// dernier cran réellement observé : au-delà, la frise n'est plus qu'une
-// prévision de vent et le feu reste figé dans cet état
-let lastObs = 0;
 
 /*
  * Surfaces brulees : EFFIS n'archive rien, le WFS ne renvoie que l'etat courant
@@ -788,11 +790,7 @@ let lastObs = 0;
  * recent ; ailleurs, seuls les foyers datent la progression.
  */
 const FIRMS_SOURCES = ['VIIRS/NOAA-20', 'VIIRS/NOAA-21', 'VIIRS/S-NPP', 'MODIS'];
-const shown = {
-  dated: true, nrt: true, psfdf: true,
-  hotspots: Object.fromEntries(FIRMS_SOURCES.map(source => [source, true])),
-};
-let atLatest = true;
+let renderedAtLatest = true;
 
 const measurementApi = Object.freeze({
   mapReady: () => !map.isMoving() && map.areTilesLoaded(),
@@ -817,7 +815,8 @@ export function getMeasurementApi() {
  * différents pour deux gestes différents : décocher, c'est éteindre, alors que
  * remonter la frise, c'est glisser. */
 function applyBurnt() {
-  const vis = k => shown[k] ? 'visible' : 'none';
+  const { atLatest, layerVisibility } = getState();
+  const vis = k => layerVisibility[k] ? 'visible' : 'none';
   for (const id of ['recent-fill', 'recent-line', 'burnt-fill', 'burnt-line'])
     if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', vis('dated'));
   for (const id of ['nrt-fill', 'nrt-line'])
@@ -832,10 +831,11 @@ function applyBurnt() {
 }
 
 function applyPsfdf() {
+  const { atLatest, layerVisibility } = getState();
   for (const [id] of PSFDF_LAYERS)
     if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility',
-      shown.psfdf && atLatest ? 'visible' : 'none');
-  if (shown.psfdf) updatePsfdfPanel();
+      layerVisibility.psfdf && atLatest ? 'visible' : 'none');
+  if (layerVisibility.psfdf) updatePsfdfPanel();
   else setPsfdfPanelVisible(false);
 }
 
@@ -843,7 +843,8 @@ function applyPsfdf() {
  * surtout pas entrer dans `show()` : le réécrire à chaque frame ferait
  * reparser les milliers de foyers pendant l'animation. */
 function applyHotspots() {
-  const enabled = FIRMS_SOURCES.filter(source => shown.hotspots[source]);
+  const enabled = FIRMS_SOURCES.filter(
+    source => getState().layerVisibility.hotspots[source]);
   const filter = enabled.length === FIRMS_SOURCES.length ? null
     : ['in', ['get', 'source'], ['literal', enabled]];
   for (const id of ['hotspots-overview', 'hotspots'])
@@ -1017,6 +1018,7 @@ function smokeSpawn(seed = false, emitter = null) {
 }
 
 function smokeTime(ts, force = false, reseed = false) {
+  const { atLatest, lastObservedTime, layerVisibility, steps } = getState();
   const previousTs = S.ts;
   S.ts = ts;
   // En lecture, l'horloge physique est exactement celle du curseur. Le delta
@@ -1026,12 +1028,12 @@ function smokeTime(ts, force = false, reseed = false) {
   const bucket = Math.floor(ts / (15 * 60));
   if (!force && bucket === S.bucket) return;
   S.bucket = bucket;
-  const now = steps.length ? Math.min(ts, steps[lastObs].ts) : ts;
+  const now = steps.length ? Math.min(ts, lastObservedTime) : ts;
   S.emitters = S.sources
     .filter(feature => {
       const p = feature.properties || {};
       return p.ts <= now && p.ts > now - SMOKE_WINDOW
-          && shown.hotspots[p.source] !== false;
+          && layerVisibility.hotspots[p.source] !== false;
     })
     .map(feature => {
       const p = feature.properties || {}, n = Math.max(+p.n || 1, 1);
@@ -1111,6 +1113,7 @@ function smokeAdvance(seconds) {
 }
 
 function smokeFrame(now) {
+  const atLatest = getState().atLatest;
   S.raf = requestAnimationFrame(smokeFrame);
   // Une petite saccade ne doit pas ralentir l'horloge physique. L'onglet caché
   // arrête déjà proprement la boucle ; la borne d'une seconde ne sert qu'à
@@ -1380,13 +1383,13 @@ const activityController = createActivityController({
   mobile: MOBILE,
   map,
   firmsSources: FIRMS_SOURCES,
-  getSteps: () => steps,
+  getSteps: () => getState().steps,
   getContext: () => ({
     disabled: Z.disabled,
     manifest: Z.manifest,
     overview: FIRE_CONTEXT.overview,
     hotspots: Z.hotspots,
-    shownHotspots: shown.hotspots,
+    shownHotspots: getState().layerVisibility.hotspots,
   }),
   fmt,
   setOpen: setActivityOpen,
@@ -1408,6 +1411,9 @@ const timelineController = createTimelineController({
   playBtn,
   playMs: PLAY_MS,
   trackUsage,
+  getSteps: () => getState().steps,
+  getCurrentTime: () => getState().currentTime,
+  setCurrentTime,
   show,
   smokeTime,
   smokeLoop,
@@ -1433,6 +1439,7 @@ function formatUpdate(step) {
 }
 
 function drawUpdates() {
+  const steps = getState().steps;
   const recent = steps.filter(step => step.kind !== 'wind').slice(-40).reverse();
   document.getElementById('updates-list').innerHTML = recent.length ? recent.map(step => {
     const source = step.kind === 'sat' ? step.label : 'Copernicus EFFIS';
@@ -1535,7 +1542,7 @@ function scaleExportStyle(style) {
 }
 
 function drawExportSmoke(ctx, exportMap, parts = S.parts,
-  live = atLatest && !timelineController.isPlaying()) {
+  live = getState().atLatest && !timelineController.isPlaying()) {
   if (!S.on || !S.sprite || !parts.length) return;
   for (const p of parts) {
     const point = exportMap.project([p.lon, p.lat]);
@@ -1644,7 +1651,7 @@ function drawExportFooter(ctx, generatedAt, shownTime = timelineController.getTi
   ctx.fillText('Fond : IGN et Sentinel-2 / EOX — Toponymes : OpenStreetMap / OpenFreeMap', 20, 525);
 
   const extracted = Z.manifest?.generated_at
-    ? Date.parse(Z.manifest.generated_at) : (steps[lastObs]?.ts || 0) * 1000;
+    ? Date.parse(Z.manifest.generated_at) : getState().lastObservedTime * 1000;
   const lines = [
     `État affiché — ${exportDate(shownTime * 1000)}`,
     `Données actualisées — ${exportDate(extracted)}`,
@@ -1732,7 +1739,8 @@ function destroyExportMap(session) {
 
 function drawExportFrame(canvas, exportMap, {
   includeWind = true, windPhase = 0, smokeParts = S.parts,
-  liveSmoke = atLatest && !timelineController.isPlaying(), shownTime = timelineController.getTime(),
+  liveSmoke = getState().atLatest && !timelineController.isPlaying(),
+  shownTime = timelineController.getTime(),
   generatedAt = new Date(), media = 'Image', showLargeTime = false,
 } = {}) {
   const ctx = canvas.getContext('2d');
@@ -1767,8 +1775,9 @@ async function exportImageBlob({ includeWind = true } = {}) {
 }
 
 function setExportMapTime(exportMap, ts) {
+  const { lastObservedTime } = getState();
   const APPEAR = appearAt(ts);
-  const now = Math.min(ts, steps[lastObs].ts);
+  const now = Math.min(ts, lastObservedTime);
   const age = ['-', now, ['get', 'ts']];
   const color = ['interpolate', ['linear'], age, ...AGE_COLOR.flat()];
   for (const id of ['hotspots-overview', 'hotspots'])
@@ -1798,7 +1807,7 @@ function setExportMapTime(exportMap, ts) {
   for (const id of ['hotspots-overview', 'hotspots'])
     if (exportMap.getLayer(id)) exportMap.setPaintProperty(id, 'circle-opacity', opacity);
 
-  const latest = ts >= steps[lastObs].ts, k = latest ? 1 : 0;
+  const latest = ts >= lastObservedTime, k = latest ? 1 : 0;
   for (const id of ['recent-fill', 'burnt-fill'])
     if (exportMap.getLayer(id)) exportMap.setPaintProperty(id, 'fill-opacity', .70 * k);
   if (exportMap.getLayer('nrt-fill'))
@@ -1876,11 +1885,12 @@ function advanceExportSmoke(parts, seconds) {
 
 function buildExportSmoke(ts, limit = 320) {
   if (!S.on) return [];
-  const now = Math.min(ts, steps[lastObs].ts);
+  const { lastObservedTime, layerVisibility } = getState();
+  const now = Math.min(ts, lastObservedTime);
   const features = S.sources.filter(feature => {
     const p = feature.properties || {};
     return p.ts <= now && p.ts > now - SMOKE_WINDOW
-        && shown.hotspots[p.source] !== false;
+        && layerVisibility.hotspots[p.source] !== false;
   });
   if (!features.length) return [];
   const random = exportRandom(Math.floor(ts / (15 * 60)) ^ 0x51f15e);
@@ -2133,12 +2143,13 @@ function appearAt(ts) {
 }
 
 function show(ts) {
+  const { atLatest, lastObservedTime } = getState();
   const measuredAt = showMeasurement ? performance.now() : null;
   const APPEAR = appearAt(ts);
   // le feu ne se prolonge pas dans la prévision : au-delà du dernier passage
   // satellite il reste dans son dernier état observé, le vieillir jusqu'à demain
   // le ferait s'éteindre à l'écran alors qu'on n'en sait tout simplement rien
-  const now = Math.min(ts, steps[lastObs].ts);
+  const now = Math.min(ts, lastObservedTime);
 
   // Couleurs recalculées à partir de `now` : MapLibre garde les données en
   // mémoire GPU, on ne repousse jamais le GeoJSON.
@@ -2185,11 +2196,11 @@ function show(ts) {
     ...rampAfter(AGE_OPACITY, APPEAR)];
   for (const id of ['hotspots-overview', 'hotspots'])
     if (map.getLayer(id)) map.setPaintProperty(id, 'circle-opacity', opacity);
-  const was = atLatest;
-  atLatest = ts >= steps[lastObs].ts;
+  const was = renderedAtLatest;
+  renderedAtLatest = atLatest;
   // fondu des surfaces brûlées : le basculement ne se fait qu'au franchissement,
   // sinon la transition MapLibre serait relancée à chaque frame et figée à zéro
-  if (was !== atLatest) {
+  if (was !== renderedAtLatest) {
     document.body.classList.toggle('past', !atLatest);
     applyBurnt();
     applyPsfdf();
@@ -2431,7 +2442,7 @@ async function loadAircraftHistory() {
     if (!response.ok)
       throw new Error(`historique aérien HTTP ${response.status}`);
     const data = await response.json();
-    if (!A.on || !atLatest || document.hidden) return;
+    if (!A.on || !getState().atLatest || document.hidden) return;
     if (!data || !Array.isArray(data.aircraft))
       throw new Error('historique aérien invalide');
 
@@ -2544,7 +2555,7 @@ function aircraftTrailCoordinates(track, endTs) {
 
 function aircraftFrame(timestamp) {
   A.raf = null;
-  const run = A.on && atLatest && !document.hidden;
+  const run = A.on && getState().atLatest && !document.hidden;
   if (!run) return;
   if (timestamp - A.lastFrame < AIRCRAFT_FRAME_MS) {
     A.raf = requestAnimationFrame(aircraftFrame);
@@ -2588,7 +2599,7 @@ function aircraftFrame(timestamp) {
 }
 
 function aircraftLoop() {
-  const run = A.on && atLatest && !document.hidden;
+  const run = A.on && getState().atLatest && !document.hidden;
   if (run && !A.raf) {
     A.lastFrame = 0;
     A.raf = requestAnimationFrame(aircraftFrame);
@@ -2599,7 +2610,7 @@ function aircraftLoop() {
 }
 
 async function refreshAircraft() {
-  if (!A.on || !atLatest || document.hidden || A.loading) return;
+  if (!A.on || !getState().atLatest || document.hidden || A.loading) return;
   const requestStartedAt = Date.now();
   A.loading = true;
   A.controller = new AbortController();
@@ -2611,7 +2622,7 @@ async function refreshAircraft() {
     });
     if (!response.ok) throw new Error(`Airplanes.live HTTP ${response.status}`);
     const data = await response.json();
-    if (!A.on || !atLatest || document.hidden) return;
+    if (!A.on || !getState().atLatest || document.hidden) return;
     const serverNow = Number(data.now);
     const receivedAt = Number.isFinite(serverNow)
       ? (serverNow > 1e12 ? serverNow : serverNow * 1000)
@@ -2646,7 +2657,7 @@ async function refreshAircraft() {
     A.loading = false;
     A.controller = null;
     clearTimeout(A.timer);
-    if (A.on && atLatest && !document.hidden) {
+    if (A.on && getState().atLatest && !document.hidden) {
       // Les 4 s sont mesurées entre les départs de requête. Le différé de 6 s
       // laisse donc encore 2 s de marge si une réponse tarde à arriver.
       const wait = Math.max(1000, AIRCRAFT_POLL_MS - (Date.now() - requestStartedAt));
@@ -2667,7 +2678,7 @@ function aircraftSync() {
     aircraftLoop();
     return;
   }
-  if (!atLatest) {
+  if (!getState().atLatest) {
     closeAircraftPopup();
     aircraftSource();
     aircraftTrailsSource();
@@ -3085,11 +3096,12 @@ function psfdfOverviewCellDistance(center, coordinates) {
 }
 
 function psfdfActivityPassages(feature, area) {
+  const shownHotspots = getState().layerVisibility.hotspots;
   const center = feature.geometry.coordinates;
   const grouped = new Map();
   for (const hotspot of FIRE_CONTEXT.overview) {
     const p = hotspot.properties;
-    if (!shown.hotspots[p.source]
+    if (!shownHotspots[p.source]
         || psfdfOverviewCellDistance(center, hotspot.geometry.coordinates) > area.radius) continue;
     const key = `${p.source}/${p.ts}`;
     if (!grouped.has(key))
@@ -3112,6 +3124,7 @@ function psfdfActivityAxisDate(timestamp) {
 }
 
 function renderPsfdfActivity(container, feature) {
+  const steps = getState().steps;
   const area = psfdfActivityArea(feature);
   const passes = psfdfActivityPassages(feature, area);
   const activityMetric = activityController.getMetric();
@@ -3290,7 +3303,8 @@ function psfdfFeatureNearCenter() {
 }
 
 function updatePsfdfPanel() {
-  if (!shown.psfdf || !atLatest || !FIRE_CONTEXT.features.length
+  const { atLatest, layerVisibility } = getState();
+  if (!layerVisibility.psfdf || !atLatest || !FIRE_CONTEXT.features.length
       || map.getZoom() < 7) {
     setPsfdfPanelVisible(false);
     return;
@@ -3304,8 +3318,9 @@ let psfdfZoomFrame = 0;
 function updatePsfdfPanelDuringZoom() {
   if (!MOBILE || psfdfZoomFrame) return;
   psfdfZoomFrame = requestAnimationFrame(() => {
+    const { atLatest, layerVisibility } = getState();
     psfdfZoomFrame = 0;
-    if (!shown.psfdf || !atLatest || !FIRE_CONTEXT.features.length
+    if (!layerVisibility.psfdf || !atLatest || !FIRE_CONTEXT.features.length
         || map.getZoom() < 7) {
       setPsfdfPanelVisible(false);
       return;
@@ -3330,7 +3345,8 @@ const Z = {
 
 function focusIncident(feature, duration = 850, targetZoom = 8.5) {
   timelineController.stop();
-  if (steps.length) setTime(steps[lastObs].ts);
+  const { lastObservedTime, steps } = getState();
+  if (steps.length) setTime(lastObservedTime);
   map.easeTo({
     center: feature.properties.center,
     zoom: Math.max(map.getZoom(), targetZoom),
@@ -3483,7 +3499,8 @@ async function loadVisibleZones() {
       document.body.classList.remove('loading-detail');
       // Le chargement des pixels FIRMS précis peut élargir l'emprise estimée
       // du feu : rafraîchir la fiche une fois ces données disponibles.
-      if (shown.psfdf && atLatest) updatePsfdfPanel();
+      const { atLatest, layerVisibility } = getState();
+      if (layerVisibility.psfdf && atLatest) updatePsfdfPanel();
     }
   }
 
@@ -3583,8 +3600,8 @@ function popRow(root, text, cls = 'row') {
 
 // instant réellement représenté : la prévision de vent ne vieillit pas le feu
 const shownTs = () => {
-  const currentTime = timelineController.getTime();
-  return Math.min(currentTime, steps.length ? steps[lastObs].ts : currentTime);
+  const { currentTime, lastObservedTime, steps } = getState();
+  return Math.min(currentTime, steps.length ? lastObservedTime : currentTime);
 };
 
 function windPhrase(lon, lat) {
@@ -3738,6 +3755,7 @@ const POP_LAYERS = [...PSFDF_HIT_LAYERS, 'aircraft-symbol', 'hotspots',
                     'hotspots-overview', 'recent-fill', 'burnt-fill', 'nrt-fill'];
 
 function popTarget(event) {
+  const { atLatest } = getState();
   const layers = POP_LAYERS.filter(id => map.getLayer(id));
   if (!layers.length) return null;
   // Un foyer fait quelques pixels de rayon : au doigt, un point exact ne
@@ -3987,7 +4005,10 @@ async function init() {
     map.on('resize', loadVisibleZones);
   }
 
-  steps = timeline;
+  // dernier cran réellement observé : au-delà, la frise n'est plus qu'une
+  // prévision de vent et le feu reste figé dans cet état
+  const lastObserved = addForecast(timeline, W.data);
+  setTimeline(timeline, lastObserved);
   activityController.configureMetrics();
   FIRE_CONTEXT.overview = overview.features;
   S.overview = overview.features.length ? overview.features
@@ -4011,13 +4032,12 @@ async function init() {
     });
   renderIncidentButtons(shortcuts);
   updatePsfdfPanel();
-  lastObs = addForecast(steps, W.data);
-  timelineController.configure(steps);
+  timelineController.configure();
   drawActivity();
   drawUpdates();
   lockWidths();
   // on ouvre sur le dernier état observé, pas sur le bout de la prévision
-  setTime(steps[lastObs].ts);
+  setTime(getState().lastObservedTime);
   aircraftSync();
 
   if (manifest.generated_at) {
@@ -4070,29 +4090,31 @@ document.getElementById('layers').addEventListener('change', event => {
 });
 
 document.getElementById('ck-dated').addEventListener('change', e => {
-  shown.dated = e.target.checked; applyBurnt();
+  setLayerVisibility('dated', e.target.checked); applyBurnt();
 });
 document.getElementById('ck-nrt').addEventListener('change', e => {
-  shown.nrt = e.target.checked; applyBurnt();
+  setLayerVisibility('nrt', e.target.checked); applyBurnt();
 });
 document.getElementById('ck-psfdf').addEventListener('change', e => {
-  shown.psfdf = e.target.checked; applyPsfdf();
+  setLayerVisibility('psfdf', e.target.checked); applyPsfdf();
 });
 const hotspotsCheck = document.getElementById('ck-hotspots');
 const sourceChecks = [...document.querySelectorAll('.ck-source')];
 function syncHotspotsCheck() {
-  const count = FIRMS_SOURCES.filter(source => shown.hotspots[source]).length;
+  const shownHotspots = getState().layerVisibility.hotspots;
+  const count = FIRMS_SOURCES.filter(source => shownHotspots[source]).length;
   hotspotsCheck.checked = count === FIRMS_SOURCES.length;
   hotspotsCheck.indeterminate = count > 0 && count < FIRMS_SOURCES.length;
 }
 hotspotsCheck.addEventListener('change', event => {
-  for (const source of FIRMS_SOURCES) shown.hotspots[source] = event.target.checked;
+  for (const source of FIRMS_SOURCES)
+    setLayerVisibility(source, event.target.checked);
   for (const check of sourceChecks) check.checked = event.target.checked;
   hotspotsCheck.indeterminate = false;
   applyHotspots();
 });
 for (const check of sourceChecks) check.addEventListener('change', event => {
-  shown.hotspots[event.target.value] = event.target.checked;
+  setLayerVisibility(event.target.value, event.target.checked);
   syncHotspotsCheck();
   applyHotspots();
 });

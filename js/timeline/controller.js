@@ -7,17 +7,18 @@ export function createTimelineController({
   playBtn,
   playMs,
   trackUsage,
+  getSteps,
+  getCurrentTime,
+  setCurrentTime,
   show,
   smokeTime,
   smokeLoop,
 }) {
-  let steps = [];
-  let currentTime = 0;
   let playing = null;
   let warp = null;
 
-  function configure(nextSteps) {
-    steps = nextSteps;
+  function configure() {
+    const steps = getSteps();
     // Le pas d'une seconde garde atteignables les publications EFFIS, dont
     // LASTUPDATE n'est pas nécessairement aligné sur une minute.
     slider.min = steps[0].ts;
@@ -31,17 +32,20 @@ export function createTimelineController({
    * frise — ce qui n'était pas le cas avec une valeur indicielle et des marques
    * placées à la date. */
   function setTime(ts, fromSlider) {
-    currentTime = Math.min(Math.max(ts, steps[0].ts), steps[steps.length - 1].ts);
+    const steps = getSteps();
+    const currentTime = Math.min(Math.max(ts, steps[0].ts), steps[steps.length - 1].ts);
+    setCurrentTime(currentTime);
     if (!fromSlider) slider.value = currentTime;
     show(currentTime);
   }
 
   function installSliderListener() {
     slider.addEventListener('input', () => {
+      const steps = getSteps();
       if (!steps.length) return;
       stop();                           // prendre la main sur la frise met en pause
       setTime(+slider.value, true);
-      smokeTime(currentTime, true, true);
+      smokeTime(getCurrentTime(), true, true);
     });
   }
 
@@ -62,6 +66,7 @@ export function createTimelineController({
 
   function playFrame(now) {
     if (!playing) return;
+    const steps = getSteps();
     const p = Math.min((now - playing.start) / playMs, 1);
     if (p >= 1) { setTime(steps[steps.length - 1].ts); stop(); return; }
     if (now - playing.paint >= PAINT_MS) {
@@ -78,12 +83,13 @@ export function createTimelineController({
         stop();
         return;
       }
+      const steps = getSteps();
       if (!steps.length) return;
       trackUsage('timeline-play');
 
       // une lecture terminée — ou lâchée tout au bout — repart du début ; ailleurs
       // on reprend là où le curseur a été laissé, sans le renvoyer à gauche
-      let p = unease(warpProgress(warp, currentTime));
+      let p = unease(warpProgress(warp, getCurrentTime()));
       if (p > .995) p = 0;
 
       playBtn.textContent = '❚❚';
@@ -99,7 +105,7 @@ export function createTimelineController({
   return Object.freeze({
     configure,
     getPlayDuration: () => playMs,
-    getTime: () => currentTime,
+    getTime: getCurrentTime,
     installPlayListener,
     installSliderListener,
     isConfigured: () => !!warp?.C,
