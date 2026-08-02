@@ -119,7 +119,8 @@ AGENTS.md
 - Le chargement des zones reste progressif, dédupliqué, borné et protégé par
   son jeton de course.
 - Le nombre d'appels aux APIs externes reste identique. Les avions restent
-  opt-in et leur polling s'arrête dans un onglet masqué ou au passé.
+  activés par défaut et leur polling s'arrête s'ils sont décochés, dans un
+  onglet masqué ou au passé.
 - L'extraction en modules conserve un graphe d'import peu profond. Éviter les
   dizaines de fichiers minuscules et les imports en cascade.
 - Les nouveaux fichiers statiques doivent être copiés par les trois workflows
@@ -408,7 +409,7 @@ analysée et corrigée, ou explicitement soumise à l'utilisateur.
 
 - [ ] Les raccourcis et le panneau PSFDF affichent le même feu qu'avant.
 - [ ] Le graphique d'activité locale conserve ses valeurs et son échelle.
-- [ ] Aucun appel Airplanes.live n'a lieu avant activation volontaire.
+- [ ] Les avions démarrent au chargement et s'arrêtent dès qu'ils sont décochés.
 - [ ] Le polling avions s'arrête au passé et dans un onglet masqué.
 - [ ] Les traces, libellés et popups des appareils restent cohérents.
 
@@ -462,12 +463,12 @@ nouvelle conversation.
 
 ### Lot 1 — Correctifs préexistants isolés
 
-- [ ] Ajouter l'import `shutil` manquant au workflow front.
-- [ ] Rendre les avions réellement désactivés par défaut, conformément à la
-      documentation et au commentaire opt-in.
-- [ ] Uniformiser les textes de fréquence sur 30 minutes.
-- [ ] Afficher un état d'erreur si l'initialisation principale échoue.
-- [ ] Vérifier chaque correction séparément.
+- [x] Ajouter l'import `shutil` manquant au workflow front.
+- [x] Conserver les avions activés par défaut, conformément à la décision
+      explicite de l'utilisateur.
+- [x] Uniformiser les textes de fréquence sur 30 minutes.
+- [x] Afficher un état d'erreur si l'initialisation principale échoue.
+- [x] Vérifier chaque correction séparément.
 
 Ce lot modifie intentionnellement des défauts connus. Il ne doit contenir aucun
 déplacement architectural.
@@ -657,7 +658,7 @@ de performance respectés.
 | Lot | Statut | Branche/commit | Date | Vérifications et notes |
 |---:|---|---|---|---|
 | 0 | terminé | `codex/refactor-0-socle` | 2026-08-01 | Références et protocole dans `docs/refactor/lot-0-baseline.md` ; captures 1440/375 px ; trois séries mémoire, deux lectures finales ; syntaxe Python/JS et console vérifiées ; doubles relectures comportement/performance. |
-| 1 | à faire | | | |
+| 1 | terminé | `codex/refactor-1-correctifs` | 2026-08-02 | Points du lot vérifiés séparément ; avions conservés actifs par défaut sur décision explicite de l'utilisateur, avec 1 requête d'historique et 2 requêtes Airplanes.live observées dans les 5 premières secondes ; syntaxe Python/JS, bloc Python du workflow et `git diff --check` valides ; échec des données forcé et état d'erreur contrôlé ; initialisation finale à 401 ms, carte prête à 1 331 ms et aucune requête de données supplémentaire ; rendu desktop 1440 px et console contrôlés ; relecture à froid sans régression confirmée ; validation mobile 375 px confirmée par l'utilisateur. |
 | 2 | à faire | | | |
 | 3 | à faire | | | |
 | 4 | à faire | | | |

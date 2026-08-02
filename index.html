@@ -102,6 +102,12 @@
     -webkit-backdrop-filter: blur(14px);
     border: 1px solid rgba(255,255,255,.10); border-radius: 12px;
   }
+  #init-error {
+    position: fixed; z-index: 700; top: 50%; left: 50%;
+    width: min(380px, calc(100vw - 28px)); margin: 0;
+    padding: 16px 18px; transform: translate(-50%, -50%);
+    color: var(--ink); text-align: center;
+  }
 
   /* ---- logo ---- */
   #head { position: absolute; z-index: 500; top: 14px; left: 14px;
@@ -1011,7 +1017,7 @@
       "operatingSystem": "Tout système avec un navigateur web",
       "inLanguage": "fr-FR",
       "isAccessibleForFree": true,
-      "description": "Carte interactive des incendies en France : foyers actifs détectés par les satellites NASA FIRMS, surfaces brûlées Copernicus EFFIS, vent et évolution temporelle, avec une mise à jour toutes les deux heures.",
+      "description": "Carte interactive des incendies en France : foyers actifs détectés par les satellites NASA FIRMS, surfaces brûlées Copernicus EFFIS, vent et évolution temporelle, avec une mise à jour toutes les 30 minutes.",
       "featureList": [
         "Foyers d'incendie actifs détectés par satellite",
         "Surfaces brûlées récentes",
@@ -1045,6 +1051,9 @@
 <canvas id="smoke" aria-hidden="true"></canvas>
 <canvas id="wind" aria-hidden="true"></canvas>
 <div id="center-probe" hidden aria-hidden="true"></div>
+<p id="init-error" class="glass" role="alert" hidden>
+  La carte n’a pas pu être chargée. Rechargez la page pour réessayer.
+</p>
 
 <div id="head" class="glass">
   <div class="brand">
@@ -1067,8 +1076,8 @@
           title="Recentrer sur la France"></button>
   <section class="sr-only" aria-label="Présentation de Flamap">
     <h2>Suivre les incendies et feux de forêt en cours en France</h2>
-    <p>Flamap est une carte des incendies en France mise à jour toutes les deux
-    heures. Elle affiche les foyers actifs détectés par les satellites NASA
+    <p>Flamap est une carte des incendies en France mise à jour toutes les 30
+    minutes. Elle affiche les foyers actifs détectés par les satellites NASA
     FIRMS, les surfaces brûlées publiées par Copernicus EFFIS et le vent à
     10 mètres du modèle AROME de Météo-France.</p>
     <p>La frise temporelle permet de suivre l'évolution récente des feux,
@@ -4006,8 +4015,8 @@ const json = async url => {
  * l'interface parle donc de « moyens aériens » et signale seulement leur
  * proximité éventuelle avec un incendie détecté par la carte.
  *
- * La requête reste strictement opt-in. Tant que la case est décochée, aucun
- * appel n'est envoyé à Airplanes.live ; elle s'arrête aussi dans un onglet
+ * La couche est active au chargement. Dès que la case est décochée, aucun appel
+ * n'est envoyé à Airplanes.live ; la requête s'arrête aussi dans un onglet
  * masqué ou lorsque la frise montre le passé.
  */
 const AIRCRAFT_ICAO = (
@@ -4049,7 +4058,7 @@ const aircraftCheck = document.getElementById('ck-aircraft');
 const aircraftLabelsCheck = document.getElementById('ck-aircraft-label');
 const aircraftStatus = document.getElementById('aircraft-status');
 const A = {
-  on: true, timer: null, controller: null, loading: false,
+  on: aircraftCheck.checked, timer: null, controller: null, loading: false,
   labels: false,
   tracks: new Map(), features: [], clockOffset: 0,
   historyLoaded: false, historyLoading: false,
@@ -5653,7 +5662,11 @@ function start() {
   if (started || !map.isStyleLoaded()) return;
   started = true;
   clearInterval(poll);
-  init();
+  init().catch(error => {
+    console.error('Initialisation de la carte impossible', error);
+    document.getElementById('map').setAttribute('aria-label', 'Carte indisponible');
+    document.getElementById('init-error').hidden = false;
+  });
 }
 map.on('style.load', start);
 map.on('load', start);

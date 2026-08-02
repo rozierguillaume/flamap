@@ -158,7 +158,8 @@ les décrit comme opt-in. Il produit :
 Sur les cinq secondes suivant l'initialisation, une requête d'historique et
 deux requêtes Airplanes.live ont été observées. La couche a ensuite été coupée :
 aucune requête aérienne supplémentaire n'est apparue pendant les cinq minutes
-du test. La désactivation par défaut appartient explicitement au lot 1.
+du test. Le lot 1 conserve finalement cette activation par défaut, conformément
+à la décision explicite de l'utilisateur.
 
 ## Jeu de données utilisé
 

@@ -202,8 +202,8 @@ réanalyse ERA5, 25 km, latence 5 jours).
 
    `thermal.json` couvre ±18 h, avec sa propre base de temps : il est collecté
    toutes les 6 h par un workflow distinct, alors que le vent l'est toutes les
-   2 h, et les deux champs ne se lisent donc jamais au même indice de ligne. La
-   fenêtre est plus large que les ±12 h du vent exprès : les deux collectes
+   30 min, et les deux champs ne se lisent donc jamais au même indice de ligne.
+   La fenêtre est plus large que les ±12 h du vent exprès : les deux collectes
    peuvent être décalées de six heures, et sans cette marge le graphique perdait
    jusqu'à six heures de tracé. Le navigateur le charge au
    démarrage puisque la légende y lit la température. Au-delà de cette fenêtre —

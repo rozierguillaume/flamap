@@ -84,6 +84,7 @@ jobs:
           import json
           import os
           import pathlib
+          import shutil
           import sys
           import urllib.parse
           import urllib.request
