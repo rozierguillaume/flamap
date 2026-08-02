@@ -387,7 +387,7 @@ front retombe alors sur la température grossière que `wind_coarse.json`
 transporte toujours.
 
 Le service `flamap-aircraft-history` est déployé séparément sur le VPS. Il
-conserve quinze minutes en RAM et expose
+conserve trente minutes en RAM et expose
 `https://api.flamap.fr/aircraft-history` derrière nginx. Il n'est pas inclus
 dans l'artefact GitHub Pages.
 

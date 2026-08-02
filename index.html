@@ -4041,9 +4041,11 @@ const AIRCRAFT_HISTORY_URL = 'https://api.flamap.fr/aircraft-history';
 const AIRCRAFT_POLL_MS = 4 * 1000;
 const AIRCRAFT_DELAY_MS = 6 * 1000;
 const AIRCRAFT_HISTORY_TIMEOUT_MS = 4 * 1000;
-const AIRCRAFT_HISTORY_MAX_POINTS = 300;
+// Trente minutes à un relevé toutes les 4 s donnent 450 points ; la marge
+// absorbe les réponses irrégulières sans rogner le début de la trace.
+const AIRCRAFT_HISTORY_MAX_POINTS = 500;
 const AIRCRAFT_TRAIL_MS = 30 * 60 * 1000;
-const AIRCRAFT_TRACK_KEEP_MS = 15 * 60 * 1000;
+const AIRCRAFT_TRACK_KEEP_MS = AIRCRAFT_TRAIL_MS;
 const AIRCRAFT_TRAIL_GAP_MS = 90 * 1000;
 const AIRCRAFT_POINT_STALE_MS = 90 * 1000;
 const AIRCRAFT_FRAME_MS = 1000 / 20;
@@ -4182,7 +4184,7 @@ function updateAircraftTracks(points, now) {
 }
 
 /*
- * Le VPS mutualise la collecte des quinze dernières minutes. Cet amorçage
+ * Le VPS mutualise la collecte des trente dernières minutes. Cet amorçage
  * reste facultatif : s'il est indisponible, la collecte directe ci-dessous
  * construit exactement la même trace dans le navigateur.
  */
@@ -4354,12 +4356,17 @@ function aircraftFrame(timestamp) {
         properties: { ...p, track: pose.heading },
       });
     }
+  }
+  // Les positions courantes viennent toujours de la collecte directe, mais les
+  // traces peuvent déjà exister grâce au VPS. Les parcourir depuis A.tracks les
+  // rend visibles dès l'amorçage, même avant la première réponse Airplanes.live.
+  for (const [hex, track] of A.tracks) {
     const coordinates = aircraftTrailCoordinates(track, displayTs);
     if (coordinates.length >= 2) {
       trails.push({
         type: 'Feature',
         geometry: { type: 'LineString', coordinates },
-        properties: { hex: p.hex },
+        properties: { hex },
       });
     }
   }

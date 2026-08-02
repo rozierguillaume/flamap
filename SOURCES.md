@@ -277,14 +277,14 @@ affecter le reste de la carte.
 
 L'endpoint ne livre que l'état courant. Le service isolé
 `flamap-aircraft-history`, installé séparément sur le VPS, effectue donc la
-même requête toutes les 4 secondes et conserve 15 minutes de points dans un
+même requête toutes les 4 secondes et conserve 30 minutes de points dans un
 tampon circulaire en RAM. Il ne stocke pas d'archive durable : après un
 redémarrage, le tampon se reconstitue progressivement. Son endpoint agrégé
 n'est appelé qu'à l'activation du calque pour fournir le début des traces à
 tous les visiteurs sans multiplier la collecte amont.
 
 Le navigateur continue ensuite sa collecte directe, conserve les points pendant
-15 minutes et dessine les 10 dernières minutes, même si le calque est brièvement
+30 minutes et dessine les 30 dernières minutes, même si le calque est brièvement
 décoché. Le service du VPS reste un enrichissement facultatif : en cas d'échec,
 la trace se construit localement à partir de l'activation. Le navigateur
 abandonne l'amorçage après 4 secondes, rejette les formats inattendus, les ICAO24
