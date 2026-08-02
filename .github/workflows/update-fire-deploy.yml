@@ -15,6 +15,7 @@ on:
     # lorsque le collecteur ou ce workflow change.
     paths:
       - fetch_fires.py
+      - flamap/**
       - .github/workflows/update-fire-deploy.yml
   workflow_dispatch:
 

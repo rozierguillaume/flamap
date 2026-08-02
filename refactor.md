@@ -612,6 +612,14 @@ Ce lot est obligatoirement découpé par frontière de source : socle HTTP/géo,
 FIRMS/frise, EFFIS/PSFDF, météo, puis écriture/orchestration. Une conversation
 et un diff révisable par sous-lot.
 
+- [x] Sous-lot `14A-http-geo` : extraire le socle HTTP et les utilitaires
+      géographiques purs.
+- [ ] Sous-lot `14B-firms-timeline` : extraire FIRMS et la frise.
+- [ ] Sous-lot `14C-effis-psfdf` : extraire EFFIS et PSFDF.
+- [ ] Sous-lot `14D-meteo` : extraire la collecte météo.
+- [ ] Sous-lot `14E-writer-orchestration` : extraire l'écriture, la validation
+      et l'orchestration finale.
+
 - [ ] Créer le package `flamap/` selon l'architecture cible.
 - [ ] Déplacer une source à la fois avec tests et fixtures.
 - [ ] Garder `fetch_fires.py` comme CLI compatible.
@@ -676,7 +684,7 @@ de performance respectés.
 | 11 | terminé | `codex/refactor-11-panels-popups` | 2026-08-02 | Coordination d’exclusivité des panneaux extraite dans `ui/panel-manager.js` en conservant les fermetures et retours de focus propres à chaque panneau ; état, ancrage, recadrage et timer des fiches extraits dans `ui/popup-view.js` ; priorité, tolérance tactile et rejet des objets transparents extraits dans `ui/popup-router.js`. Trois tests portent le total à 43 tests JS, avec 11 tests Python ; syntaxe Python/JS et `git diff --check` valides. Ordre du clic carte, listeners, rAF, timers, `setFilter` et requêtes inchangés ; le workflow météo publie les trois modules. Exclusivité Calques/Météo, focus, Escape, clic extérieur, unicité des popups, fiche météo du fond de carte et rendu contrôlés à 1440 et 375 px ; relecture à froid corrigée puis rejouée sans constat résiduel. |
 | 12 | terminé | `codex/refactor-12-export` | 2026-08-02 | Export PNG, GIF instantané et GIF d’évolution extrait dans `export/map-export.js` avec lectures vivantes injectées et état des boucles vent/fumée restauré sous `finally`, y compris quand une restauration ou le chargement parallèle de l’encodeur échoue. Un test porte le total à 44 tests JS, avec 11 tests Python ; syntaxe Python/JS et `git diff --check` valides. Listeners, rAF et appels à `setFilter` inchangés ; front brut/gzip à +0,80/+1,53 % sur le lot 11. PNG et deux modes GIF générés sans erreur console ; bouton et boucle vivante rendus disponibles après export ; panneaux et rendu contrôlés à 1440/820/375/320 px. Relecture à froid sans constat résiduel. |
 | 13 | terminé | `codex/refactor-13-map-orchestration` | 2026-08-02 | Style IGN/Sentinel et toponymes extrait dans `map/base-style.js`, création MapLibre et contrôles dans `map/create-map.js`, racine renommée `main.js` ; ordre des sources, couches métier et démarrage par sondage conservé. Destruction idempotente sur départ réel, compatible bfcache ; 47 tests JS et 11 tests Python, syntaxe, graphe de 24 modules sans cycle et `git diff --check` valides. Front brut/gzip à +0,45/+0,62 % sur le lot 12 ; banc court à 268 ms pour l'initialisation et 1 155 ms pour la carte prête, huit requêtes locales de données initiales et aucune erreur applicative. Rendu, console, panneaux et lecture contrôlés à 1440/820/375/320 px ; doubles relectures à froid, correctif bfcache appliqué puis relu. Le navigateur intégré conserve `visibilityState=visible` entre ses onglets : le masquage réel reste non reproductible, mais le sondage `isStyleLoaded()`, ses deux listeners, l'intervalle de secours et `visibilitychange` ont été conservés et relus avant tout nettoyage. |
-| 14 | à faire | | | |
+| 14 | en cours | `codex/refactor-14a-http-geo` | 2026-08-02 | Sous-lot 14A terminé : primitives HTTP et géographiques extraites dans `flamap/http.py` et `flamap/geo.py`, avec les mêmes noms réexportés par la CLI ; filtre du workflow de collecte étendu à `flamap/**` après relecture à froid. Trois tests de caractérisation portent le total à 14 tests Python, avec 47 tests JavaScript ; syntaxe Python/JS, compatibilité CLI, absence de cycle et `git diff --check` valides. Aucun appel réseau, retry, `except` ou comportement de source modifié ; doubles relectures comportement/performance sans constat résiduel. |
 | 15 | à faire | | | |
 | 16 | à faire | | | |
 | 17 | à faire | | | |
