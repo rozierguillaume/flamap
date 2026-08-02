@@ -1,6 +1,9 @@
 import { ago, confidenceText, fmt, fmtClock, nf } from './util/format.js';
 import { aircraftBearing, aircraftCurve, distanceKm, zoneId } from './util/geo.js';
 import { gridAt, gridBilinear, windAtGrid } from './util/grid.js';
+import { createActivityController } from './timeline/activity.js';
+import { createTimelineController } from './timeline/controller.js';
+import { addForecast, buildSteps } from './timeline/model.js';
 
 
 const MOBILE = matchMedia('(max-width: 720px)').matches;
@@ -311,6 +314,7 @@ document.getElementById('layers-btn').addEventListener('click', e => {
 });
 
 const slider  = document.getElementById('slider');
+const playBtn = document.getElementById('play');
 const activityEl = document.getElementById('activity');
 const activityTip = document.getElementById('activity-tip');
 const activityPanel = document.getElementById('activity-panel');
@@ -331,22 +335,6 @@ const weatherStatus = document.getElementById('weather-status');
 const weatherTitle = document.getElementById('weather-title');
 const weatherFollow = document.getElementById('weather-follow');
 
-function syncActivityMetricControls() {
-  for (const input of activityMetricInputs)
-    input.checked = input.value === activityMetric;
-  for (const tab of activityMetricTabs) {
-    const selected = tab.dataset.activityMetric === activityMetric;
-    tab.setAttribute('aria-selected', selected);
-    tab.tabIndex = selected ? 0 : -1;
-  }
-}
-function setActivityMetric(metric) {
-  if (!['count', 'frp'].includes(metric)) return;
-  const changed = activityMetric !== metric;
-  activityMetric = metric;
-  syncActivityMetricControls();
-  if (changed) drawActivity();
-}
 // v4 : le fichier ne porte plus que le vent. La température vit dans
 // `thermal.json`, collecté par un workflow de cadence différente.
 const WEATHER_URL = 'data/weather_forecast.json?v=4';
@@ -473,7 +461,7 @@ function setActivityOpen(open, selected = null) {
     document.getElementById('layers').classList.remove('open');
     document.getElementById('layers-btn').setAttribute('aria-expanded', 'false');
     document.getElementById('incidents').classList.remove('credits-open', 'layers-open');
-    drawLargeActivity(selected);
+    activityController.drawLarge(selected);
     document.getElementById('activity-panel-close').focus();
   } else if (wasOpen) {
     activityEl.focus({ preventScroll: true });
@@ -785,11 +773,8 @@ addEventListener('resize', placeClock);
 new ResizeObserver(placeClock).observe(document.getElementById('dock'));
 new ResizeObserver(placeClock).observe(document.getElementById('timebar'));
 
-let steps = [], playing = null;
+let steps = [];
 let showMeasurement = null;
-// instant affiché, en secondes epoch : la frise est parcourue en continu, ce
-// n'est plus un numéro de cran
-let curTs = 0;
 // dernier cran réellement observé : au-delà, la frise n'est plus qu'une
 // prévision de vent et le feu reste figé dans cet état
 let lastObs = 0;
@@ -811,7 +796,7 @@ let atLatest = true;
 
 const measurementApi = Object.freeze({
   mapReady: () => !map.isMoving() && map.areTilesLoaded(),
-  playbackRunning: () => !!playing,
+  playbackRunning: () => timelineController.isPlaying(),
   startShowTiming() {
     if (showMeasurement) throw new Error('mesure de show() déjà active');
     showMeasurement = [];
@@ -864,7 +849,7 @@ function applyHotspots() {
   for (const id of ['hotspots-overview', 'hotspots'])
     if (map.getLayer(id)) map.setFilter(id, filter);
 
-  smokeTime(curTs, true, true);
+  smokeTime(timelineController.getTime(), true, true);
   drawActivity();
 }
 
@@ -1037,7 +1022,7 @@ function smokeTime(ts, force = false, reseed = false) {
   // En lecture, l'horloge physique est exactement celle du curseur. Le delta
   // est mis en attente puis consommé par la prochaine frame de fumée. Un saut
   // manuel, lui, réamorce explicitement l'état demandé.
-  if (playing && ts > previousTs && !reseed) S.pending += ts - previousTs;
+  if (timelineController.isPlaying() && ts > previousTs && !reseed) S.pending += ts - previousTs;
   const bucket = Math.floor(ts / (15 * 60));
   if (!force && bucket === S.bucket) return;
   S.bucket = bucket;
@@ -1131,6 +1116,7 @@ function smokeFrame(now) {
   // arrête déjà proprement la boucle ; la borne d'une seconde ne sert qu'à
   // absorber un blocage exceptionnel du thread principal.
   const wallDt = Math.min((now - S.last) / 1000, 1);
+  const playing = timelineController.isPlaying();
   S.last = now;
 
   // `pending` vient de la frise. Une pause historique continue au rythme réel.
@@ -1175,7 +1161,7 @@ function smokeLoop() {
   // elle consomme leur temps virtuel au lieu de le reporter sur la prochaine
   // source qui apparaîtrait.
   const run = S.on && !!W.cur
-           && !!(playing || S.pending || S.emitters.length || S.parts.length)
+           && !!(timelineController.isPlaying() || S.pending || S.emitters.length || S.parts.length)
            && !document.hidden;
   smokeCv.hidden = !S.on;
   if (run && !S.raf) {
@@ -1390,400 +1376,52 @@ function windLoop() {
   }
 }
 
-/**
- * Les données ne sont pas continues : VIIRS/MODIS ne voient la zone que lors
- * d'un passage orbital, et EFFIS ne republie ses polygones qu'une à deux fois
- * par jour. On reconstruit donc la liste des mises à jour réelles, et le
- * curseur saute de l'une à l'autre — un cran = une actualisation.
- */
-function buildSteps(hs, dated) {
-  const out = [];
-
-  // un passage satellite = une rafale de détections en quelques minutes
-  const GAP = 25 * 60;
-  const currentBySource = new Map();
-  for (const f of hs.features) {          // deja trie par date
-    const p = f.properties;
-    let cur = currentBySource.get(p.source);
-    if (cur && p.ts - cur.last <= GAP) {
-      cur.n++;
-      cur.frp += +p.frp || 0;
-      cur.last = p.ts;
-      continue;
-    }
-    cur = {
-      ts: p.ts, last: p.ts, kind: 'sat', label: p.source,
-      n: 1, frp: +p.frp || 0,
-    };
-    currentBySource.set(p.source, cur);
-    out.push(cur);
-  }
-  for (const step of out) {
-    delete step.last;
-    step.frp = Math.round(step.frp * 100) / 100;
-  }
-
-  // Chaque publication EFFIS d'un polygone, mais seulement dans la fenêtre
-  // couverte par les foyers : 7 jours viennent des flux FIRMS et 3 de
-  // l'historique conserve, alors que la couche EFFIS contient toute la saison.
-  // Sans ce filtre, une
-  // publication de mars étirerait la frise sur cinq mois et tasserait tous les
-  // passages satellite à l'extrémité droite.
-  const t0 = out.length ? out[0].ts : 0;
-  for (const t of new Set(dated.features.map(f => f.properties.lu).filter(Boolean))) {
-    if (t >= t0) out.push({ ts: t, kind: 'effis', label: 'EFFIS', n: 0 });
-  }
-
-  return out.sort((a, b) => a.ts - b.ts);
-}
-
-/* Les crans à venir. Le vent est le seul paramètre dont on connaisse la suite :
- * la frise peut continuer heure par heure après le dernier passage satellite,
- * le feu figé dans son dernier état observé et la seule nappe qui bouge.
- *
- * Désactivé pour l'instant : le vent porte bien les 24 h à venir, il
- * suffit de remonter cette constante pour les rouvrir. */
-const FORECAST_H = 0;
-
-function addForecast(wind) {
-  lastObs = steps.length - 1;
-  if (!wind || lastObs < 0) return;
-
-  const end = steps[lastObs].ts;
-  for (let k = 0; k < wind.nt; k++) {
-    const ts = wind.t0 + k * wind.dt;
-    // arrondi au-dessus : le premier cran tombe souvent une demi-heure après le
-    // dernier passage, et « +0 h » ne veut rien dire
-    if (ts > end && ts <= end + FORECAST_H * H)
-      steps.push({ ts, kind: 'wind', label: 'prévision', n: 0, h: Math.ceil((ts - end) / H) });
-  }
-}
-
-/* =====================================================================
- * LECTURE — le temps balayé en continu, à vitesse variable
- *
- * Les mises à jour ne sont pas réparties uniformément : deux ou trois passages
- * satellite se suivent en une heure, puis plus rien pendant douze. Une lecture
- * à vitesse constante passerait l'essentiel de son temps sur du vide et
- * expédierait les rafales ; une lecture cran par cran — l'ancienne — donnait
- * des sauts de plusieurs heures d'un coup, d'où l'impression de à-coups.
- *
- * On calcule donc un coût de lecture le long de la frise : élevé là où les
- * mises à jour se pressent, plancher ailleurs. Le curseur avance vite dans les
- * creux et ralentit dans les rafales. Le noyau gaussien rend ce coût continu,
- * donc l'accélération l'est aussi — aucune cassure de vitesse aux crans.
- * ===================================================================== */
-const WARP_N   = 720;                       // échantillons de la table
-const WARP_K   = 6;                         // ralentissement max dans une rafale
-const PLAY_MS  = MOBILE ? 19000 : 23000;    // durée d'une lecture complète
-const WARP = { t0: 0, span: 1, C: null };
-
-function buildWarp() {
-  const t0 = steps[0].ts, span = (steps[steps.length - 1].ts - t0) || 1;
-  // largeur du noyau : une rafale « pèse » environ deux heures de frise
-  const sigma = Math.max(span / 120, 45 * 60);
-  const C = new Float64Array(WARP_N + 1);
-  let acc = 0;
-  for (let i = 0; i < WARP_N; i++) {
-    const t = t0 + span * (i + .5) / WARP_N;
-    let d = 0;
-    for (const s of steps) {
-      const z = (t - s.ts) / sigma;
-      // au-delà de 4 sigma la gaussienne ne pèse plus rien
-      if (z > -4 && z < 4) d += Math.exp(-.5 * z * z) * (s.kind === 'sat' ? 1 : .35);
-    }
-    acc += 1 + WARP_K * (d / (1 + d));   // saturé : dix passages ne figent pas la lecture
-    C[i + 1] = acc;
-  }
-  for (let i = 0; i <= WARP_N; i++) C[i] /= acc;
-  WARP.t0 = t0; WARP.span = span; WARP.C = C;
-}
-
-// progression de lecture (0→1) → instant de la frise
-function warpTime(p) {
-  const C = WARP.C;
-  let lo = 0, hi = WARP_N;
-  while (hi - lo > 1) { const m = (lo + hi) >> 1; if (C[m] <= p) lo = m; else hi = m; }
-  const a = C[lo], b = C[lo + 1];
-  return WARP.t0 + WARP.span * (lo + (b > a ? (p - a) / (b - a) : 0)) / WARP_N;
-}
-
-// l'inverse, pour reprendre la lecture là où le curseur a été lâché
-function warpProgress(ts) {
-  const x = (ts - WARP.t0) / WARP.span * WARP_N;
-  if (x <= 0) return 0;
-  if (x >= WARP_N) return 1;
-  const i = x | 0, f = x - i;
-  return WARP.C[i] + (WARP.C[i + 1] - WARP.C[i]) * f;
-}
-
-// démarrage et arrivée adoucis, sans écraser la modulation par densité
-const ease = p => .72 * p + .28 * (p * p * (3 - 2 * p));
-// monotone, mais sans forme fermée commode : on l'inverse par dichotomie, une
-// seule fois par appui sur Lecture
-function unease(y) {
-  let lo = 0, hi = 1;
-  for (let i = 0; i < 24; i++) { const m = (lo + hi) / 2; if (ease(m) < y) lo = m; else hi = m; }
-  return (lo + hi) / 2;
-}
-
-/* La frise n'est nationale que lorsque l'emprise de la carte contient
- * réellement toute la bbox France. Un seuil de zoom ne suffit pas : à zoom
- * égal, un téléphone montre beaucoup moins de territoire qu'un ordinateur.
- * Dès qu'une partie du pays sort de l'écran, la frise suit donc l'emprise
- * visible et les sources cochées.
- *
- * Les passages locaux sont reconstruits séparément pour chaque satellite :
- * deux détections distantes de moins de 25 minutes appartiennent à la même
- * orbite. C'est la même définition que celle de la timeline nationale. */
-function activityIsNational(bounds = map.getBounds()) {
-  if (Z.disabled || !Z.manifest) return true;
-  const box = Z.manifest.bbox;
-  return bounds.getWest() <= box[0] && bounds.getEast() >= box[2]
-    && bounds.getSouth() <= box[1] && bounds.getNorth() >= box[3];
-}
-
-function activityPassages() {
-  const enabled = source => shown.hotspots[source];
-  const bounds = map.getBounds();
-  if (activityIsNational(bounds))
-    return steps.filter(step => step.kind === 'sat' && enabled(step.label));
-
-  const inside = ([lon, lat]) =>
-    lon >= bounds.getWest() && lon <= bounds.getEast()
-    && lat >= bounds.getSouth() && lat <= bounds.getNorth();
-
-  // Sous le seuil de chargement des cellules détaillées, l'aperçu national
-  // contient déjà une somme par cellule de 0,25°, heure et satellite. On peut
-  // donc le découper spatialement sans télécharger toute la France.
-  if (map.getZoom() < Z.manifest.detail_zoom) {
-    const grouped = new Map();
-    for (const feature of FIRE_CONTEXT.overview) {
-      const p = feature.properties;
-      if (!enabled(p.source) || !inside(feature.geometry.coordinates)) continue;
-      const key = `${p.source}/${p.ts}`;
-      if (!grouped.has(key))
-        grouped.set(key, { ts: p.ts, kind: 'sat', label: p.source, n: 0, frp: 0 });
-      grouped.get(key).n += +p.n || 1;
-      grouped.get(key).frp += +p.frp || 0;
-    }
-    return [...grouped.values()].sort((a, b) => a.ts - b.ts);
-  }
-
-  const bySource = new Map(FIRMS_SOURCES.map(source => [source, []]));
-  for (const feature of Z.hotspots) {
-    const p = feature.properties, source = p.source;
-    if (enabled(source) && inside(feature.geometry.coordinates))
-      bySource.get(source)?.push({ ts: p.ts, frp: +p.frp || 0 });
-  }
-
-  const passages = [], gap = 25 * 60;
-  for (const [label, detections] of bySource) {
-    detections.sort((a, b) => a.ts - b.ts);
-    let current = null;
-    for (const detection of detections) {
-      if (current && detection.ts - current.last <= gap) {
-        current.n++;
-        current.frp += detection.frp;
-        current.last = detection.ts;
-      } else {
-        current = {
-          ts: detection.ts, last: detection.ts, kind: 'sat', label,
-          n: 1, frp: detection.frp,
-        };
-        passages.push(current);
-      }
-    }
-  }
-  return passages.sort((a, b) => a.ts - b.ts);
-}
-
-let activityMetric =
-  document.querySelector('input[name="activity-metric"]:checked')?.value || 'count';
-let renderedActivity = [], renderedActivityAverages = [];
-let activityPeak = 1, activityT0 = 0, activitySpan = 1;
-syncActivityMetricControls();
-
-const activityValue = step => activityMetric === 'frp' ? (+step.frp || 0) : step.n;
-const ACTIVITY_AVERAGE_H = 48;
-const activityAverageText = `moyenne centrée sur ${ACTIVITY_AVERAGE_H} h`;
-/* Les passages ne sont pas espacés régulièrement : une moyenne sur un nombre
- * fixe de barres changerait de durée selon la zone et la période affichées.
- * La fenêtre est bornée par le temps et centrée sur chaque passage, avec
- * 24 heures de données de chaque côté. Chaque passage compte une fois. */
-function activityMovingAverage(passes, windowMs = ACTIVITY_AVERAGE_H * H) {
-  const averages = [];
-  const halfWindow = windowMs / 2;
-  let first = 0, last = 0, sum = 0;
-  for (let i = 0; i < passes.length; i++) {
-    const start = passes[i].ts - halfWindow;
-    const end = passes[i].ts + halfWindow;
-    while (last < passes.length && passes[last].ts <= end)
-      sum += activityValue(passes[last++]);
-    while (first < last && passes[first].ts < start)
-      sum -= activityValue(passes[first++]);
-    averages.push({ ts: passes[i].ts, value: sum / (last - first) });
-  }
-  return averages;
-}
-const countLabel = n => `${n.toLocaleString('fr-FR')} foyer${n > 1 ? 's' : ''}`;
-const powerLabel = frp => `${frp.toLocaleString('fr-FR', {
-  maximumFractionDigits: frp < 100 ? 1 : 0,
-})} MW`;
-const primaryActivityLabel = step =>
-  activityMetric === 'frp' ? powerLabel(+step.frp || 0) : countLabel(step.n);
-const secondaryActivityLabel = step =>
-  activityMetric === 'frp' ? countLabel(step.n) : powerLabel(+step.frp || 0);
-const activityLabel = step =>
-  `${fmt(step.ts)} — ${primaryActivityLabel(step)} — ${secondaryActivityLabel(step)} — ${step.label}`;
-
-function activityScale(peak, metric = activityMetric, intervals = 4) {
-  const rawStep = Math.max(peak, Number.EPSILON) / intervals;
-  const magnitude = 10 ** Math.floor(Math.log10(rawStep));
-  const normalized = rawStep / magnitude;
-  const factor = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10;
-  const step = metric === 'count' ? Math.max(1, factor * magnitude) : factor * magnitude;
-  const max = Math.max(step, Math.ceil(peak / step) * step);
-  const ticks = [];
-  for (let value = 0; value <= max + step / 2; value += step) ticks.push(value);
-  return { max, ticks };
-}
-
-function activityTickLabel(value, metric = activityMetric) {
-  return value.toLocaleString('fr-FR', {
-    maximumFractionDigits: metric === 'frp' && value < 10 ? 1 : 0,
-  });
-}
-
-function showActivityDetail(index) {
-  const step = renderedActivity[index];
-  if (!step) return;
-  for (const bar of activityLarge.querySelectorAll('b.selected'))
-    bar.classList.remove('selected');
-  activityLarge.querySelector(`b[data-i="${index}"]`)?.classList.add('selected');
-  const strong = document.createElement('strong');
-  strong.textContent = primaryActivityLabel(step);
-  const meta = document.createElement('span');
-  const average = renderedActivityAverages[index]?.value || 0;
-  meta.textContent = `${fmt(step.ts)} — ${step.label} — ${secondaryActivityLabel(step)} — ${activityAverageText} : ${activityMetric === 'frp' ? powerLabel(average) : countLabel(Math.round(average))}`;
-  activityDetail.replaceChildren(strong, meta);
-}
-
-function drawLargeActivity(selected = null) {
-  if (!activityPanel.classList.contains('open')) return;
-  document.getElementById('activity-scope').textContent =
-    activityEl.dataset.scope === 'local'
-      ? `Passages dans la zone visible — échelle adaptée au pic local — ligne jaune : ${activityAverageText}.`
-      : `Passages sur l'ensemble de la France — ligne jaune : ${activityAverageText}.`;
-  document.getElementById('activity-title').textContent =
-    activityMetric === 'frp' ? 'Puissance radiative détectée' : 'Nombre de foyers détectés';
-  activityLarge.setAttribute('aria-label',
-    `${renderedActivity.length} passages satellite — ${activityEl.getAttribute('aria-label')} — ligne de ${activityAverageText}`);
-
-  if (!renderedActivity.length) {
-    activityLarge.innerHTML = '<span id="activity-empty">Aucun foyer détecté dans cette zone.</span>';
-    renderedActivityAverages = [];
-    activityDetail.replaceChildren();
-    return;
-  }
-  const panelPeak = Math.max(...renderedActivity.map(activityValue), 1);
-  const scale = activityScale(panelPeak);
-  renderedActivityAverages = activityMovingAverage(renderedActivity);
-  const averagePath = renderedActivityAverages.map((point, index) => {
-    const x = ((point.ts - activityT0) / activitySpan * 100).toFixed(3);
-    const y = (100 - 100 * point.value / scale.max).toFixed(3);
-    return `${index ? 'L' : 'M'} ${x} ${y}`;
-  }).join(' ');
-  const averageLine = renderedActivityAverages.length > 1
-    ? `<svg id="activity-average" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">`
-      + `<path class="halo" d="${averagePath}"></path><path class="line" d="${averagePath}"></path></svg>`
-    : '';
-  const bars = renderedActivity.map((step, index) => {
-    const left = ((step.ts - activityT0) / activitySpan * 100).toFixed(3);
-    const value = activityValue(step);
-    const height = (100 * value / scale.max).toFixed(2);
-    const opacity = (.28 + .36 * value / panelPeak).toFixed(2);
-    return `<b data-i="${index}" title="${activityLabel(step)}" `
-      + `style="left:${left}%;height:${height}%;min-height:${value ? 3 : 0}px;opacity:${opacity}"></b>`;
-  }).join('');
-  const grid = scale.ticks.map(value =>
-    `<i class="activity-gridline" style="bottom:${(100 * value / scale.max).toFixed(2)}%"></i>`
-  ).join('');
-  const axis = scale.ticks.map((value, index) => {
-    const top = 100 - 100 * value / scale.max;
-    const edge = index === 0 ? ' last' : index === scale.ticks.length - 1 ? ' first' : '';
-    return `<span class="activity-y-tick${edge}" style="top:${top.toFixed(2)}%">`
-      + `${activityTickLabel(value)}</span>`;
-  }).join('');
-  activityLarge.innerHTML = `<div class="activity-y-axis" aria-hidden="true">${axis}</div>`
-    + `<div class="activity-plot">${grid}${bars}${averageLine}</div>`;
-  const fallback = renderedActivity.reduce(
-    (best, step, index) =>
-      activityValue(step) > activityValue(renderedActivity[best]) ? index : best, 0);
-  showActivityDetail(Number.isInteger(selected) ? selected : fallback);
-}
-
-function drawActivity() {
-  if (!steps.length) return;
-  const t0 = steps[0].ts, span = steps[steps.length - 1].ts - t0 || 1;
-  const passages = activityPassages();
-  // Échelle nationale fixe : zoomer ne transforme pas artificiellement un
-  // petit passage local en pic maximal.
-  const peak = Math.max(...steps.filter(s => s.kind === 'sat').map(activityValue), 1);
-  const local = !activityIsNational();
-  const scope = local ? 'dans la zone visible' : "sur l'ensemble de la France";
-  const metric = activityMetric === 'frp' ? 'puissance radiative' : 'nombre de foyers';
-  renderedActivity = passages;
-  activityPeak = peak;
-  activityT0 = t0;
-  activitySpan = span;
-  activityEl.dataset.scope = local ? 'local' : 'national';
-  activityEl.setAttribute('aria-label',
-    `Ouvrir le graphique de ${metric} ${scope}`);
-  activityEl.innerHTML = passages.map((s, index) => {
-    const left = ((s.ts - t0) / span * 100).toFixed(3);
-    const value = activityValue(s);
-    const height = value ? (2 + 20 * value / peak).toFixed(1) : 0;
-    const opacity = (.42 + .5 * value / peak).toFixed(2);
-    return `<b data-i="${index}" `
-      + `style="left:${left}%;height:${height}px;min-height:${value ? 2 : 0}px;opacity:${opacity}"></b>`;
-  }).join('');
-  drawLargeActivity();
-}
-
-if (!MOBILE) {
-  activityEl.addEventListener('pointermove', event => {
-    const bar = event.target.closest('b[data-i]');
-    if (!bar) { activityTip.classList.remove('open'); return; }
-    const step = renderedActivity[+bar.dataset.i];
-    if (!step) return;
-    activityTip.innerHTML = `<strong>${primaryActivityLabel(step)}</strong>`
-      + `<span>${fmt(step.ts)} — ${step.label}<br>${secondaryActivityLabel(step)}</span>`;
-    activityTip.classList.add('open');
-    const r = activityTip.getBoundingClientRect();
-    activityTip.style.left = `${Math.min(event.clientX + 12, innerWidth - r.width - 8)}px`;
-    activityTip.style.top = `${Math.max(event.clientY - r.height - 10, 8)}px`;
-  });
-  activityEl.addEventListener('pointerleave', () => activityTip.classList.remove('open'));
-}
-activityEl.addEventListener('click', event => {
-  const bar = event.target.closest('b[data-i]');
-  setActivityOpen(true, bar ? +bar.dataset.i : null);
+const activityController = createActivityController({
+  mobile: MOBILE,
+  map,
+  firmsSources: FIRMS_SOURCES,
+  getSteps: () => steps,
+  getContext: () => ({
+    disabled: Z.disabled,
+    manifest: Z.manifest,
+    overview: FIRE_CONTEXT.overview,
+    hotspots: Z.hotspots,
+    shownHotspots: shown.hotspots,
+  }),
+  fmt,
+  setOpen: setActivityOpen,
+  elements: {
+    activityEl,
+    activityTip,
+    activityPanel,
+    activityLarge,
+    activityDetail,
+    activityMetricInputs,
+    activityMetricTabs,
+    powerMetricInput,
+  },
 });
-activityEl.addEventListener('keydown', event => {
-  if (event.key === 'Enter' || event.key === ' ') {
-    event.preventDefault();
-    setActivityOpen(true);
-  }
+const PLAY_MS = MOBILE ? 19000 : 23000;    // durée d'une lecture complète
+const timelineController = createTimelineController({
+  mobile: MOBILE,
+  slider,
+  playBtn,
+  playMs: PLAY_MS,
+  trackUsage,
+  show,
+  smokeTime,
+  smokeLoop,
 });
-activityLarge.addEventListener('pointermove', event => {
-  const bar = event.target.closest('b[data-i]');
-  if (bar && event.pointerType !== 'touch') showActivityDetail(+bar.dataset.i);
-});
-activityLarge.addEventListener('click', event => {
-  const bar = event.target.closest('b[data-i]');
-  if (bar) showActivityDetail(+bar.dataset.i);
-});
+
+const drawActivity = () => activityController.draw();
+const activityValue = step => activityController.value(step);
+const activityMovingAverage = passes => activityController.movingAverage(passes);
+const activityTickLabel = value => activityController.tickLabel(value);
+const activityLabel = step => activityController.label(step);
+const countLabel = value => activityController.countLabel(value);
+const powerLabel = value => activityController.powerLabel(value);
+
+activityController.installChartListeners();
 
 function formatUpdate(step) {
   if (step.kind === 'sat') return `${step.n.toLocaleString('fr-FR')} foyers détectés`;
@@ -1896,7 +1534,8 @@ function scaleExportStyle(style) {
   }
 }
 
-function drawExportSmoke(ctx, exportMap, parts = S.parts, live = atLatest && !playing) {
+function drawExportSmoke(ctx, exportMap, parts = S.parts,
+  live = atLatest && !timelineController.isPlaying()) {
   if (!S.on || !S.sprite || !parts.length) return;
   for (const p of parts) {
     const point = exportMap.project([p.lon, p.lat]);
@@ -1991,7 +1630,7 @@ function drawExportBrand(ctx) {
   ctx.fillStyle = '#aaa49e'; ctx.fillText('.fr', x + 63 + flamap + 2, y + height / 2 + 3);
 }
 
-function drawExportFooter(ctx, generatedAt, shownTime = curTs, media = 'Image') {
+function drawExportFooter(ctx, generatedAt, shownTime = timelineController.getTime(), media = 'Image') {
   const gradient = ctx.createLinearGradient(0, 444, 0, EXPORT_H);
   gradient.addColorStop(0, 'rgba(8,10,12,0)');
   gradient.addColorStop(.5, 'rgba(8,10,12,.70)');
@@ -2093,7 +1732,7 @@ function destroyExportMap(session) {
 
 function drawExportFrame(canvas, exportMap, {
   includeWind = true, windPhase = 0, smokeParts = S.parts,
-  liveSmoke = atLatest && !playing, shownTime = curTs,
+  liveSmoke = atLatest && !timelineController.isPlaying(), shownTime = timelineController.getTime(),
   generatedAt = new Date(), media = 'Image', showLargeTime = false,
 } = {}) {
   const ctx = canvas.getContext('2d');
@@ -2311,13 +1950,13 @@ async function exportGifBlob({ includeWind = true, mode = 'instant' } = {}) {
   smallCtx.imageSmoothingQuality = 'high';
   const gif = GIFEncoder();
   let smokeParts = S.parts.length
-    ? S.parts.map(part => ({ ...part })) : buildExportSmoke(curTs);
+    ? S.parts.map(part => ({ ...part })) : buildExportSmoke(timelineController.getTime());
   try {
     for (let frame = 0; frame < frameCount; frame++) {
       const progress = frame / Math.max(frameCount - 1, 1);
-      let shownTime = curTs;
+      let shownTime = timelineController.getTime();
       if (mode === 'evolution') {
-        shownTime = warpTime(ease(progress));
+        shownTime = timelineController.timeAtProgress(progress);
         setExportWind(shownTime);
         setExportMapTime(session.exportMap, shownTime);
         await renderExportMap(session.exportMap, 800);
@@ -2441,7 +2080,7 @@ exportGenerate.addEventListener('click', async () => {
   const gifMode = document.querySelector('input[name="export-gif-mode"]:checked')?.value || 'instant';
   setExportOpen(false);
   if (exportBtn.disabled) return;
-  stopPlay();
+  timelineController.stop();
   exportBtn.disabled = true;
   exportBtn.classList.add('busy');
   exportBtn.setAttribute('aria-busy', 'true');
@@ -2485,10 +2124,11 @@ const BIRTH_S = .55;   // durée à l'écran de la montée d'un foyer
  * minutes la montée n'est plus lisible, au-delà de quatre heures le foyer
  * finirait d'apparaître alors qu'il a déjà bien viré vers l'orange. */
 function appearAt(ts) {
-  if (!WARP.C) return 45 * 60;
-  const q = unease(warpProgress(ts)), h = .004;
-  const speed = (warpTime(ease(Math.min(q + h, 1))) - warpTime(ease(Math.max(q - h, 0))))
-              / (2 * h * PLAY_MS / 1000);
+  if (!timelineController.isConfigured()) return 45 * 60;
+  const q = timelineController.progressAtTime(ts), h = .004;
+  const speed = (timelineController.timeAtProgress(Math.min(q + h, 1))
+               - timelineController.timeAtProgress(Math.max(q - h, 0)))
+              / (2 * h * timelineController.getPlayDuration() / 1000);
   return Math.min(Math.max(speed * BIRTH_S, 10 * 60), 4 * H);
 }
 
@@ -3474,6 +3114,7 @@ function psfdfActivityAxisDate(timestamp) {
 function renderPsfdfActivity(container, feature) {
   const area = psfdfActivityArea(feature);
   const passes = psfdfActivityPassages(feature, area);
+  const activityMetric = activityController.getMetric();
   const head = document.createElement('div');
   head.className = 'psfdf-activity-head';
   const title = document.createElement('strong');
@@ -3489,7 +3130,7 @@ function renderPsfdfActivity(container, feature) {
     button.setAttribute('aria-pressed', metric === activityMetric);
     button.disabled = metric === 'frp' && powerMetricInput.disabled;
     button.addEventListener('click', () => {
-      setActivityMetric(metric);
+      activityController.setMetric(metric);
       renderPsfdfActivity(container, feature);
     });
     tabs.append(button);
@@ -3688,7 +3329,7 @@ const Z = {
 };
 
 function focusIncident(feature, duration = 850, targetZoom = 8.5) {
-  stopPlay();
+  timelineController.stop();
   if (steps.length) setTime(steps[lastObs].ts);
   map.easeTo({
     center: feature.properties.center,
@@ -3713,7 +3354,7 @@ function fitFrance(duration = 850) {
 
 document.getElementById('home-btn').addEventListener('click', () => {
   trackUsage('home-france');
-  stopPlay();
+  timelineController.stop();
   fitFrance();
 });
 
@@ -3781,7 +3422,7 @@ function smokeUseVisibleSources() {
       p.lon >= b.getWest() - mx && p.lon <= b.getEast() + mx
       && p.lat >= b.getSouth() - my && p.lat <= b.getNorth() + my);
   }
-  smokeTime(curTs, true, false);
+  smokeTime(timelineController.getTime(), true, false);
   // Compléter le budget avec une première bouffée par pixel détaillé, sans
   // retirer celles déjà en vol. Le zoom comme le panoramique changent ainsi de
   // résolution en continu, puis les émissions pondérées prennent le relais.
@@ -3941,7 +3582,10 @@ function popRow(root, text, cls = 'row') {
 }
 
 // instant réellement représenté : la prévision de vent ne vieillit pas le feu
-const shownTs = () => Math.min(curTs, steps.length ? steps[lastObs].ts : curTs);
+const shownTs = () => {
+  const currentTime = timelineController.getTime();
+  return Math.min(currentTime, steps.length ? steps[lastObs].ts : currentTime);
+};
 
 function windPhrase(lon, lat) {
   const out = {};
@@ -3966,7 +3610,7 @@ function weatherBlock(root, lngLat, { divider = true, stamp = false } = {}) {
   const wind = windPhrase(lngLat.lng, lngLat.lat);
   block.append(popEl('div', 'wind',
     wind || 'Modèle de vent non couvert à cet endroit.'));
-  if (stamp) block.append(popEl('div', 'row dim', `AROME, au ${fmt(curTs)}`));
+  if (stamp) block.append(popEl('div', 'row dim', `AROME, au ${fmt(timelineController.getTime())}`));
 
   const button = popEl('button', '', 'Prévisions météo');
   button.addEventListener('click', () => {
@@ -4344,16 +3988,7 @@ async function init() {
   }
 
   steps = timeline;
-  const satelliteSteps = steps.filter(step => step.kind === 'sat');
-  const hasNationalFrp = satelliteSteps.length
-    && satelliteSteps.every(step => Number.isFinite(step.frp));
-  powerMetricInput.disabled = !hasNationalFrp;
-  if (!hasNationalFrp) {
-    powerMetricInput.closest('label').title =
-      'La puissance sera disponible après la prochaine actualisation des données.';
-    activityMetric = 'count';
-    activityMetricInputs.find(input => input.value === 'count').checked = true;
-  }
+  activityController.configureMetrics();
   FIRE_CONTEXT.overview = overview.features;
   S.overview = overview.features.length ? overview.features
     : (detail ? detail.hotspots.features : []);
@@ -4376,13 +4011,8 @@ async function init() {
     });
   renderIncidentButtons(shortcuts);
   updatePsfdfPanel();
-  addForecast(W.data);
-  // Le pas d'une seconde garde atteignables les publications EFFIS, dont
-  // LASTUPDATE n'est pas nécessairement aligné sur une minute.
-  slider.min = steps[0].ts;
-  slider.max = steps[steps.length - 1].ts;
-  slider.step = 1;
-  buildWarp();
+  lastObs = addForecast(steps, W.data);
+  timelineController.configure(steps);
   drawActivity();
   drawUpdates();
   lockWidths();
@@ -4422,28 +4052,17 @@ document.addEventListener('visibilitychange', () => {
   if (!document.hidden) { map.resize(); map.triggerRepaint(); }
   // onglet masqué : requestAnimationFrame gèle. La lecture reprendrait d'un
   // bond de plusieurs secondes au retour — autant rendre la main proprement.
-  else stopPlay();
+  else timelineController.stop();
   windLoop();   // rien à animer tant que l'onglet est caché
   smokeLoop();
   aircraftSync();
 });
 
-/* Le curseur porte maintenant un instant, pas un numéro de cran : il se déplace
- * proportionnellement au temps, donc il passe exactement sur les marques de la
- * frise — ce qui n'était pas le cas avec une valeur indicielle et des marques
- * placées à la date. */
 function setTime(ts, fromSlider) {
-  curTs = Math.min(Math.max(ts, steps[0].ts), steps[steps.length - 1].ts);
-  if (!fromSlider) slider.value = curTs;
-  show(curTs);
+  timelineController.setTime(ts, fromSlider);
 }
 
-slider.addEventListener('input', () => {
-  if (!steps.length) return;
-  stopPlay();                     // prendre la main sur la frise met en pause
-  setTime(+slider.value, true);
-  smokeTime(curTs, true, true);
-});
+timelineController.installSliderListener();
 
 document.getElementById('layers').addEventListener('change', event => {
   const layer = event.target.dataset.analyticsLayer;
@@ -4477,13 +4096,7 @@ for (const check of sourceChecks) check.addEventListener('change', event => {
   syncHotspotsCheck();
   applyHotspots();
 });
-for (const input of activityMetricInputs) input.addEventListener('change', event => {
-  if (!event.target.checked) return;
-  setActivityMetric(event.target.value);
-});
-for (const tab of activityMetricTabs) tab.addEventListener('click', event => {
-  setActivityMetric(event.currentTarget.dataset.activityMetric);
-});
+activityController.installMetricListeners();
 document.getElementById('ck-wind').addEventListener('change', e => {
   W.on = e.target.checked; windLoop(); windBadge();
 });
@@ -4499,53 +4112,4 @@ aircraftLabelsCheck.addEventListener('change', event => {
   applyAircraftLabels();
 });
 
-const playBtn = document.getElementById('play');
-
-function stopPlay() {
-  if (!playing) return;
-  cancelAnimationFrame(playing.raf);
-  playing = null;
-  playBtn.textContent = '▶';
-  playBtn.setAttribute('aria-label', "Lancer l'animation");
-  smokeLoop();
-}
-
-/* Chaque frame réécrit trois expressions de peinture, que MapLibre réévalue sur
- * les quelques milliers de foyers chargés. C'est tenable — 2 à 3 ms par frame
- * sur un portable — mais inutile de le faire 120 fois par seconde sur un écran
- * qui rafraîchit à 120 Hz : la nappe de vent, elle, a besoin de ces frames. */
-const PAINT_MS = MOBILE ? 1000 / 30 : 1000 / 50;
-
-function playFrame(now) {
-  if (!playing) return;
-  const p = Math.min((now - playing.start) / PLAY_MS, 1);
-  if (p >= 1) { setTime(steps[steps.length - 1].ts); stopPlay(); return; }
-  if (now - playing.paint >= PAINT_MS) {
-    playing.paint = now;
-    setTime(warpTime(ease(p)));
-  }
-  playing.raf = requestAnimationFrame(playFrame);
-}
-
-playBtn.addEventListener('click', () => {
-  if (playing) {
-    trackUsage('timeline-pause');
-    stopPlay();
-    return;
-  }
-  if (!steps.length) return;
-  trackUsage('timeline-play');
-
-  // une lecture terminée — ou lâchée tout au bout — repart du début ; ailleurs
-  // on reprend là où le curseur a été laissé, sans le renvoyer à gauche
-  let p = unease(warpProgress(curTs));
-  if (p > .995) p = 0;
-
-  playBtn.textContent = '❚❚';
-  playBtn.setAttribute('aria-label', "Suspendre l'animation");
-  // le premier instant s'affiche tout de suite, la boucle ne fait que continuer
-  setTime(warpTime(ease(p)));
-  playing = { start: performance.now() - p * PLAY_MS, paint: 0, raf: 0 };
-  playing.raf = requestAnimationFrame(playFrame);
-  smokeLoop();
-});
+timelineController.installPlayListener();

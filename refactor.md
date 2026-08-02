@@ -512,11 +512,11 @@ Critère de sortie : utilitaires testés, aucune nouvelle dépendance circulaire
 
 ### Lot 5 — Modèle temporel et activité
 
-- [ ] Extraire la construction de la frise dans `timeline/model.js`.
-- [ ] Extraire le warp et les calculs d'activité purs.
-- [ ] Extraire le rendu/contrôleur dans `timeline/controller.js` et
+- [x] Extraire la construction de la frise dans `timeline/model.js`.
+- [x] Extraire le warp et les calculs d'activité purs.
+- [x] Extraire le rendu/contrôleur dans `timeline/controller.js` et
       `timeline/activity.js` sans changer l'animation.
-- [ ] Tester timestamps irréguliers, publications EFFIS et moyennes mobiles.
+- [x] Tester timestamps irréguliers, publications EFFIS et moyennes mobiles.
 
 Critère de sortie : calculs temporels testables sans carte ni DOM.
 
@@ -662,7 +662,7 @@ de performance respectés.
 | 2 | terminé | `codex/refactor-2-tests-ci` | 2026-08-02 | Fixtures locales FIRMS, EFFIS, PSFDF et météo ; garde réseau actif avant l'import du collecteur ; 11 tests Python et 7 tests JavaScript purs valides sous Python 3.12 et Node 22, y compris sous plusieurs fuseaux ; syntaxe Python/JS, YAML et `git diff --check` valides ; doubles relectures comportement et CI/performance sans constat résiduel. Après validation du lot, correction séparée demandée explicitement : les 30 minutes de traces d'avions sont conservées et rendues dès l'amorçage VPS, avec 3 tests de non-régression et documentation alignée. |
 | 3 | terminé | `codex/refactor-3-assets` | 2026-08-02 | CSS et JavaScript extraits byte à byte (empreintes identiques aux blocs inline) ; ordre MapLibre et exécution classique conservés ; trois workflows adaptés et artefact local contrôlé ; 11 tests Python et 7 tests JavaScript, syntaxe Python/JS, YAML et `git diff --check` valides ; assets servis en 200 avec les bons types MIME ; 11 requêtes de données inchangées ; médianes courtes à 633 ms pour l'initialisation et 1 492 ms pour la carte prête ; lecture longue : `show()` à 0,75/0,70/0,90 ms moyenne/médiane/p95, aucune frame perdue, mémoire médiane à 26 510 731 octets (+4,3 %) ; rendu et console contrôlés à 1440, 820, 375 et 320 px ; relecture à froid sans régression confirmée. Le navigateur intégré garde `visibilityState=visible` entre ses onglets : le scénario réellement masqué n'y est pas reproductible, mais le démarrage et son listener sont inchangés dans l'extraction. |
 | 4 | terminé | `codex/refactor-4-utilitaires` | 2026-08-02 | `app.js` passé en module natif ; utilitaires de formatage, grille et géométrie extraits mécaniquement et couverts par 11 nouveaux tests (18 JS au total). API de mesure gelée, état privé et banc lot 0 adapté ; 11 requêtes de données et séquence avions inchangées. Front propriétaire à 277 645 octets bruts (+0,76 %) et 83 577 octets gzip (+2,56 %). Comparaison directe lot 3/lot 4 à 120 Hz : initialisation 555/545,9 ms, carte prête 1 701,1/1 703,1 ms, 3 600 frames et 14 manquées dans les deux cas, `show()` 1,175/1,152 ms de moyenne et 1,3/1,3 ms au p95, aucune hausse mémoire. 11 tests Python, syntaxe, YAML, artefact, `git diff --check`, fuseaux UTC/Honolulu et rendu 1440/820/375/320 px contrôlés ; doubles relectures à froid sans constat. |
-| 5 | à faire | | | |
+| 5 | terminé | `codex/refactor-5-timeline` | 2026-08-02 | Modèle de frise, prévisions, warp et contrôleurs de lecture/activité extraits ; 21 tests JS et 11 tests Python valides, dont timestamps irréguliers, bornage EFFIS, prévisions et moyennes mobiles compte/FRP ; syntaxe, YAML, bloc Python du workflow météo, fuseaux UTC/Honolulu et `git diff --check` contrôlés. Les trois workflows publient les nouveaux modules ; 11 requêtes de données inchangées. Front propriétaire brut à 282 927 octets (+1,9 % sur le lot 4). Banc complet : initialisation 845,5 ms, carte prête 1 816,9 ms, aucune frame perdue sur 30 s, `show()` à 1,02/1,00/1,20 ms moyenne/médiane/p95, mémoire médiane à 25 366 145 octets après cinq minutes. Lecture, pause, curseur et largeurs vérifiés ; graphiques national et PSFDF, métriques compte/FRP et rendu 1440/820/375/320 px contrôlés. Double relecture à froid : aucune régression comportementale ; lecture de l'état de lecture sortie de la boucle des particules après constat performance, correctif confirmé. Comme aux lots 3 et 4, le navigateur intégré ne permet pas de rendre réellement l'onglet masqué ; le listener `visibilitychange` et son ordre ont été conservés et relus. |
 | 6 | à faire | | | |
 | 7 | à faire | | | |
 | 8 | à faire | | | |

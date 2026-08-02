@@ -137,7 +137,10 @@ jobs:
                        'site.webmanifest', 'robots.txt', 'sitemap.xml',
                        'css/app.css', 'js/app.js',
                        'js/util/format.js', 'js/util/geo.js',
-                       'js/util/grid.js'):
+                       'js/util/grid.js',
+                       'js/timeline/activity.js',
+                       'js/timeline/controller.js',
+                       'js/timeline/model.js'):
               files.append((name, name))
           for zone_id in manifest['zones']:
               encoded = urllib.parse.quote(str(zone_id), safe='')

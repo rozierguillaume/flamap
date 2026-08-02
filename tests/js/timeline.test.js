@@ -1,19 +1,21 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import {
+  activityMovingAverage,
+  activityScale,
+  activityValue,
+} from '../../js/timeline/activity.js';
+import {
+  addForecast,
+  buildSteps,
+  buildWarp,
+  warpProgress,
+  warpTime,
+} from '../../js/timeline/model.js';
 import { loadInlineFunction, plain } from './inline-function-loader.js';
 
 
-const buildSteps = loadInlineFunction('buildSteps', '/* Les crans à venir.');
-const activityMovingAverage = loadInlineFunction(
-  'activityMovingAverage',
-  'const countLabel',
-  'const activityValue = step => step.n;',
-);
-const activityScale = loadInlineFunction(
-  'activityScale',
-  'function activityTickLabel',
-);
 const psfdfUpdatedTimestamp = loadInlineFunction(
   'psfdfUpdatedTimestamp',
   'function currentPsfdf',
@@ -49,6 +51,8 @@ test('buildSteps conserve les rafales par source et borne EFFIS', () => {
   assert.deepEqual(result[2], {
     ts: 2600, kind: 'effis', label: 'EFFIS', n: 0,
   });
+  assert.equal(result.some(step => step.ts === 900), false);
+  assert.equal(result.filter(step => step.ts === 2600).length, 1);
 });
 
 test('activityMovingAverage utilise une fenêtre temporelle centrée', () => {
@@ -62,6 +66,52 @@ test('activityMovingAverage utilise une fenêtre temporelle centrée', () => {
     { ts: 0, value: 3 },
     { ts: 10, value: 3 },
     { ts: 30, value: 8 },
+  ]);
+});
+
+test('activityMovingAverage conserve la même fenêtre pour la puissance', () => {
+  const passes = [
+    { ts: 0, n: 20, frp: 1 },
+    { ts: 10, n: 40, frp: 5 },
+    { ts: 30, n: 80, frp: 12 },
+  ];
+
+  assert.deepEqual(plain(activityMovingAverage(
+    passes,
+    20,
+    step => activityValue(step, 'frp'),
+  )), [
+    { ts: 0, value: 3 },
+    { ts: 10, value: 3 },
+    { ts: 30, value: 12 },
+  ]);
+});
+
+test('le warp reste inversible avec des timestamps irréguliers et EFFIS', () => {
+  const steps = [
+    { ts: 1000, kind: 'sat' },
+    { ts: 1120, kind: 'sat' },
+    { ts: 8500, kind: 'effis' },
+    { ts: 46000, kind: 'sat' },
+  ];
+  const warp = buildWarp(steps);
+
+  for (const timestamp of [1000, 1120, 8500, 32000, 46000]) {
+    const roundTrip = warpTime(warp, warpProgress(warp, timestamp));
+    assert.ok(Math.abs(roundTrip - timestamp) < 1e-8);
+  }
+  assert.equal(warpProgress(warp, 999), 0);
+  assert.equal(warpProgress(warp, 46001), 1);
+});
+
+test('addForecast garde le dernier cran observé et ajoute les heures autorisées', () => {
+  const steps = [{ ts: 1000, kind: 'sat', label: 'A', n: 1 }];
+  const lastObserved = addForecast(steps, { t0: 1000, dt: 1800, nt: 5 }, 1);
+
+  assert.equal(lastObserved, 0);
+  assert.deepEqual(plain(steps.slice(1)), [
+    { ts: 2800, kind: 'wind', label: 'prévision', n: 0, h: 1 },
+    { ts: 4600, kind: 'wind', label: 'prévision', n: 0, h: 1 },
   ]);
 });
 
