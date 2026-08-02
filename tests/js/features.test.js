@@ -10,6 +10,12 @@ import {
   rampAt,
   zoomScaleFor,
 } from '../../js/features/fires.js';
+import {
+  createPsfdfController,
+  currentPsfdf,
+  isPsfdfLayer,
+  PSFDF_HIT_LAYERS,
+} from '../../js/features/psfdf.js';
 import { createWeatherController, weatherCoordinates } from '../../js/features/weather.js';
 
 
@@ -145,6 +151,78 @@ test('les contrôleurs installent les couches dans l’ordre historique', () => 
   assert.deepEqual(layers.map(layer => layer.id), [
     'nrt-fill', 'recent-fill', 'recent-line', 'burnt-fill', 'burnt-line', 'nrt-line',
     'hotspots-overview', 'hotspots',
+  ]);
+});
+
+test('PSFDF conserve seulement les signalements des sept derniers jours', () => {
+  const now = 2_000_000_000_000;
+  const feature = updated => ({ properties: { updated_ts: updated } });
+  const input = {
+    type: 'FeatureCollection',
+    marker: 'conservé',
+    features: [
+      feature((now - 7 * 86400000) / 1000),
+      feature((now - 7 * 86400000 - 1) / 1000),
+      feature(now / 1000),
+      feature((now + 1) / 1000),
+      { properties: { updated: 'date invalide' } },
+    ],
+  };
+
+  const originalNow = Date.now;
+  Date.now = () => now;
+  try {
+    const filtered = currentPsfdf(input);
+    assert.equal(filtered.marker, 'conservé');
+    assert.deepEqual(filtered.features, [input.features[0], input.features[2]]);
+  } finally {
+    Date.now = originalNow;
+  }
+});
+
+test('le contrôleur PSFDF conserve ordre, priorité et bascule des couches', () => {
+  const layers = [], layouts = [];
+  const controller = createPsfdfController({
+    mobile: false,
+    map: {
+      addLayer: layer => layers.push(layer),
+      getLayer: () => true,
+      setLayoutProperty: (...args) => layouts.push(args),
+    },
+    getState: () => ({
+      atLatest: true,
+      layerVisibility: { psfdf: true, hotspots: {} },
+      steps: [],
+    }),
+    getHotspots: () => [],
+    activityController: {},
+    powerMetricInput: fakeElement(),
+    trackUsage() {},
+    stopTimeline() {},
+    setTime() {},
+    elements: Object.fromEntries([
+      'incidents', 'panel', 'panelTitle', 'panelSub', 'panelBody', 'headStatus',
+      'relative', 'panelToggle',
+    ].map(name => [name, fakeElement()])),
+  });
+
+  controller.install();
+  controller.paint({
+    getLayer: () => true,
+    setLayoutProperty: (...args) => layouts.push(args),
+  }, false);
+  controller.destroy();
+
+  assert.deepEqual(layers.map(layer => layer.id), [
+    'psfdf-extinguished', 'psfdf-controlled', 'psfdf-fixed',
+    'psfdf-active', 'psfdf-uncontrolled',
+  ]);
+  assert.deepEqual(PSFDF_HIT_LAYERS, layers.map(layer => layer.id).reverse());
+  assert.equal(isPsfdfLayer('psfdf-active'), true);
+  assert.equal(isPsfdfLayer('hotspots'), false);
+  assert.deepEqual(layouts.map(([, property, value]) => [property, value]), [
+    ['visibility', 'none'], ['visibility', 'none'], ['visibility', 'none'],
+    ['visibility', 'none'], ['visibility', 'none'],
   ]);
 });
 

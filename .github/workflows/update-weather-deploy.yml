@@ -139,6 +139,7 @@ jobs:
                        'js/data/client.js', 'js/data/initial.js',
                        'js/data/zones.js',
                        'js/features/burnt.js', 'js/features/fires.js',
+                       'js/features/psfdf.js',
                        'js/features/weather.js',
                        'js/util/format.js', 'js/util/geo.js',
                        'js/util/grid.js',

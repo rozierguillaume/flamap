@@ -6,6 +6,7 @@ import {
   activityScale,
   activityValue,
 } from '../../js/timeline/activity.js';
+import { psfdfUpdatedTimestamp } from '../../js/features/psfdf.js';
 import {
   addForecast,
   buildSteps,
@@ -13,14 +14,7 @@ import {
   warpProgress,
   warpTime,
 } from '../../js/timeline/model.js';
-import { loadInlineFunction, plain } from './inline-function-loader.js';
-
-
-const psfdfUpdatedTimestamp = loadInlineFunction(
-  'psfdfUpdatedTimestamp',
-  'function currentPsfdf',
-  'Date.now = () => new Date(2026, 7, 2, 12, 0, 0).getTime();',
-);
+import { plain } from './inline-function-loader.js';
 
 
 const feature = (ts, source, frp) => ({
@@ -127,16 +121,22 @@ test('activityScale garde les graduations 1-2-5 et les comptes entiers', () => {
 });
 
 test('psfdfUpdatedTimestamp reconnaît les deux ordres de date PSFDF', () => {
-  const french = new Date(psfdfUpdatedTimestamp('01/08/2026 à 14:30:05'));
-  const american = new Date(psfdfUpdatedTimestamp('8/1/2026 15:45'));
+  const originalNow = Date.now;
+  Date.now = () => new Date(2026, 7, 2, 12, 0, 0).getTime();
+  try {
+    const french = new Date(psfdfUpdatedTimestamp('01/08/2026 à 14:30:05'));
+    const american = new Date(psfdfUpdatedTimestamp('8/1/2026 15:45'));
 
-  assert.deepEqual(
-    [french.getFullYear(), french.getMonth() + 1, french.getDate(), french.getHours()],
-    [2026, 8, 1, 14],
-  );
-  assert.deepEqual(
-    [american.getFullYear(), american.getMonth() + 1, american.getDate(), american.getHours()],
-    [2026, 8, 1, 15],
-  );
-  assert.equal(Number.isNaN(psfdfUpdatedTimestamp('31/31/2026')), true);
+    assert.deepEqual(
+      [french.getFullYear(), french.getMonth() + 1, french.getDate(), french.getHours()],
+      [2026, 8, 1, 14],
+    );
+    assert.deepEqual(
+      [american.getFullYear(), american.getMonth() + 1, american.getDate(), american.getHours()],
+      [2026, 8, 1, 15],
+    );
+    assert.equal(Number.isNaN(psfdfUpdatedTimestamp('31/31/2026')), true);
+  } finally {
+    Date.now = originalNow;
+  }
 });
