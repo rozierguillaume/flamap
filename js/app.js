@@ -1,9 +1,11 @@
 import { ago, confidenceText, fmt, fmtClock, nf } from './util/format.js';
 import { aircraftBearing, aircraftCurve, distanceKm } from './util/geo.js';
-import { gridAt, gridBilinear, windAtGrid } from './util/grid.js';
+import { gridAt, gridBilinear } from './util/grid.js';
 import { EMPTY, json } from './data/client.js';
 import { loadInitialData } from './data/initial.js';
 import { createZonesController } from './data/zones.js';
+import { createSmokeController, SMOKE_H, SMOKE_LIVE_K, SMOKE_WINDOW } from './fx/smoke.js';
+import { CARD, createWindController } from './fx/wind.js';
 import { createActivityController } from './timeline/activity.js';
 import { createTimelineController } from './timeline/controller.js';
 import { addForecast, buildSteps } from './timeline/model.js';
@@ -486,7 +488,7 @@ document.getElementById('activity-panel-close').addEventListener('click', () => 
 function thermalAt(key, lon, lat, ts) {
   const fine = gridAt(thermalData, key, lon, lat, ts);
   if (Number.isFinite(fine)) return fine;
-  return gridAt(W.data, key, lon, lat, ts);
+  return windController.gridValueAt(key, lon, lat, ts);
 }
 
 function weatherValue(data, row, lon, lat) {
@@ -859,433 +861,53 @@ function applyHotspots() {
 }
 
 /* =====================================================================
- * VENT — nappe de particules advectées par le champ AROME HD
- *
- * Le manifest porte une grille nationale grossière ; les paquets de zone
- * peuvent lui substituer une grille fine. Toutes contiennent les composantes
- * est/nord du vent à 10 m en m/s. On tire
- * quelques milliers de particules au hasard sur l'écran, on les déplace le long
- * du champ interpolé, et on laisse derrière elles une traînée qui s'estompe.
- *
- * Deux détails valent d'être notés :
- *  - les composantes u/v plutôt que vitesse + azimut : interpoler des angles
- *    qui bouclent à 360° donnerait des girouettes folles entre deux mailles ;
- *  - l'écran, pas le sol : à z8 un vent de 10 m/s vaut 0,02 px/s, invisible. La
- *    vitesse rendue est donc relative — comparable d'un point à l'autre, mais
- *    ce n'est pas une distance parcourue au sol.
+ * VENT ET FUMEE — contrôleurs à état privé
  * ===================================================================== */
 
 const windCv  = document.getElementById('wind');
-const wctx    = windCv.getContext('2d');
 const windKey = document.getElementById('windkey');
 const windVal = document.getElementById('windval');
 const tempKey = document.getElementById('tempkey');
 const tempVal = document.getElementById('tempval');
 const centerProbe = document.getElementById('center-probe');
+const smokeCv = document.getElementById('smoke');
 
-const WIND_K    = 5;                    // px/s pour 1 m/s de vent
-const WIND_N    = MOBILE ? 550 : 1700;  // particules
-const WIND_LIFE = 3.2;                  // s avant de renaître ailleurs
-const WIND_FADE = .90;                  // alpha retiré à la traînée par frame
-/* Trois classes de vitesse : la nappe bleuit dans les calmes, blanchit dans le
- * fort. Le seuil bas ne descend pas plus : sous 5 m/s les segments tracés par
- * frame sont déjà courts, un alpha plus faible les rendrait illisibles sur
- * l'imagerie claire — et un vent faible autour d'un feu, ça se lit aussi. */
-const WIND_LANE = [
-  [5,        'rgba(191,227,255,.55)', MOBILE ? .9 : 1.0],
-  [10,       'rgba(224,241,255,.70)', MOBILE ? 1.1 : 1.2],
-  [Infinity, 'rgba(255,255,255,.88)', MOBILE ? 1.3 : 1.5],
-];
-const CARD = ['nord', 'nord-nord-est', 'nord-est', 'est-nord-est', 'est',
-              'est-sud-est', 'sud-est', 'sud-sud-est', 'sud', 'sud-sud-ouest',
-              'sud-ouest', 'ouest-sud-ouest', 'ouest', 'ouest-nord-ouest',
-              'nord-ouest', 'nord-nord-ouest'];
+let timelineController;
+let smokeController;
+const windController = createWindController({
+  mobile: MOBILE,
+  map,
+  canvas: windCv,
+  key: windKey,
+  value: windVal,
+  getManifest: () => zonesController.getManifest(),
+  onBadgeChange: () => temperatureBadge(),
+  onFieldChange: () => smokeController.loop(),
+});
+smokeController = createSmokeController({
+  mobile: MOBILE,
+  canvas: smokeCv,
+  windAt: (...args) => windController.at(...args),
+  getWindProjection: out => windController.getProjection(out),
+  getState,
+  isPlaying: () => timelineController.isPlaying(),
+});
+const WIND_LANE = windController.getExportLanes();
 
-const W = {
-  data: null, cur: null, tiles: new Map(), ts: 0, on: true,
-  parts: [], raf: null, last: 0, w: 0, h: 0,
-};
-
-/* =====================================================================
- * FUMEE — bouffées émises par les foyers puis advectées dans le champ de vent
- *
- * Contrairement aux traits du vent, une bouffée vit en longitude/latitude.
- * Elle réinterroge `windAt()` après chaque déplacement : si elle rencontre plus
- * loin un vent d'une autre direction, sa trajectoire se courbe réellement.
- *
- * Ce rendu reste une indication visuelle, pas un modèle de qualité de l'air :
- * ni relief, ni stabilité atmosphérique, ni hauteur d'injection ne sont connus.
- * La FRP (énergie radiative) et le nombre de pixels déterminent toutefois la
- * fréquence d'émission, puis chaque bouffée s'élargit et s'efface avec l'âge.
- * ===================================================================== */
-
-const smokeCv  = document.getElementById('smoke');
-const sctx     = smokeCv.getContext('2d');
-// La lecture accélérée condense plusieurs heures d'émission en quelques
-// secondes murales : le plafond doit laisser cette masse supplémentaire se
-// former, tout en restant plus bas sur mobile.
-const SMOKE_N  = MOBILE ? 900 : 2200;
-const SMOKE_H  = 6 * H;                   // disparition physique du panache
-const SMOKE_WINDOW = 6 * H;               // la zone jaune de la rampe d'anciennete
-const SMOKE_LIVE_K = 180;                 // dernier instant : 3 min physiques/s
-const SMOKE_LIVE_DENSITY = 2.2;           // compense le peu de passages récents
-const S = {
-  on: true, overview: [], sources: [], emitters: [], total: 0,
-  parts: [], target: 0, pick: 0, raf: null, last: 0, ts: 0,
-  bucket: null, ready: false, pending: 0, emitCarry: 0,
-  w: 0, h: 0, sprite: null,
-};
-
-function smokeSprite() {
-  const cv = document.createElement('canvas'), n = 96;
-  cv.width = cv.height = n;
-  const c = cv.getContext('2d');
-  const g = c.createRadialGradient(n * .47, n * .47, 0, n / 2, n / 2, n / 2);
-  g.addColorStop(0,   'rgba(226,222,214,.34)');
-  g.addColorStop(.24, 'rgba(218,214,206,.25)');
-  g.addColorStop(.58, 'rgba(202,200,195,.12)');
-  g.addColorStop(1,   'rgba(194,194,192,0)');
-  c.fillStyle = g;
-  c.fillRect(0, 0, n, n);
-  return cv;
-}
-
-function smokeResize() {
-  const dpr = Math.min(devicePixelRatio || 1, MOBILE ? 1.25 : 1.5);
-  S.w = smokeCv.clientWidth; S.h = smokeCv.clientHeight;
-  smokeCv.width = Math.round(S.w * dpr);
-  smokeCv.height = Math.round(S.h * dpr);
-  sctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  S.sprite ||= smokeSprite();
-}
-
-function smokePick() {
-  // Une part de tirage uniforme garantit que toute la lisiere jaune émet. Le
-  // reste est pondéré par FRP/nombre : les secteurs puissants sont plus denses,
-  // sans aspirer toute la fumée vers un unique maximum.
-  if (Math.random() < .58)
-    return S.emitters[S.pick++ % S.emitters.length];
-  let r = Math.random() * S.total;
-  for (const emitter of S.emitters) {
-    r -= emitter.weight;
-    if (r <= 0) return emitter;
-  }
-  return S.emitters[S.emitters.length - 1];
-}
-
-function smokeAdvect(p, seconds) {
-  const o = {};
-  if (!windAt(p.lon, p.lat, o)) return false;
-  // Diffusion turbulente lente. Deux particules parties du même front ne
-  // parcourent ainsi jamais exactement la même ligne de courant : la nappe
-  // s'ouvre latéralement et ne dessine plus de rails parallèles.
-  const keep = Math.exp(-seconds / (28 * 60));
-  const kick = Math.sqrt(1 - keep * keep) * (1.15 + Math.min(o.g / 80, .85));
-  p.tu = p.tu * keep + (Math.random() * 2 - 1) * kick;
-  p.tv = p.tv * keep + (Math.random() * 2 - 1) * kick;
-  // u/v sont en m/s. La conversion locale suffit sur les quelques heures de
-  // vie d'une bouffée et évite une projection complète à chaque sous-pas.
-  p.lat += (o.v + p.tv) * seconds / 110570;
-  p.lon += (o.u + p.tu) * seconds
-         / (111320 * Math.max(Math.cos(p.lat * Math.PI / 180), .2));
-  return true;
-}
-
-function smokeSpawn(seed = false, emitter = null) {
-  emitter ||= smokePick();
-  if (!emitter) return null;
-  // Les agrégats nationaux représentent une cellule de 0,25°, pas un point :
-  // leur naissance est étalée sur cette emprise. Au zoom détaillé, la largeur
-  // scan/track du pixel satellite donne une dispersion initiale plus resserrée.
-  const jitterKm = emitter.spread * (Math.random() + Math.random() - 1);
-  const angle = Math.random() * Math.PI * 2;
-  const p = {
-    lon: emitter.lon + Math.cos(angle) * jitterKm
-       / (111.32 * Math.max(Math.cos(emitter.lat * Math.PI / 180), .2)),
-    lat: emitter.lat + Math.sin(angle) * jitterKm / 110.57,
-    age: 0, tu: (Math.random() * 2 - 1) * .7,
-    tv: (Math.random() * 2 - 1) * .7,
-    life: SMOKE_H * (.72 + Math.random() * .56),
-    size: .72 + Math.random() * .58,
-    alpha: .62 + Math.random() * .38,
-  };
-  // Au premier affichage, amorcer des âges différents donne immédiatement un
-  // panache constitué. Les petits pas suivent déjà les courbures du champ.
-  if (seed) {
-    const age = Math.random() * p.life * .82, dt = age / 12;
-    for (let i = 0; i < 12; i++) {
-      if (!smokeAdvect(p, dt)) return null;
-      p.age += dt;
-    }
-  }
-  return p;
-}
-
-function smokeTime(ts, force = false, reseed = false) {
-  const { atLatest, lastObservedTime, layerVisibility, steps } = getState();
-  const previousTs = S.ts;
-  S.ts = ts;
-  // En lecture, l'horloge physique est exactement celle du curseur. Le delta
-  // est mis en attente puis consommé par la prochaine frame de fumée. Un saut
-  // manuel, lui, réamorce explicitement l'état demandé.
-  if (timelineController.isPlaying() && ts > previousTs && !reseed) S.pending += ts - previousTs;
-  const bucket = Math.floor(ts / (15 * 60));
-  if (!force && bucket === S.bucket) return;
-  S.bucket = bucket;
-  const now = steps.length ? Math.min(ts, lastObservedTime) : ts;
-  S.emitters = S.sources
-    .filter(feature => {
-      const p = feature.properties || {};
-      return p.ts <= now && p.ts > now - SMOKE_WINDOW
-          && layerVisibility.hotspots[p.source] !== false;
-    })
-    .map(feature => {
-      const p = feature.properties || {}, n = Math.max(+p.n || 1, 1);
-      const frp = Math.max(+p.frp || 0, 0);
-      // La racine évite qu'un pixel extrême écrase tout le pays ; les deux
-      // facteurs restent indépendants, donc un front étendu mais modéré émet
-      // lui aussi davantage qu'un foyer isolé.
-      const weight = Math.sqrt(n) * (.7 + Math.log1p(frp));
-      return {
-        lon: feature.geometry.coordinates[0],
-        lat: feature.geometry.coordinates[1],
-        weight,
-        spread: p.overview ? 9
-          : Math.max(.18, Math.min(1.2, Math.max(+p.scan || 0, +p.track || 0) * .65)),
-      };
-    });
-  S.total = S.emitters.reduce((sum, emitter) => sum + emitter.weight, 0);
-  const density = atLatest ? SMOKE_LIVE_DENSITY : 1;
-  S.target = S.total ? Math.min(SMOKE_N, Math.max(S.emitters.length,
-    Math.round((S.emitters.length * 4.2 + S.total * .18) * density))) : 0;
-
-  // Au premier rendu, lors d'une sélection explicite de sources ou si la frise
-  // repart en arrière, les panaches sont réamorcés dans l'état demandé. Un
-  // simple changement de niveau de détail conserve au contraire les bouffées
-  // existantes : leur géographie et leur courbure restent continues.
-  if (reseed || !S.ready || ts < previousTs) {
-    S.parts.length = 0;
-    S.pending = 0;
-    S.emitCarry = 0;
-    S.ready = true;
-    // Un passage uniforme donne d'abord une bouffée à chaque foyer récent ;
-    // les suivantes repassent par le mélange uniforme/pondéré de `smokePick`.
-    for (const emitter of S.emitters) {
-      const p = smokeSpawn(true, emitter);
-      if (p) S.parts.push(p);
-      if (S.parts.length >= S.target) break;
-    }
-    for (let i = 0; i < S.target; i++) {
-      if (S.parts.length >= S.target) break;
-      const p = smokeSpawn(true);
-      if (p) S.parts.push(p);
-    }
-  }
-  smokeLoop();
-}
-
-/* Intègre un intervalle physique. En lecture, un appel représente souvent
- * plusieurs minutes de frise : les sous-pas évitent qu'une bouffée traverse une
- * maille de vent d'un seul bond et permettent d'émettre tout au long du trajet.
- * Le nombre de sous-pas est borné pour garder le coût stable dans les longs
- * creux entre deux passages satellite. */
-function smokeAdvance(seconds) {
-  if (!(seconds > 0) || !W.cur) return;
-  const count = Math.min(12, Math.max(1, Math.ceil(seconds / (5 * 60))));
-  const dt = seconds / count;
-  for (let step = 0; step < count; step++) {
-    for (let i = S.parts.length - 1; i >= 0; i--) {
-      const p = S.parts[i];
-      p.age += dt;
-      if (p.age >= p.life || !smokeAdvect(p, dt)) S.parts.splice(i, 1);
-    }
-
-    // Le débit est défini en temps physique : à l'équilibre, six heures
-    // d'émission donnent `target` bouffées. Accélérer la frise accélère donc à
-    // la fois le vent, le vieillissement et les nouvelles émissions.
-    if (S.emitters.length && S.target) {
-      S.emitCarry += S.target / SMOKE_H * dt;
-      let births = Math.floor(S.emitCarry);
-      S.emitCarry -= births;
-      births = Math.min(births, SMOKE_N - S.parts.length);
-      for (let i = 0; i < births; i++) {
-        const p = smokeSpawn(false);
-        if (p) S.parts.push(p);
-      }
-    }
-  }
-}
-
-function smokeFrame(now) {
-  const atLatest = getState().atLatest;
-  S.raf = requestAnimationFrame(smokeFrame);
-  // Une petite saccade ne doit pas ralentir l'horloge physique. L'onglet caché
-  // arrête déjà proprement la boucle ; la borne d'une seconde ne sert qu'à
-  // absorber un blocage exceptionnel du thread principal.
-  const wallDt = Math.min((now - S.last) / 1000, 1);
-  const playing = timelineController.isPlaying();
-  S.last = now;
-
-  // `pending` vient de la frise. Une pause historique continue au rythme réel.
-  // Au dernier instant seulement, la carte reste « vivante » : trois minutes
-  // physique par seconde murale rend le déplacement perceptible sans retrouver
-  // l'emballement de l'ancien multiplicateur fixe, et accélère ensemble vent,
-  // émission, diffusion et extinction.
-  const idleK = atLatest ? SMOKE_LIVE_K : 1;
-  const seconds = S.pending + (playing ? 0 : wallDt * idleK);
-  S.pending = 0;
-  smokeAdvance(seconds);
-
-  sctx.clearRect(0, 0, S.w, S.h);
-  if (!W.cur || !S.parts.length) return;
-
-  const merc = lat => Math.log(Math.tan(Math.PI / 4 + lat * Math.PI / 360));
-  for (let i = S.parts.length - 1; i >= 0; i--) {
-    const p = S.parts[i];
-    const x = (p.lon - W.lon0) / W.dLon;
-    const y = (merc(p.lat) - W.y0) / W.dY;
-    if (x < -80 || y < -80 || x > S.w + 80 || y > S.h + 80) continue;
-    const q = p.age / p.life;
-    const fade = Math.pow(1 - q, 1.45) * Math.min(p.age / (12 * 60), 1);
-    // Taille en kilomètres, convertie à l'échelle courante. Une bouffée garde
-    // donc la même emprise au sol pendant un zoom ; seuls un plancher de trois
-    // pixels et une borne de sécurité évitent disparition et voile plein écran.
-    const kmPerPx = Math.abs(W.dLon) * 111.32
-                  * Math.max(Math.cos(p.lat * Math.PI / 180), .2);
-    const live = atLatest && !playing;
-    const radiusKm = (.30 + 2.35 * Math.sqrt(q)) * p.size * (live ? 1.18 : 1);
-    const radius = Math.min(Math.max(radiusKm / Math.max(kmPerPx, .001), 3),
-                            MOBILE ? 78 : 105);
-    sctx.globalAlpha = (live ? .48 : .20) * fade * p.alpha;
-    sctx.drawImage(S.sprite, x - radius, y - radius, radius * 2, radius * 2);
-  }
-  sctx.globalAlpha = 1;
-}
-
-function smokeLoop() {
-  // Une source peut s'éteindre alors que son panache est encore en vol.
-  // Pendant play, la boucle reste aussi active dans les intervalles sans feu :
-  // elle consomme leur temps virtuel au lieu de le reporter sur la prochaine
-  // source qui apparaîtrait.
-  const run = S.on && !!W.cur
-           && !!(timelineController.isPlaying() || S.pending || S.emitters.length || S.parts.length)
-           && !document.hidden;
-  smokeCv.hidden = !S.on;
-  if (run && !S.raf) {
-    S.last = performance.now();
-    S.raf = requestAnimationFrame(smokeFrame);
-  }
-  if (!run && S.raf) {
-    cancelAnimationFrame(S.raf); S.raf = null;
-    sctx.clearRect(0, 0, S.w, S.h);
-  }
-}
+const windAt = (...args) => windController.at(...args);
+const windTime = (...args) => windController.setTime(...args);
+const windBadge = () => windController.badge();
+const windResize = () => windController.resize();
+const windSync = () => windController.sync();
+const windLoop = () => windController.loop();
+const smokeTime = (...args) => smokeController.setTime(...args);
+const smokeResize = () => smokeController.resize();
+const smokeLoop = () => smokeController.loop();
 
 function temperatureAt(lon, lat) {
-  const fine = thermalAt('temperature', lon, lat, W.ts);
+  const fine = thermalAt('temperature', lon, lat, windController.getTime());
   if (Number.isFinite(fine)) return fine;
-  // Anciens exports locaux : un instantané unique, sans dimension temporelle.
-  const values = W.data?.temperature_2m;
-  return values ? gridBilinear(W.data, values, lon, lat) : null;
-}
-
-// Au zoom de détail, la grille fine se fond dans le champ national sur les
-// 35 derniers kilometres de sa marge. Sans ce raccord, la différence de
-// résolution dessinait le carré exact de la cellule active dans les particules.
-const WIND_BLEND_KM = 35;
-function windAt(lon, lat, out) {
-  const coarse = {};
-  const hasCoarse = windAtGrid(W.data, W.cur, lon, lat, coarse);
-  const manifest = zonesController.getManifest();
-  if (manifest && map.getZoom() >= manifest.detail_zoom) {
-    let weight = 0, blend = 0, fineU = 0, fineV = 0, fineG = 0;
-    for (const tile of W.tiles.values()) {
-      const fine = {};
-      if (!tile || !windAtGrid(tile, tile._cur, lon, lat, fine)) continue;
-      const [west, south, east, north] = tile.bbox;
-      const dx = Math.min(lon - west, east - lon)
-               * 111.32 * Math.cos(lat * Math.PI / 180);
-      const dy = Math.min(lat - south, north - lat) * 110.57;
-      const t = Math.min(Math.max(Math.min(dx, dy) / WIND_BLEND_KM, 0), 1);
-      const mix = t * t * (3 - 2 * t);
-      fineU += fine.u * mix; fineV += fine.v * mix; fineG += fine.g * mix;
-      weight += mix; blend = Math.max(blend, mix);
-    }
-    if (weight) {
-      const fine = { u: fineU / weight, v: fineV / weight, g: fineG / weight };
-      const a = hasCoarse ? 1 - blend : 0;
-      out.u = coarse.u * a + fine.u * (1 - a);
-      out.v = coarse.v * a + fine.v * (1 - a);
-      out.g = coarse.g * a + fine.g * (1 - a);
-      return true;
-    }
-  }
-  if (!hasCoarse) return false;
-  out.u = coarse.u; out.v = coarse.v; out.g = coarse.g;
-  return true;
-}
-
-function windGridTime(d, ts) {
-  if (!d) return null;
-  if (d._cur && Math.abs(ts - d._ts) < 120) return d._cur;
-  d._ts = ts;
-  d._cur = null;
-  const x = (ts - d.t0) / d.dt;
-  if (!(x >= 0 && x <= d.nt - 1)) return null;
-  const k = Math.min(x | 0, d.nt - 2), f = x - k;
-  const mix = A => {
-    const a = A[k], b = A[k + 1], o = new Float32Array(a.length);
-    for (let n = 0; n < a.length; n++) o[n] = a[n] + (b[n] - a[n]) * f;
-    return o;
-  };
-  // Seul le vent est pré-mélangé : il est relu à chaque frame par la nappe de
-  // particules. La température ne sert qu'au badge et au volet, quelques fois
-  // par seconde au plus, et `thermalAt` fait son interpolation temporelle
-  // lui-même — la pré-mélanger reviendrait à parcourir 225 valeurs pour rien.
-  d._cur = { u: mix(d.u), v: mix(d.v), gust: mix(d.gust) };
-  return d._cur;
-}
-
-/* Le champ n'est connu qu'à l'heure ronde : on fabrique une fois par cran la
- * grille interpolée entre les deux heures encadrantes, et l'animation n'a plus
- * qu'à y piocher. Hors de la fenêtre couverte — fichier périmé, cran trop
- * ancien — `cur` reste nul et la couche s'efface d'elle-même. */
-function windTime(ts, force = false) {
-  const d = W.data;
-  if (!d) return;
-  // `show()` est maintenant appelé à chaque frame de lecture. Le champ, lui, ne
-  // bouge qu'à l'échelle de l'heure : refabriquer la grille pour deux minutes
-  // de modèle brûlerait des allocations pour un résultat identique à l'œil.
-  if (!force && W.cur && Math.abs(ts - W.ts) < 120) return;
-  W.ts = ts;
-
-  W.cur = windGridTime(d, ts);
-  for (const tile of W.tiles.values()) windGridTime(tile, ts);
-  windBadge();
-  temperatureBadge();
-  windLoop();
-  smokeLoop();
-}
-
-// lecture chiffrée au centre de la carte
-function windBadge() {
-  const o = {}, c = map.getCenter();
-  // deux façons de ne rien afficher, qui n'ont pas le même effet sur la mise en
-  // page : voir les règles de `#windkey`
-  windKey.classList.toggle('off', !W.on);
-  windKey.hidden = !W.on || !W.cur || !windAt(c.lng, c.lat, o);
-  if (windKey.hidden) return;
-
-  const kmh = Math.hypot(o.u, o.v) * 3.6;
-  const to = (Math.atan2(o.u, o.v) * 180 / Math.PI + 360) % 360;  // vers où il pousse
-  const from = CARD[Math.round(((to + 180) % 360) / 22.5) % 16];
-
-  windKey.style.setProperty('--dir', to.toFixed(0) + 'deg');
-  // les rafales sont déjà en km/h dans les exports (`fetch_fires.py` les
-  // convertit), contrairement à u/v qui sont en m/s
-  windVal.textContent = `${Math.round(kmh)} km/h (raf. ${Math.round(o.g)} km/h)`;
-  windKey.title = `Vent de ${from}, ${Math.round(kmh)} km/h au centre de la carte,`
-                + ` rafales à ${Math.round(o.g)} km/h`;
+  return windController.legacyTemperatureAt(lon, lat);
 }
 
 function temperatureBadge() {
@@ -1296,92 +918,11 @@ function temperatureBadge() {
   tempVal.textContent = `${Math.round(value)} °C`;
   // Les champs datés suivent la frise ; l'instantané des anciens exports locaux
   // porte sa propre heure.
-  const dated = thermalData || W.data?.temperature;
-  const stamp = dated ? W.ts : W.data?.temperature_ts;
+  const metadata = windController.temperatureMetadata();
+  const stamp = thermalData || metadata.dated
+    ? windController.getTime() : metadata.ts;
   tempKey.title = 'Température à 2 m au centre de la carte'
                 + (stamp ? `, au ${fmt(stamp)}` : '');
-}
-
-function windSpawn(p) {
-  p.x = Math.random() * W.w;
-  p.y = Math.random() * W.h;
-  p.age = Math.random() * WIND_LIFE;   // décalées, sinon toute la nappe clignote
-  return p;
-}
-
-function windResize() {
-  // au-delà de 2 le gain est invisible et le coût de remplissage double
-  const dpr = Math.min(devicePixelRatio || 1, MOBILE ? 1.5 : 2);
-  W.w = windCv.clientWidth; W.h = windCv.clientHeight;
-  windCv.width = Math.round(W.w * dpr);
-  windCv.height = Math.round(W.h * dpr);
-  wctx.setTransform(dpr, 0, 0, dpr, 0, 0);   // tout le dessin en px CSS
-  wctx.lineCap = 'round';
-  if (W.parts.length !== WIND_N) W.parts = Array.from({ length: WIND_N }, () => windSpawn({}));
-  else W.parts.forEach(windSpawn);
-  windSync();
-}
-
-/* Écran → coordonnées : la carte n'est ni pivotée ni inclinée, la longitude est
- * donc affine en x et la latitude affine en y de Mercator. Deux multiplications
- * par particule, contre un unproject matriciel. */
-function windSync() {
-  const b = map.getBounds();
-  const merc = lat => Math.log(Math.tan(Math.PI / 4 + lat * Math.PI / 360));
-  const yN = merc(b.getNorth());
-  W.lon0 = b.getWest(); W.dLon = (b.getEast() - b.getWest()) / (W.w || 1);
-  W.y0 = yN; W.dY = (merc(b.getSouth()) - yN) / (W.h || 1);
-}
-
-function windFrame(now) {
-  W.raf = requestAnimationFrame(windFrame);
-  const dt = Math.min((now - W.last) / 1000, .05);   // onglet ralenti : pas de bond
-  W.last = now;
-  if (!W.cur) return;
-
-  // on retire de l'alpha à ce qui est déjà peint : la traînée s'efface sans
-  // qu'un aplat vienne jamais assombrir la carte en dessous
-  wctx.globalCompositeOperation = 'destination-in';
-  wctx.fillStyle = `rgba(0,0,0,${WIND_FADE})`;
-  wctx.fillRect(0, 0, W.w, W.h);
-  wctx.globalCompositeOperation = 'source-over';
-
-  const o = {}, lanes = WIND_LANE.map(() => []);
-  for (const p of W.parts) {
-    p.age += dt;
-    const lon = W.lon0 + p.x * W.dLon;
-    const lat = (2 * Math.atan(Math.exp(W.y0 + p.y * W.dY)) - Math.PI / 2) * 57.29577951;
-    // hors grille ou en fin de vie : on renaît ailleurs, sans tracer le saut
-    if (p.age > WIND_LIFE || !windAt(lon, lat, o)) { windSpawn(p); continue; }
-
-    const nx = p.x + o.u * WIND_K * dt, ny = p.y - o.v * WIND_K * dt;
-    if (nx < -4 || ny < -4 || nx > W.w + 4 || ny > W.h + 4) { windSpawn(p); continue; }
-
-    const s = Math.hypot(o.u, o.v);
-    lanes[s < WIND_LANE[0][0] ? 0 : s < WIND_LANE[1][0] ? 1 : 2].push(p.x, p.y, nx, ny);
-    p.x = nx; p.y = ny;
-  }
-
-  for (let l = 0; l < lanes.length; l++) {
-    const a = lanes[l];
-    if (!a.length) continue;
-    wctx.strokeStyle = WIND_LANE[l][1];
-    wctx.lineWidth = WIND_LANE[l][2];
-    wctx.beginPath();
-    for (let i = 0; i < a.length; i += 4) {
-      wctx.moveTo(a[i], a[i + 1]); wctx.lineTo(a[i + 2], a[i + 3]);
-    }
-    wctx.stroke();
-  }
-}
-
-function windLoop() {
-  const run = W.on && !!W.cur && !document.hidden;
-  if (run && !W.raf) { W.last = performance.now(); W.raf = requestAnimationFrame(windFrame); }
-  if (!run && W.raf) {
-    cancelAnimationFrame(W.raf); W.raf = null;
-    wctx.clearRect(0, 0, W.w, W.h);
-  }
 }
 
 const activityController = createActivityController({
@@ -1410,7 +951,7 @@ const activityController = createActivityController({
   },
 });
 const PLAY_MS = MOBILE ? 19000 : 23000;    // durée d'une lecture complète
-const timelineController = createTimelineController({
+timelineController = createTimelineController({
   mobile: MOBILE,
   slider,
   playBtn,
@@ -1546,9 +1087,11 @@ function scaleExportStyle(style) {
   }
 }
 
-function drawExportSmoke(ctx, exportMap, parts = S.parts,
+function drawExportSmoke(ctx, exportMap, parts = null,
   live = getState().atLatest && !timelineController.isPlaying()) {
-  if (!S.on || !S.sprite || !parts.length) return;
+  const sprite = smokeController.getSprite();
+  if (parts === null) parts = smokeController.copyParts();
+  if (!smokeController.isEnabled() || !sprite || !parts.length) return;
   for (const p of parts) {
     const point = exportMap.project([p.lon, p.lat]);
     if (point.x < -200 || point.y < -200 || point.x > EXPORT_W + 200 || point.y > EXPORT_H + 200)
@@ -1560,13 +1103,13 @@ function drawExportSmoke(ctx, exportMap, parts = S.parts,
     const edge = exportMap.project([p.lon + radiusKm / (111.32 * cos), p.lat]);
     const radius = Math.min(Math.max(Math.abs(edge.x - point.x), 6), 210);
     ctx.globalAlpha = (live ? .48 : .20) * fade * p.alpha;
-    ctx.drawImage(S.sprite, point.x - radius, point.y - radius, radius * 2, radius * 2);
+    ctx.drawImage(sprite, point.x - radius, point.y - radius, radius * 2, radius * 2);
   }
   ctx.globalAlpha = 1;
 }
 
 function drawExportWind(ctx, exportMap, enabled, phase = 0) {
-  if (!enabled || !W.cur) return;
+  if (!enabled || !windController.hasCurrent()) return;
   const lanes = WIND_LANE.map(() => []), out = {};
   const cols = 37, rows = 21;
   for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) {
@@ -1744,7 +1287,7 @@ function destroyExportMap(session) {
 }
 
 function drawExportFrame(canvas, exportMap, {
-  includeWind = true, windPhase = 0, smokeParts = S.parts,
+  includeWind = true, windPhase = 0, smokeParts = null,
   liveSmoke = getState().atLatest && !timelineController.isPlaying(),
   shownTime = timelineController.getTime(),
   generatedAt = new Date(), media = 'Image', showLargeTime = false,
@@ -1834,31 +1377,19 @@ function setExportMapTime(exportMap, ts) {
 }
 
 function saveExportWind() {
-  const grids = [...new Set([W.data, ...W.tiles.values()].filter(Boolean))];
-  const windRunning = !!W.raf, smokeRunning = !!S.raf;
-  if (W.raf) { cancelAnimationFrame(W.raf); W.raf = null; }
-  if (S.raf) { cancelAnimationFrame(S.raf); S.raf = null; }
   return {
-    ts: W.ts, cur: W.cur, windRunning, smokeRunning,
-    grids: grids.map(grid => [grid, grid._ts, grid._cur]),
+    wind: windController.pauseForExport(),
+    smoke: smokeController.pauseForExport(),
   };
 }
 
 function setExportWind(ts) {
-  W.ts = ts;
-  W.cur = windGridTime(W.data, ts);
-  for (const tile of W.tiles.values()) windGridTime(tile, ts);
+  windController.setExportTime(ts);
 }
 
 function restoreExportWind(state) {
-  W.ts = state.ts;
-  W.cur = state.cur;
-  for (const [grid, ts, cur] of state.grids) {
-    grid._ts = ts;
-    grid._cur = cur;
-  }
-  if (state.windRunning) windLoop();
-  if (state.smokeRunning) smokeLoop();
+  windController.restoreExport(state.wind);
+  smokeController.restoreExport(state.smoke);
 }
 
 function exportRandom(seed) {
@@ -1868,7 +1399,7 @@ function exportRandom(seed) {
 
 function exportSmokeAdvect(p, seconds) {
   const out = {};
-  if (!W.cur || !windAt(p.lon, p.lat, out)) return false;
+  if (!windController.hasCurrent() || !windAt(p.lon, p.lat, out)) return false;
   p.lat += (out.v + p.tv) * seconds / 110570;
   p.lon += (out.u + p.tu) * seconds
          / (111320 * Math.max(Math.cos(p.lat * Math.PI / 180), .2));
@@ -1890,10 +1421,10 @@ function advanceExportSmoke(parts, seconds) {
 }
 
 function buildExportSmoke(ts, limit = 320) {
-  if (!S.on) return [];
+  if (!smokeController.isEnabled()) return [];
   const { lastObservedTime, layerVisibility } = getState();
   const now = Math.min(ts, lastObservedTime);
-  const features = S.sources.filter(feature => {
+  const features = smokeController.getSources().filter(feature => {
     const p = feature.properties || {};
     return p.ts <= now && p.ts > now - SMOKE_WINDOW
         && layerVisibility.hotspots[p.source] !== false;
@@ -1965,8 +1496,9 @@ async function exportGifBlob({ includeWind = true, mode = 'instant' } = {}) {
   smallCtx.imageSmoothingEnabled = true;
   smallCtx.imageSmoothingQuality = 'high';
   const gif = GIFEncoder();
-  let smokeParts = S.parts.length
-    ? S.parts.map(part => ({ ...part })) : buildExportSmoke(timelineController.getTime());
+  const liveSmoke = smokeController.copyParts();
+  let smokeParts = liveSmoke.length
+    ? liveSmoke : buildExportSmoke(timelineController.getTime());
   try {
     for (let frame = 0; frame < frameCount; frame++) {
       const progress = frame / Math.max(frameCount - 1, 1);
@@ -2060,7 +1592,7 @@ function setExportOpen(open) {
   exportBtn.setAttribute('aria-expanded', open);
   document.getElementById('incidents').classList.toggle('export-open', open);
   if (open) {
-    exportWind.disabled = !W.cur;
+    exportWind.disabled = !windController.hasCurrent();
     setUpdatesOpen(false);
     setActivityOpen(false);
     setWeatherOpen(false);
@@ -3371,33 +2903,13 @@ document.getElementById('home-btn').addEventListener('click', () => {
  * Le changement de jeu de sources ne vide jamais les particules existantes :
  * elles gardent leur position géographique pendant et après le zoom. */
 function smokeUseVisibleSources() {
-  const manifest = zonesController.getManifest();
-  const hotspots = zonesController.getHotspots();
-  const detailed = manifest && map.getZoom() >= manifest.detail_zoom
-                && hotspots.length;
-  S.sources = detailed ? hotspots : S.overview;
-  if (detailed) {
-    // En panoramique, les panaches déjà loin hors champ ne doivent pas occuper
-    // tout le budget et empêcher la nouvelle zone visible d'émettre. Une marge
-    // généreuse préserve ceux qui peuvent revenir au prochain petit mouvement.
-    const b = map.getBounds();
-    const mx = (b.getEast() - b.getWest()) * .45;
-    const my = (b.getNorth() - b.getSouth()) * .45;
-    S.parts = S.parts.filter(p =>
-      p.lon >= b.getWest() - mx && p.lon <= b.getEast() + mx
-      && p.lat >= b.getSouth() - my && p.lat <= b.getNorth() + my);
-  }
-  smokeTime(timelineController.getTime(), true, false);
-  // Compléter le budget avec une première bouffée par pixel détaillé, sans
-  // retirer celles déjà en vol. Le zoom comme le panoramique changent ainsi de
-  // résolution en continu, puis les émissions pondérées prennent le relais.
-  if (detailed && S.parts.length < S.target) {
-    for (const emitter of S.emitters) {
-      if (S.parts.length >= S.target || S.parts.length >= SMOKE_N) break;
-      const p = smokeSpawn(true, emitter);
-      if (p) S.parts.push(p);
-    }
-  }
+  smokeController.useVisibleSources({
+    manifest: zonesController.getManifest(),
+    zoom: map.getZoom(),
+    hotspots: zonesController.getHotspots(),
+    bounds: map.getBounds(),
+    time: timelineController.getTime(),
+  });
 }
 
 const zonesController = createZonesController({
@@ -3408,20 +2920,19 @@ const zonesController = createZonesController({
     map.getSource('hs').setData(EMPTY);
     map.getSource('dated').setData(EMPTY);
     map.getSource('nrt').setData(EMPTY);
-    W.tiles = new Map();
+    windController.setTiles([]);
     smokeUseVisibleSources();
-    if (reason === 'empty') windTime(W.ts, true);
+    if (reason === 'empty') windTime(windController.getTime(), true);
     drawActivity();
   },
   applyDetail: ({ zones, hotspots, merge }) => {
-    W.tiles = new Map(zones.map(zone => [zone.id, zone.wind]));
-    for (const tile of W.tiles.values()) windGridTime(tile, W.ts);
+    windController.setTiles(zones);
     smokeUseVisibleSources();
     map.getSource('hs').setData(hotspots);
     map.getSource('dated').setData(merge('burnt_dated', true));
     map.getSource('nrt').setData(merge('burnt_nrt', true));
-    windTime(W.ts, true);
-    wctx.clearRect(0, 0, W.w, W.h);
+    windTime(windController.getTime(), true);
+    windController.clear();
     drawActivity();
   },
   afterDetail: () => {
@@ -3527,15 +3038,7 @@ const shownTs = () => {
 };
 
 function windPhrase(lon, lat) {
-  const out = {};
-  if (!W.cur || !windAt(lon, lat, out)) return '';
-  const kmh = Math.hypot(out.u, out.v) * 3.6;
-  const to = (Math.atan2(out.u, out.v) * 180 / Math.PI + 360) % 360;
-  const from = CARD[Math.round(((to + 180) % 360) / 22.5) % 16];
-  // Même formulation que la légende, pour qu'on retrouve la lecture du centre.
-  // « de » s'élide devant est et ouest : « vent d'ouest », pas « de ouest ».
-  const de = /^[aeiou]/.test(from) ? `d'${from}` : `de ${from}`;
-  return `Vent ${de}, ${Math.round(kmh)} km/h (raf. ${Math.round(out.g)} km/h)`;
+  return windController.phrase(lon, lat);
 }
 
 /* Deuxième étage de toutes les fiches : l'air à cet endroit, au cran affiché.
@@ -3869,14 +3372,14 @@ async function init() {
   addAircraftLayers();
 
   if (windData && windData.nt > 1) {
-    W.data = windData;
+    windController.configure(windData);
     centerProbe.hidden = false;
     temperatureBadge();
     windResize();
     smokeResize();
     map.on('move', () => {
       windSync();
-      wctx.clearRect(0, 0, W.w, W.h);
+      windController.clear();
       windBadge();
       temperatureBadge();
     });
@@ -3900,13 +3403,13 @@ async function init() {
 
   // dernier cran réellement observé : au-delà, la frise n'est plus qu'une
   // prévision de vent et le feu reste figé dans cet état
-  const lastObserved = addForecast(timeline, W.data);
+  const lastObserved = addForecast(timeline,
+    windData && windData.nt > 1 ? windData : null);
   setTimeline(timeline, lastObserved);
   activityController.configureMetrics();
   FIRE_CONTEXT.overview = overview.features;
-  S.overview = overview.features.length ? overview.features
-    : (detail ? detail.hotspots.features : []);
-  S.sources = S.overview;
+  smokeController.configureOverview(overview.features.length ? overview.features
+    : (detail ? detail.hotspots.features : []));
   FIRE_CONTEXT.features = psfdf.features.map(feature => {
     feature.properties.center = feature.geometry.coordinates;
     feature.properties.name = feature.properties.commune
@@ -4013,10 +3516,10 @@ for (const check of sourceChecks) check.addEventListener('change', event => {
 });
 activityController.installMetricListeners();
 document.getElementById('ck-wind').addEventListener('change', e => {
-  W.on = e.target.checked; windLoop(); windBadge();
+  windController.setEnabled(e.target.checked);
 });
 document.getElementById('ck-smoke').addEventListener('change', e => {
-  S.on = e.target.checked; smokeLoop();
+  smokeController.setEnabled(e.target.checked);
 });
 aircraftCheck.addEventListener('change', event => {
   A.on = event.target.checked;
