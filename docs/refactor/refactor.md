@@ -37,9 +37,10 @@ modifier simultanément les mêmes fichiers.
 
 ### Prompt d'ouverture d'une conversation d'implémentation
 
-> Refactor Flamap, lot **N** de `refactor.md`.
+> Refactor Flamap, lot **N** de `docs/refactor/refactor.md`.
 >
-> Lis `AGENTS.md` et `refactor.md` en entier avant toute modification. Inspecte
+> Lis `AGENTS.md` et `docs/refactor/refactor.md` en entier avant toute modification.
+> Inspecte
 > aussi l'état Git et les lots déjà terminés.
 >
 > Fais uniquement le lot N. Pendant une extraction, conserve les mêmes noms,
@@ -49,12 +50,14 @@ modifier simultanément les mêmes fichiers.
 > Exécute les contrôles requis par le lot, puis demande à des sous-agents en
 > lecture seule de rechercher les changements de comportement et les
 > régressions de performances. Corrige les problèmes confirmés, mets à jour
-> `refactor.md`, et montre le diff final. Ne committe ni ne pousse sans mon
+> `docs/refactor/refactor.md`, et montre le diff final. Ne committe ni ne pousse
+> sans mon
 > accord explicite.
 
 ### Prompt de relecture à froid
 
-> Relis ce diff de refactorisation de Flamap avec `AGENTS.md` et `refactor.md`.
+> Relis ce diff de refactorisation de Flamap avec `AGENTS.md` et
+> `docs/refactor/refactor.md`.
 > Il est censé préserver strictement les fonctionnalités et les performances.
 >
 > Cherche uniquement : changement de comportement, ordre d'exécution modifié,
@@ -451,7 +454,7 @@ doivent rester mécaniques ; les nettoyages viennent après la stabilisation.
 
 ### Lot 0 — Socle du chantier et références
 
-- [x] Suivre `refactor.md` et créer `.worktreeinclude` pour `AGENTS.md`.
+- [x] Suivre ce plan et créer `.worktreeinclude` pour `AGENTS.md`.
 - [x] Créer la branche d'intégration.
 - [x] Mesurer et consigner les performances de référence.
 - [x] Capturer des screenshots de référence desktop et mobile.
@@ -699,7 +702,11 @@ publié et toutes les données non thermiques, avec une seule substitution de
       l'exige.
 - [ ] Fusionner vers `main` uniquement après validation explicite, lots 17 et
       18 compris.
-- [ ] Décider de conserver ce fichier comme historique ou de le supprimer.
+- [x] Décider de conserver ce fichier comme historique ou de le supprimer.
+      Conservé, et archivé dans `docs/refactor/` auprès des références et
+      des captures du lot 0. Il n'est pas publié : `front_closure()` ne
+      reprend que la fermeture calculée depuis `FRONT_ROOT_FILES`, et
+      aucun workflow ne se déclenche sur `docs/`.
 
 ### Lot 18 — Optimisations de performances
 
