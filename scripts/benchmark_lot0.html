@@ -23,6 +23,7 @@ const output = document.getElementById('result');
 const result = { startedAt: new Date().toISOString() };
 const start = performance.now();
 const longRun = new URLSearchParams(location.search).get('long') !== '0';
+const appUrl = new URL(`../index.html?lot0=${Date.now()}`, location.href);
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 const resources = win => win.performance.getEntriesByType('resource').map(entry => ({
@@ -44,10 +45,31 @@ const median = values => {
   return sorted[Math.floor(sorted.length / 2)];
 };
 
-app.addEventListener('load', async () => {
+async function run() {
   let win = null;
   try {
   win = app.contentWindow;
+  // L'iframe démarre sur about:blank : attendre le document mesuré plutôt que
+  // son événement load, qui attend aussi les tuiles cartographiques externes.
+  // MapLibre écrit `#map=zoom/lat/lon` dès la création de la carte : comparer
+  // l'URL entière ferait attendre un href qui n'existe plus au bout de quelques
+  // millisecondes. Seuls le chemin et la requête identifient le document mesuré.
+  const measuredDocument = () => {
+    try {
+      const here = new URL(win.location.href);
+      return here.origin === appUrl.origin && here.pathname === appUrl.pathname
+        && here.search === appUrl.search;
+    } catch (_) {
+      return false;   // about:blank ou document pas encore accessible
+    }
+  };
+  const frameDeadline = performance.now() + 30000;
+  while (!measuredDocument()) {
+    if (performance.now() > frameDeadline)
+      throw new Error('iframe de mesure indisponible');
+    await sleep(25);
+    win = app.contentWindow;
+  }
   const apiDeadline = performance.now() + 30000;
   while (!win.__flamapMeasurement) {
     if (performance.now() > apiDeadline) throw new Error('API de mesure indisponible');
@@ -183,7 +205,8 @@ app.addEventListener('load', async () => {
     output.dataset.done = 'true';
     app.remove();
   }
-});
+}
 
-app.src = `../index.html?lot0=${Date.now()}`;
+app.src = appUrl.href;
+run();
 </script>

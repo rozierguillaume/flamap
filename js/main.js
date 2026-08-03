@@ -278,6 +278,10 @@ addEventListener('keydown', event => {
     setUpdatesOpen(false);
     if (activityPanel.classList.contains('open')) setActivityOpen(false);
     setWeatherOpen(false);
+    if (document.getElementById('credits').classList.contains('open'))
+      document.getElementById('cr-btn').click();
+    if (document.getElementById('layers').classList.contains('open'))
+      document.getElementById('layers-btn').click();
     closePopup();
   }
 });

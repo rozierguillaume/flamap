@@ -680,11 +680,21 @@ publié et toutes les données non thermiques, avec une seule substitution de
 
 ### Lot 17 — Revue finale et retrait du chantier
 
-- [ ] Exécuter toute la checklist sur desktop et mobile.
+- [~] Exécuter toute la checklist sur desktop et mobile. 30 items vérifiés sur
+      l'arbre final, sans régression ; 13 restent hors de portée d'un
+      environnement automatisé et demandent une passe manuelle (voir le journal
+      du lot 17). Attention : `MOBILE` est figé au chargement par
+      `matchMedia('(max-width: 720px)')` dans `js/main.js`. Redimensionner la
+      fenêtre ne bascule pas l'application en mode mobile et produit de faux
+      chevauchements ; toute vérification mobile exige un rechargement à la
+      largeur voulue.
 - [ ] Comparer toutes les mesures aux références du lot 0.
-- [ ] Faire une relecture parallèle : comportement, performances,
-      accessibilité, données et workflows.
-- [ ] Vérifier l'absence de secret, chemin absolu et donnée générée.
+- [x] Faire une relecture parallèle : comportement, performances,
+      accessibilité, données et workflows. Les défauts CSP, Escape et banc ont
+      été corrigés et relus à froid. L'écart de performance qui bloquait le lot
+      venait du banc lui-même et non du front : voir le journal du lot 17. Les
+      mesures d'initialisation et de frames restent à reprendre.
+- [x] Vérifier l'absence de secret, chemin absolu et donnée générée.
 - [ ] Mettre à jour README, SOURCES et AGENTS seulement si l'architecture finale
       l'exige.
 - [ ] Fusionner vers `main` uniquement après validation explicite.
@@ -714,7 +724,7 @@ publié et toutes les données non thermiques, avec une seule substitution de
 | 15 | terminé | `codex/refactor-15-workflows` / commit lot 15 | 2026-08-03 | Reprise de l’artefact, assemblage et validation extraits dans trois scripts standard-library, avec modes fire/front/weather ; 36 tests Python (dont les trois artefacts de fixture), 47 tests JavaScript, syntaxe Python/JS, YAML et `git diff --check` valides. Deux relectures à froid confirment la conservation des cadences, verrous, délais, reprises (0/3/9 s, 12 téléchargements), replis, validations et notification. L’omission préexistante de `js/fx/wind.js` et `js/fx/smoke.js` par le workflow météo reste volontairement hors lot, conformément à « Repéré en chemin ». Commit créé, intégration locale en attente. |
 | 16 | terminé | `codex/refactor-16-css-deps-securite` | 2026-08-03 | Cascade CSS découpée mécaniquement en base, tokens, carte, composants et responsive : la concaténation des règles historiques est identique octet pour octet. Les tokens existants et réellement communs sont isolés sans remplacement d’IDs. MapLibre GL JS 5.24.0 et gifenc 1.0.3 sont servis depuis `vendor/`, avec licences, README et empreintes SHA-256 ; les assemblages fire/front copient `vendor/` et `fonts/`, tandis que l’assemblage météo préserve le front publié ; le workflow front les déclenche. La CSP autorise seulement les scripts locaux et l’amorce analytique hashée, puis les API, tuiles, fontes, images `data:`/`blob:` et workers réellement observés ; `upgrade-insecure-requests` en est volontairement absent afin de conserver le démarrage HTTP statique local. Le banc de mesure a été rendu compatible CSP sans `unsafe-eval`. `prefers-reduced-motion` retire les transitions décoratives sans masquer données ni contrôles. Syntaxe Python/JS, 36 tests Python, 47 tests JS, artefact de fixture, `git diff --check`, chargement local et console sont valides. Rendu contrôlé à 1440×900 et 375×812 ; banc sans cache : init 528,5 ms, carte prête 1 647,5 ms (références 910/1 935 ms), 11 requêtes de données inchangées. Front CSS/JS/vendor : 1 428 161 octets bruts et 384 698 octets gzip par fichier (MapLibre est la même version que la référence, désormais locale). Relecture à froid sans régression confirmée. |
 | 16bis | terminé | `codex/refactor-16bis-weather-artifact` | 2026-08-03 | La reprise météo parcourt désormais la fermeture statique du front publié par niveaux parallèles (12 téléchargements) : documents, CSS importées, modules ES et imports dynamiques, vendor et police. Les notices de distribution sont conservées lorsqu’elles existent, sans bloquer la transition depuis l’artefact antérieur au lot 16. La validation rejette toute ressource locale requise manquante. Fixture complète : sous-feuilles CSS, vent, fumée, MapLibre, gifenc, police et notices ; les trois modes fire/front/weather et la substitution exclusive de `thermal.json` sont contrôlés. 37 tests Python, 47 tests JS, syntaxe Python/JS et `git diff --check` valides ; artefact météo local validé (235 fichiers, 20,2 Mio) et chargé sans erreur console. Double relecture à froid : parallélisme et intégrité des notices corrigés, aucun constat résiduel. |
-| 17 | à faire | | | |
+| 17 | bloqué | `codex/refactor-17-final-review` | 2026-08-03 | Correctifs : hash CSP analytics rectifié (script effectivement chargé), Escape ferme Calques et Sources & crédits en conservant leurs chemins de fermeture, banc lot 0 fiabilisé contre le chargement initial `about:blank`, garde du workflow front adaptée aux fichiers auxiliaires du lot. Contrôles : 37 tests Python, 47 JS, syntaxe complète, 3 tests de workflows et `git diff --check` valides ; carte chargée sans erreur console à 1440×900 et 375×812, dock/réglette mobile sans chevauchement ; relectures à froid ciblées sans régression. Banc visible complet : `show()` 0,832/0,800/1,000 ms moyenne/médiane/p95 et mémoire médiane 26 036 028 octets, dans les références. **Les deux dépassements relevés d'abord — initialisation 1 131 ms et 8,35 % de frames perdues — sont invalidés.** Le banc comparait l'URL entière de l'iframe pour attendre le document mesuré, alors que MapLibre y écrit `#map=zoom/lat/lon` dès la création de la carte : l'égalité devenait définitivement fausse. Selon que la comparaison tombait avant ou après cette écriture, la boucle sortait aussitôt ou épuisait ses trente secondes, et le nombre de sondages de 25 ms consommés s'ajoutait à une mesure prise depuis un `start` fixe. Le défaut a été reproduit puis corrigé sur `origine + chemin + requête`. L'écart lot 16 (528,5 ms) / lot 17 s'explique en outre par le hash CSP : le lot 16 mesurait une page où la mesure d'audience était bloquée, le lot 17 une page où elle est chargée. **L'initialisation et les frames perdues restent donc à mesurer avec le banc corrigé, onglet visible en continu en 1280×720, avant toute conclusion et avant de lever le statut.** Aucun merge ni push effectué ; les optimisations de performances sont sorties au lot 18. Reprise du banc corrigé, passage long complet du 2026-08-03 : **le budget de frames est tenu, 0 frame perdue et 0,00 point sur 29 961 ms**, cadence au repos et en lecture à 17 ms, 1 789 intervalles rendus pour 1 763 attendus ; `show()` à 0,99/1/1 ms moyenne/médiane/p95, dans la référence. Les 8,35 % de frames perdues ne se reproduisent pas. Ce passage a toutefois été pris sous Safari 27 en 1512×789, alors que la référence du lot 0 est Chromium 150 en 1280×720 : `performance.memory` y est absent, donc la mémoire n'est pas mesurée ; `performance.now()` y est quantifié à la milliseconde, donc les durées fines ne sont pas directement opposables ; la fenêtre plus large charge une quatrième zone et `thermal.json` répond désormais 200 au lieu de 404, soit 12 requêtes de données au lieu de 11. **`initReadyMs` 1 935 ms et `mapReadyMs` 3 447 ms ne sont donc pas comparables aux 910 et 1 935 ms de référence** ; une tuile IGN de ce passage a mis à elle seule 1 370 ms, et `mapReady()` attend `areTilesLoaded()`. Restent à mesurer sous Chromium en 1280×720, en trois passages : initialisation, carte prête et mémoire. Checklist fonctionnelle déroulée le 2026-08-03 sur l'arbre final : 30 items vérifiés, 13 hors de portée de l'environnement (zone manquante, champ de vent absent, popups agrégat/NRT/avion, point météo épinglé, polling avions live, traces d'appareils, GIF, partage mobile, onglet réellement masqué). **Aucune régression.** Points saillants : bornes et pas du curseur exacts sur les timestamps publiés ; légende à 230 px et lecture du vent à 128 px invariantes sur sept crans ; `past` bascule au seul franchissement et les surfaces brûlées suivent, vérifié à z11,5 ; arrêt de lecture au dernier cran ; un seul panneau ouvert sur cinq transitions avec `aria-expanded` cohérent et Échap fermant Calques et crédits ; popups foyer et sol conformes, horodatage AROME au cran courant, une seule popup ; export PNG au canvas 1920×1080 sans altérer caméra, vent, fumée ni cran ; à 375 et 320 px rechargés nativement, zéro chevauchement de commandes, rien hors écran, pas de défilement horizontal, dix commandes focusables et nommées ; les deux règles `prefers-reduced-motion` ne touchent que `animation*`, `transition-*` et `scroll-behavior`. |
 
 Statuts autorisés : `à faire`, `en cours`, `bloqué`, `terminé`.
 
@@ -739,6 +749,15 @@ implémenter opportunément dans un diff d'extraction.
 - La liste explicite de reprise du workflow météo omet les modules `fx/` depuis
   le lot 8, puis les sous-feuilles CSS, dépendances vendored et fontes ajoutées
   au lot 16. Son correctif est isolé dans le lot 16bis.
+- Le message d'état des avions reste périmé : après un retour au présent dans un
+  onglet masqué, `sync()` laisse « Masqués pendant la lecture du passé. » car il
+  ne réinitialise le texte que dans ses branches « décoché » et « passé ». Défaut
+  préexistant, identique au code d'avant refactorisation.
+- La cible tactile du lien « crédits » fait 34 × 15 px sur mobile, sous le seuil
+  recommandé. Choix préexistant, à arbitrer hors chantier.
+- Durcissement éventuel : valider les identifiants de zones du manifeste avant
+  de les concaténer dans des chemins locaux de reprise d’artefact, afin
+  d’écarter toute traversée de répertoires provenant d’un manifeste compromis.
 
 ---
 
