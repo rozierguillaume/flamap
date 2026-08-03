@@ -1,20 +1,7 @@
 # Grille de température à 20 km, et rien d'autre.
-#
-# Pourquoi elle vit à part. Elle représentait dix des dix-sept requêtes
-# Open-Meteo d'une collecte, et c'est le rythme des aller-retours depuis l'IP
-# partagée du runner qui déclenche les bridages — HTTP 429 et poignées de main
-# TLS laissées pendantes. Elle n'a pourtant aucune raison de suivre la cadence
-# des foyers : AROME HD ne sort une nouvelle échéance que toutes les 3 h, pour
-# 2 jours de prévision. La passer de 12 à 4 collectes par jour divise sa
-# pression par trois sans rien perdre.
-#
-# Elle ne partage aucun fichier avec update-fire-deploy.yml : `thermal.json`
-# porte sa propre base de temps, donc les deux cadences n'ont pas à s'aligner.
 name: update-weather-deploy
 
 on:
-  # Toutes les 6 h, à :47. Le passage :47 coïncide avec un cycle incendies,
-  # mais le verrou partagé le met en file derrière la publication en cours.
   schedule:
     - cron: "47 1,7,13,19 * * *"
   workflow_dispatch:
@@ -24,12 +11,6 @@ permissions:
   pages: write
   id-token: write
 
-# Le même verrou que les deux autres workflows. Un groupe de concurrence est
-# global au dépôt : ce workflow ne peut donc jamais publier en même temps que la
-# collecte des foyers, et ne risque pas d'écraser ses données. `thermal.json`
-# étant le seul fichier qu'il produise, tout le reste de l'artefact est repris
-# tel quel du site publié — l'état le plus récent au moment où le verrou se
-# libère.
 concurrency:
   group: pages
   cancel-in-progress: false
@@ -43,10 +24,6 @@ jobs:
       deploy: ${{ steps.collect.outputs.deploy }}
     steps:
       - uses: actions/checkout@v5
-
-      # Dix lots séquentiels espacés de six secondes : deux à quatre minutes en
-      # régime sain. Le budget interne de six minutes du collecteur écourte la
-      # série bien avant ce plafond, qui ne sert que de dernier recours.
       - name: Collecter la grille de température
         id: collect
         shell: bash
@@ -56,157 +33,28 @@ jobs:
           status=$?
           set -e
           if [ "$status" -ne 0 ]; then
-            # Rien à publier, et surtout rien à casser : le site publié conserve
-            # sa grille précédente, et le front sait de toute façon retomber sur
-            # la température grossière de `wind_coarse.json`.
             echo "::warning::Grille de température indisponible ; le site publié est conservé."
             echo "deploy=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           echo "deploy=true" >> "$GITHUB_OUTPUT"
         timeout-minutes: 12
-
       - name: Vérifier la grille
         if: steps.collect.outputs.deploy == 'true'
-        run: |
-          python3 - <<'PY'
-          import json, sys
-          thermal = json.load(open('data/thermal.json'))
-          rows = thermal.get('nt', 0)
-          print(f"{rows} heures, grille {thermal.get('nx')}x{thermal.get('ny')}, "
-                f"modèle {thermal.get('model')}")
-          if (rows < 2
-              or any(len(thermal.get(name, [])) != rows
-                     for name in ('temperature', 'precipitation'))):
-              sys.exit('grille de température incomplète')
-          # Tout l'intérêt de ce fichier est d'être bien plus fin que la grille
-          # du vent, qui est en 15x15 : sans ce seuil, une régression silencieuse
-          # du pas ramènerait Lyon de 38 à 33 °C sans que rien ne le signale.
-          if thermal.get('nx', 0) < 45:
-              sys.exit(f"grille trop grossière : nx={thermal.get('nx')}")
-          if any(row.count(None) > len(row) * 0.5
-                 for row in thermal['temperature']):
-              sys.exit('plus de la moitié des températures manquantes')
-          PY
-
-      # Même principe qu'update-front-deploy.yml : un artefact Pages remplace
-      # toujours le précédent en entier, donc il faut reprendre tout le site
-      # publié et n'y substituer que la grille fraîche.
+        run: python3 scripts/validate_export.py thermal-data data
       - name: Reprendre le site publié
         if: steps.collect.outputs.deploy == 'true'
-        run: |
-          python3 - <<'PY'
-          import json
-          import os
-          import pathlib
-          import shutil
-          import sys
-          import urllib.parse
-          import urllib.request
-          from concurrent.futures import ThreadPoolExecutor
-
-          base = os.environ['LIVE_SITE'].rstrip('/')
-          root = pathlib.Path('_site')
-
-          def download(item):
-              relative, local = item
-              url = f"{base}/{relative}"
-              target = root / local
-              target.parent.mkdir(parents=True, exist_ok=True)
-              try:
-                  with urllib.request.urlopen(url, timeout=60) as response:
-                      payload = response.read()
-              except Exception as error:
-                  sys.exit(f"impossible de reprendre {url}: {error}")
-              if not payload:
-                  sys.exit(f"fichier vide recu: {url}")
-              target.write_bytes(payload)
-              return payload
-
-          manifest = json.loads(download(('data/manifest.json',
-                                          'data/manifest.json')))
-          files = []
-          for name in ('overview_hotspots.geojson', 'burnt_recent.geojson',
-                       'psfdf_fires.geojson',
-                       'timeline.json', 'wind_coarse.json',
-                       'weather_forecast.json'):
-              files.append((f'data/{name}', f'data/{name}'))
-          for name in ('index.html', 'mentions-legales.html', 'social.html',
-                       'og.png', 'favicon.svg', 'favicon.ico',
-                       'apple-touch-icon.png', 'icon-192.png', 'icon-512.png',
-                       'site.webmanifest', 'robots.txt', 'sitemap.xml',
-                       'css/app.css', 'js/main.js', 'js/state.js',
-                       'js/data/client.js', 'js/data/initial.js',
-                       'js/data/zones.js',
-                       'js/map/base-style.js', 'js/map/create-map.js',
-                       'js/features/aircraft.js',
-                       'js/features/burnt.js', 'js/features/fires.js',
-                       'js/features/psfdf.js',
-                       'js/features/weather.js',
-                       'js/export/map-export.js',
-                       'js/util/format.js', 'js/util/geo.js',
-                       'js/util/grid.js',
-                       'js/timeline/activity.js',
-                       'js/timeline/controller.js',
-                       'js/timeline/model.js',
-                       'js/ui/panel-manager.js',
-                       'js/ui/popup-router.js',
-                       'js/ui/popup-view.js'):
-              files.append((name, name))
-          for zone_id in manifest['zones']:
-              encoded = urllib.parse.quote(str(zone_id), safe='')
-              files.append((f'data/zones/{encoded}.json',
-                            f'data/zones/{zone_id}.json'))
-          with ThreadPoolExecutor(max_workers=12) as pool:
-              for _ in pool.map(download, files):
-                  pass
-
-          try:
-              download(('data/social_timeline.json',
-                        'data/social_timeline.json'))
-          except SystemExit as error:
-              print(f'::warning::Historique social repris depuis la frise : {error}')
-              shutil.copy(root / 'data/timeline.json',
-                          root / 'data/social_timeline.json')
-
-          # La seule substitution : la grille fraîchement collectée.
-          shutil.copy('data/thermal.json', root / 'data/thermal.json')
-          print(f"{len(files) + 2} fichiers repris, grille de température "
-                "remplacée")
-          PY
-
+        run: python3 scripts/download_live_artifact.py --mode weather
+      - name: Remplacer la grille de température
+        if: steps.collect.outputs.deploy == 'true'
+        run: python3 scripts/assemble_site.py weather
       - name: Vérifier l’artefact
         if: steps.collect.outputs.deploy == 'true'
-        run: |
-          python3 - <<'PY'
-          import json, pathlib, sys
-          root = pathlib.Path('_site')
-          manifest = json.load(open(root / 'data/manifest.json'))
-          timeline = json.load(open(root / 'data/timeline.json'))
-          thermal = json.load(open(root / 'data/thermal.json'))
-          zone_paths = list((root / 'data/zones').glob('*.json'))
-          expected = {f"{zone_id}.json" for zone_id in manifest['zones']}
-          if (not manifest['hotspot_count'] or not timeline
-                  or {path.name for path in zone_paths} != expected):
-              sys.exit('artefact publie incomplet, déploiement annulé')
-          if thermal.get('nx', 0) < 45:
-              sys.exit('grille de température perdue dans l’artefact')
-          if not (root / 'index.html').exists():
-              sys.exit('front absent de l’artefact')
-          files = [path for path in root.rglob('*') if path.is_file()]
-          size = sum(path.stat().st_size for path in files)
-          if size > 100 * 1024 * 1024:
-              sys.exit('site supérieur à 100 Mio, déploiement annulé')
-          print(f"{manifest['hotspot_count']} foyers conservés, "
-                f"{len(zone_paths)} zones, {len(files)} fichiers, "
-                f"{size / 1024 / 1024:.1f} Mio")
-          PY
-
+        run: python3 scripts/validate_export.py weather _site
       - uses: actions/upload-pages-artifact@v3
         if: steps.collect.outputs.deploy == 'true'
         with:
           path: _site
-
   deploy:
     needs: build
     if: needs.build.outputs.deploy == 'true'

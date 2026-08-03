@@ -12,12 +12,11 @@ import tempfile
 
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-PYTHON_FILES = (
-    ROOT / "fetch_fires.py",
-    ROOT / "notify_telegram.py",
-    ROOT / "make_og.py",
-    ROOT / "scripts" / "serve_no_cache.py",
-)
+PYTHON_FILES = tuple(sorted(
+    [ROOT / "fetch_fires.py", ROOT / "notify_telegram.py", ROOT / "make_og.py"]
+    + list((ROOT / "scripts").glob("*.py"))
+    + list((ROOT / "flamap").glob("*.py"))
+))
 HTML_FILES = (
     ROOT / "index.html",
     ROOT / "social.html",
