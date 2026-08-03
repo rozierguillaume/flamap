@@ -15,6 +15,8 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from collections.abc import Callable
 
+from front_resources import PRESERVED_FRONT_FILES, front_closure
+
 
 CORE_DATA_FILES = (
     "overview_hotspots.geojson",
@@ -24,23 +26,6 @@ CORE_DATA_FILES = (
     "wind_coarse.json",
     "weather_forecast.json",
 )
-
-# La liste explicite est celle que le workflow météo reprenait avant le lot 15.
-# Elle est volontairement distincte du front copié par update-front-deploy.yml.
-PUBLISHED_FRONT_FILES = (
-    "index.html", "mentions-legales.html", "social.html", "og.png",
-    "favicon.svg", "favicon.ico", "apple-touch-icon.png", "icon-192.png",
-    "icon-512.png", "site.webmanifest", "robots.txt", "sitemap.xml",
-    "css/app.css", "js/main.js", "js/state.js", "js/data/client.js",
-    "js/data/initial.js", "js/data/zones.js", "js/map/base-style.js",
-    "js/map/create-map.js", "js/features/aircraft.js",
-    "js/features/burnt.js", "js/features/fires.js", "js/features/psfdf.js",
-    "js/features/weather.js", "js/export/map-export.js", "js/util/format.js",
-    "js/util/geo.js", "js/util/grid.js", "js/timeline/activity.js",
-    "js/timeline/controller.js", "js/timeline/model.js",
-    "js/ui/panel-manager.js", "js/ui/popup-router.js", "js/ui/popup-view.js",
-)
-
 
 def download_artifact(
     base: str,
@@ -69,8 +54,6 @@ def download_artifact(
 
     manifest = json.loads(download(("data/manifest.json", "data/manifest.json")))
     files = [(f"data/{name}", f"data/{name}") for name in CORE_DATA_FILES]
-    if include_front:
-        files.extend((name, name) for name in PUBLISHED_FRONT_FILES)
     for zone_id in manifest["zones"]:
         encoded = urllib.parse.quote(str(zone_id), safe="")
         files.append((f"data/zones/{encoded}.json", f"data/zones/{zone_id}.json"))
@@ -85,6 +68,21 @@ def download_artifact(
         shutil.copy(root / "data/timeline.json", root / "data/social_timeline.json")
 
     if include_front:
+        def download_front(names: list[str]) -> dict[str, bytes]:
+            with ThreadPoolExecutor(max_workers=12) as pool:
+                payloads = pool.map(lambda name: download((name, name)), names)
+                return dict(zip(names, payloads))
+
+        front_closure(lambda name: download((name, name)), read_many=download_front)
+        def preserve_front(name: str) -> None:
+            try:
+                download((name, name))
+            except SystemExit:
+                pass
+
+        with ThreadPoolExecutor(max_workers=12) as pool:
+            for _ in pool.map(preserve_front, PRESERVED_FRONT_FILES):
+                pass
         return
     download_thermal(base, root / "data/thermal.json", open_url=open_url)
 

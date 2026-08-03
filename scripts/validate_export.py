@@ -8,6 +8,8 @@ import json
 import pathlib
 import sys
 
+from front_resources import front_closure
+
 
 LIMIT = 100 * 1024 * 1024
 
@@ -128,8 +130,10 @@ def validate_weather_site(root: pathlib.Path) -> None:
         sys.exit("artefact publie incomplet, déploiement annulé")
     if thermal.get("nx", 0) < 45:
         sys.exit("grille de température perdue dans l’artefact")
-    if not (root / "index.html").exists():
-        sys.exit("front absent de l’artefact")
+    try:
+        front_closure(lambda name: (root / name).read_bytes())
+    except (OSError, ValueError, json.JSONDecodeError) as error:
+        raise SystemExit(f"ressource locale du front absente ou invalide : {error}") from error
     check_size(root)
     print(f"{manifest['hotspot_count']} foyers conservés, {len(zone_paths)} zones")
 

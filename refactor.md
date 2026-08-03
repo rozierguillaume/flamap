@@ -652,6 +652,32 @@ Critère de sortie : YAML déclaratif, artefacts équivalents et replis conserv�
 Critère de sortie : dépendances reproductibles, CSP fonctionnelle et budgets
 de performance respectés.
 
+### Lot 16bis — Intégrité de l’artefact météo
+
+Correctif explicite issu de « Repéré en chemin ». La reprise de l’artefact
+publié par le workflow météo est encore une liste manuelle datant d’avant les
+lots 8 et 16. Elle omet les modules `fx/`, les feuilles CSS importées, les
+dépendances vendored et les fontes : un déploiement météo peut donc republier
+un front incomplet.
+
+- [x] Remplacer ou compléter l’inventaire de reprise afin qu’il couvre toute la
+      fermeture statique réellement chargée par le front (HTML, CSS importé,
+      modules ES, vendor et fontes), sans reprendre de données générées en plus
+      de celles déjà prévues.
+- [x] Conserver le principe du workflow météo : reprendre l’artefact publié et
+      ne substituer que `data/thermal.json` ; ne pas y injecter le front du
+      checkout ni coupler sa cadence à celle de la grille thermique.
+- [x] Faire échouer la validation de l’artefact si une ressource locale
+      référencée par le front est absente ; couvrir notamment les sous-feuilles
+      CSS, `fx/wind.js`, `fx/smoke.js`, MapLibre, gifenc et la police.
+- [x] Ajouter une fixture d’artefact complète et vérifier les trois modes de
+      publication, puis démarrer l’artefact météo localement sans erreur de
+      ressource ni console.
+
+Critère de sortie : un déploiement météo conserve à l’identique le front
+publié et toutes les données non thermiques, avec une seule substitution de
+`thermal.json`.
+
 ### Lot 17 — Revue finale et retrait du chantier
 
 - [ ] Exécuter toute la checklist sur desktop et mobile.
@@ -687,6 +713,7 @@ de performance respectés.
 | 14 | terminé | `codex/refactor-14e-writer-orchestration` | 2026-08-02 | Sous-lot 14A terminé : primitives HTTP et géographiques extraites dans `flamap/http.py` et `flamap/geo.py`, avec les mêmes noms réexportés par la CLI ; filtre du workflow de collecte étendu à `flamap/**` après relecture à froid. Trois tests de caractérisation portent le total à 14 tests Python, avec 47 tests JavaScript ; syntaxe Python/JS, compatibilité CLI, absence de cycle et `git diff --check` valides. Aucun appel réseau, retry, `except` ou comportement de source modifié ; doubles relectures comportement/performance sans constat résiduel. Sous-lot 14B terminé : collecte, reprise historique et agrégation FIRMS extraites dans `flamap/firms.py`, frises courante et sociale dans `flamap/timeline.py`, avec façades CLI conservant les signatures et la lecture dynamique des constantes et chemins historiques. Six tests de caractérisation portent le total à 20 tests Python, avec 47 tests JavaScript ; syntaxe Python/JS, compatibilité CLI et `git diff --check` valides. Quatre téléchargements concurrents, deux tentatives à 60 s, pause de 5 s, code temporaire 75, fenêtres de 10/14 jours, déduplication, bornage EFFIS et replis inchangés ; aucun appel réseau supplémentaire ; relectures à froid comportement/performance sans constat résiduel après correction de la façade. Sous-lot 14C terminé : collecte et normalisation EFFIS extraites dans `flamap/effis.py`, collecte et rapprochement PSFDF dans `flamap/psfdf.py`, avec façades CLI conservant signatures, helpers et configuration lus à l'appel. Six tests de caractérisation portent le total à 26 tests Python, avec 47 tests JavaScript ; syntaxe Python/JS, compatibilité CLI, graphe Python de huit modules sans cycle et `git diff --check` valides. Un appel EFFIS daté obligatoire, un NRT facultatif, trois tentatives à 300 s et pauses de 4/8 s, un appel PSFDF à 30 s, permutations d'axes, filtres, tri, regroupement exclusif et replis inchangés ; aucun appel réseau supplémentaire ; doubles relectures à froid comportement/performance sans constat résiduel après correction des façades. Sous-lot 14D terminé : collecte Open-Meteo, grilles, lots, délais, replis AROME et exports extraits dans `flamap/meteo.py`, avec façades CLI conservant les signatures, l'horloge et les helpers injectables. Cinq tests de caractérisation portent le total à 31 tests Python, avec 47 tests JavaScript ; syntaxe Python/JS, compatibilité CLI, graphe Python de neuf modules sans cycle et `git diff --check` valides. Quatre tentatives, délais 429/réseau, timeout de 30 s, pauses de 6 s, lots séquentiels, budgets fin/thermique et aucun appel réseau supplémentaire sont inchangés ; double relecture à froid comportement/performance, avec correction de la façade `keep_recent`, sans constat résiduel. Sous-lot 14E terminé : écriture JSON, validation structurelle et publication extraites dans `flamap/writer.py` et `flamap/validation.py` ; les exports incendie sont préparés, validés, puis substitués avec `manifest.json` en dernier, tandis que `thermal.json` et les fichiers hors périmètre sont préservés. Trois tests portent le total à 34 tests Python, avec 47 tests JavaScript ; syntaxe Python/JS et `git diff --check` valides. Double relecture à froid : copie inutile des zones supprimée, aucun changement de comportement ni coût d'E/S résiduel identifié. |
 | 15 | terminé | `codex/refactor-15-workflows` / commit lot 15 | 2026-08-03 | Reprise de l’artefact, assemblage et validation extraits dans trois scripts standard-library, avec modes fire/front/weather ; 36 tests Python (dont les trois artefacts de fixture), 47 tests JavaScript, syntaxe Python/JS, YAML et `git diff --check` valides. Deux relectures à froid confirment la conservation des cadences, verrous, délais, reprises (0/3/9 s, 12 téléchargements), replis, validations et notification. L’omission préexistante de `js/fx/wind.js` et `js/fx/smoke.js` par le workflow météo reste volontairement hors lot, conformément à « Repéré en chemin ». Commit créé, intégration locale en attente. |
 | 16 | terminé | `codex/refactor-16-css-deps-securite` | 2026-08-03 | Cascade CSS découpée mécaniquement en base, tokens, carte, composants et responsive : la concaténation des règles historiques est identique octet pour octet. Les tokens existants et réellement communs sont isolés sans remplacement d’IDs. MapLibre GL JS 5.24.0 et gifenc 1.0.3 sont servis depuis `vendor/`, avec licences, README et empreintes SHA-256 ; les assemblages fire/front copient `vendor/` et `fonts/`, tandis que l’assemblage météo préserve le front publié ; le workflow front les déclenche. La CSP autorise seulement les scripts locaux et l’amorce analytique hashée, puis les API, tuiles, fontes, images `data:`/`blob:` et workers réellement observés ; `upgrade-insecure-requests` en est volontairement absent afin de conserver le démarrage HTTP statique local. Le banc de mesure a été rendu compatible CSP sans `unsafe-eval`. `prefers-reduced-motion` retire les transitions décoratives sans masquer données ni contrôles. Syntaxe Python/JS, 36 tests Python, 47 tests JS, artefact de fixture, `git diff --check`, chargement local et console sont valides. Rendu contrôlé à 1440×900 et 375×812 ; banc sans cache : init 528,5 ms, carte prête 1 647,5 ms (références 910/1 935 ms), 11 requêtes de données inchangées. Front CSS/JS/vendor : 1 428 161 octets bruts et 384 698 octets gzip par fichier (MapLibre est la même version que la référence, désormais locale). Relecture à froid sans régression confirmée. |
+| 16bis | terminé | `codex/refactor-16bis-weather-artifact` | 2026-08-03 | La reprise météo parcourt désormais la fermeture statique du front publié par niveaux parallèles (12 téléchargements) : documents, CSS importées, modules ES et imports dynamiques, vendor et police. Les notices de distribution sont conservées lorsqu’elles existent, sans bloquer la transition depuis l’artefact antérieur au lot 16. La validation rejette toute ressource locale requise manquante. Fixture complète : sous-feuilles CSS, vent, fumée, MapLibre, gifenc, police et notices ; les trois modes fire/front/weather et la substitution exclusive de `thermal.json` sont contrôlés. 37 tests Python, 47 tests JS, syntaxe Python/JS et `git diff --check` valides ; artefact météo local validé (235 fichiers, 20,2 Mio) et chargé sans erreur console. Double relecture à froid : parallélisme et intégrité des notices corrigés, aucun constat résiduel. |
 | 17 | à faire | | | |
 
 Statuts autorisés : `à faire`, `en cours`, `bloqué`, `terminé`.
@@ -708,14 +735,10 @@ implémenter opportunément dans un diff d'extraction.
   les éléments réellement uniques.
 - Ne mémoïser les lectures de styles calculés qu'après mesure et seulement pour
   les tokens garantis immuables.
-- Les trois assemblages de publication omettent actuellement `fonts/`, alors
-  que le front précharge `fonts/instrument-sans-latin.woff2` ; traiter ce défaut
-  préexistant dans un lot correctif explicite, sans le mêler à l'extraction des
-  assets du lot 3.
-- `update-weather-deploy.yml` reprend le front depuis une liste explicite qui
-  omet déjà `js/fx/wind.js` et `js/fx/smoke.js` depuis le lot 8 ; traiter ce
-  défaut préexistant dans un lot correctif explicite, sans le mêler à
-  l'extraction des foyers et surfaces brûlées du lot 9.
+- Les assemblages fire/front copient désormais `fonts/` (corrigé au lot 16).
+- La liste explicite de reprise du workflow météo omet les modules `fx/` depuis
+  le lot 8, puis les sous-feuilles CSS, dépendances vendored et fontes ajoutées
+  au lot 16. Son correctif est isolé dans le lot 16bis.
 
 ---
 
