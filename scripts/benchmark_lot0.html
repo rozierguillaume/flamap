@@ -1,0 +1,212 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Flamap — mesure lot 0</title>
+<style>
+  html, body, iframe { width: 100%; height: 100%; margin: 0; border: 0; }
+  #result { display: none; }
+  #result[data-done="true"] {
+    display: block;
+    position: fixed;
+    inset: 0;
+    overflow: auto;
+    margin: 0;
+    padding: 16px;
+    color: #eee;
+    background: #111;
+  }
+</style>
+<iframe id="app" title="Flamap mesurée"></iframe>
+<pre id="result">en cours</pre>
+<script>
+const app = document.getElementById('app');
+const output = document.getElementById('result');
+const result = { startedAt: new Date().toISOString() };
+const start = performance.now();
+const longRun = new URLSearchParams(location.search).get('long') !== '0';
+const appUrl = new URL(`../index.html?lot0=${Date.now()}`, location.href);
+
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+const resources = win => win.performance.getEntriesByType('resource').map(entry => ({
+  name: entry.name,
+  initiatorType: entry.initiatorType,
+  duration: entry.duration,
+  transferSize: entry.transferSize,
+  encodedBodySize: entry.encodedBodySize,
+  decodedBodySize: entry.decodedBodySize,
+}));
+const memory = win => win.performance.memory ? {
+  usedJSHeapSize: win.performance.memory.usedJSHeapSize,
+  totalJSHeapSize: win.performance.memory.totalJSHeapSize,
+  jsHeapSizeLimit: win.performance.memory.jsHeapSizeLimit,
+} : null;
+const median = values => {
+  if (!values.length) return null;
+  const sorted = [...values].sort((left, right) => left - right);
+  return sorted[Math.floor(sorted.length / 2)];
+};
+
+async function run() {
+  let win = null;
+  try {
+  win = app.contentWindow;
+  // L'iframe démarre sur about:blank : attendre le document mesuré plutôt que
+  // son événement load, qui attend aussi les tuiles cartographiques externes.
+  // MapLibre écrit `#map=zoom/lat/lon` dès la création de la carte : comparer
+  // l'URL entière ferait attendre un href qui n'existe plus au bout de quelques
+  // millisecondes. Seuls le chemin et la requête identifient le document mesuré.
+  const measuredDocument = () => {
+    try {
+      const here = new URL(win.location.href);
+      return here.origin === appUrl.origin && here.pathname === appUrl.pathname
+        && here.search === appUrl.search;
+    } catch (_) {
+      return false;   // about:blank ou document pas encore accessible
+    }
+  };
+  const frameDeadline = performance.now() + 30000;
+  while (!measuredDocument()) {
+    if (performance.now() > frameDeadline)
+      throw new Error('iframe de mesure indisponible');
+    await sleep(25);
+    win = app.contentWindow;
+  }
+  const apiDeadline = performance.now() + 30000;
+  while (!win.__flamapMeasurement) {
+    if (performance.now() > apiDeadline) throw new Error('API de mesure indisponible');
+    await sleep(25);
+  }
+  const measurement = win.__flamapMeasurement;
+  result.environment = {
+    userAgent: win.navigator.userAgent,
+    viewport: [win.innerWidth, win.innerHeight],
+    devicePixelRatio: win.devicePixelRatio,
+    hardwareConcurrency: win.navigator.hardwareConcurrency,
+  };
+  result.frameLoadMs = performance.now() - start;
+  const deadline = performance.now() + 30000;
+  while (win.document.getElementById('export-btn').disabled) {
+    if (performance.now() > deadline) throw new Error('initialisation > 30 s');
+    await sleep(25);
+  }
+  result.initReadyMs = performance.now() - start;
+  result.navigation = JSON.parse(JSON.stringify(
+    win.performance.getEntriesByType('navigation')[0] || null));
+  const networkSnapshot = (async () => {
+    await sleep(5000);
+    result.resourcesAtFiveSeconds = resources(win);
+    const aircraft = win.document.getElementById('ck-aircraft');
+    if (aircraft.checked) aircraft.click();
+  })();
+
+  const visualDeadline = performance.now() + 30000;
+  while (!measurement.mapReady()) {
+    if (performance.now() > visualDeadline)
+      throw new Error('carte non stabilisée après 30 s');
+    await sleep(25);
+  }
+  await new Promise(resolve => win.requestAnimationFrame(() =>
+    win.requestAnimationFrame(resolve)));
+  result.mapReadyMs = performance.now() - start;
+  await networkSnapshot;
+  if (!longRun) {
+    result.finishedAt = new Date().toISOString();
+    output.textContent = JSON.stringify(result, null, 2);
+    output.dataset.done = 'true';
+    app.remove();
+    return;
+  }
+
+  const idleFrameTimes = [];
+  await new Promise(resolve => {
+    let firstFrame = null;
+    const idleFrame = now => {
+      firstFrame ??= now;
+      idleFrameTimes.push(now);
+      if (now - firstFrame >= 2000) resolve();
+      else win.requestAnimationFrame(idleFrame);
+    };
+    win.requestAnimationFrame(idleFrame);
+  });
+  result.idleRefreshIntervalMs = median(idleFrameTimes
+    .slice(1).map((value, index) => value - idleFrameTimes[index]));
+  result.memoryBeforeFiveMinutes = memory(win);
+
+  measurement.startShowTiming();
+  const frameTimes = [];
+  let probeRaf = 0;
+  const lot0Frame = now => {
+    frameTimes.push(now);
+    if (!measurement.playbackRunning()) win.document.getElementById('play').click();
+    probeRaf = win.requestAnimationFrame(lot0Frame);
+  };
+  win.document.getElementById('play').click();
+  probeRaf = win.requestAnimationFrame(lot0Frame);
+
+  await sleep(30000);
+  win.cancelAnimationFrame(probeRaf);
+  if (measurement.playbackRunning()) win.document.getElementById('play').click();
+  const showDurations = measurement.stopShowTiming();
+  const deltas = frameTimes.slice(1).map((value, index) => value - frameTimes[index]);
+  const sortedDeltas = [...deltas].sort((a, b) => a - b);
+  const sortedShow = [...showDurations].sort((a, b) => a - b);
+  const percentile = (values, ratio) => values.length
+    ? values[Math.min(Math.floor(values.length * ratio), values.length - 1)] : null;
+  const elapsed = frameTimes.length > 1 ? frameTimes.at(-1) - frameTimes[0] : 0;
+  const refreshIntervalMs = percentile(sortedDeltas, .5);
+  const expectedIntervals = result.idleRefreshIntervalMs
+    ? Math.round(elapsed / result.idleRefreshIntervalMs) : 0;
+  const missedFrames = Math.max(
+    0, expectedIntervals - Math.max(frameTimes.length - 1, 0));
+  result.playback = {
+    elapsedMs: elapsed,
+    frames: frameTimes.length,
+    referenceIntervalMs: result.idleRefreshIntervalMs,
+    refreshIntervalMs,
+    missedFrames,
+    missedFramePoints: expectedIntervals
+      ? missedFrames / expectedIntervals * 100 : null,
+    frameMedianMs: percentile(sortedDeltas, .5),
+    frameP95Ms: percentile(sortedDeltas, .95),
+    showCalls: showDurations.length,
+    showMeanMs: showDurations.length
+      ? showDurations.reduce((sum, value) => sum + value, 0) / showDurations.length : null,
+    showMedianMs: percentile(sortedShow, .5),
+    showP95Ms: percentile(sortedShow, .95),
+    showMaxMs: showDurations.length ? Math.max(...showDurations) : null,
+  };
+
+  await sleep(210000);
+  const memorySamples = [];
+  for (let sample = 0; sample < 60; sample++) {
+    const value = memory(win);
+    if (value) memorySamples.push(value);
+    await sleep(1000);
+  }
+  result.memoryAfterFiveMinutes = memorySamples.length ? {
+    samples: memorySamples.length,
+    usedJSHeapSizeMedian: median(memorySamples.map(value => value.usedJSHeapSize)),
+    usedJSHeapSizeMin: Math.min(...memorySamples.map(value => value.usedJSHeapSize)),
+    usedJSHeapSizeMax: Math.max(...memorySamples.map(value => value.usedJSHeapSize)),
+    totalJSHeapSizeMedian: median(memorySamples.map(value => value.totalJSHeapSize)),
+  } : null;
+  result.resourcesAfterFiveMinutes = resources(win);
+  result.finishedAt = new Date().toISOString();
+  output.textContent = JSON.stringify(result, null, 2);
+  output.dataset.done = 'true';
+  for (const id of ['ck-wind', 'ck-smoke']) {
+    const input = win.document.getElementById(id);
+    if (input.checked) input.click();
+  }
+  app.remove();
+  } catch (error) {
+    result.error = error instanceof Error ? error.message : String(error);
+    result.finishedAt = new Date().toISOString();
+    output.textContent = JSON.stringify(result, null, 2);
+    output.dataset.done = 'true';
+    app.remove();
+  }
+}
+
+app.src = appUrl.href;
+run();
+</script>

@@ -1,0 +1,31 @@
+name: checks
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Vérifier la syntaxe
+        run: python3 scripts/check_syntax.py
+
+      - name: Tester le collecteur sans réseau
+        run: python3 -m unittest discover tests/python
+
+      - name: Tester les fonctions JavaScript pures
+        run: node --experimental-default-type=module --test tests/js/*.test.js

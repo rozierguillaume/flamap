@@ -202,8 +202,8 @@ réanalyse ERA5, 25 km, latence 5 jours).
 
    `thermal.json` couvre ±18 h, avec sa propre base de temps : il est collecté
    toutes les 6 h par un workflow distinct, alors que le vent l'est toutes les
-   2 h, et les deux champs ne se lisent donc jamais au même indice de ligne. La
-   fenêtre est plus large que les ±12 h du vent exprès : les deux collectes
+   30 min, et les deux champs ne se lisent donc jamais au même indice de ligne.
+   La fenêtre est plus large que les ±12 h du vent exprès : les deux collectes
    peuvent être décalées de six heures, et sans cette marge le graphique perdait
    jusqu'à six heures de tracé. Le navigateur le charge au
    démarrage puisque la légende y lit la température. Au-delà de cette fenêtre —
@@ -277,14 +277,14 @@ affecter le reste de la carte.
 
 L'endpoint ne livre que l'état courant. Le service isolé
 `flamap-aircraft-history`, installé séparément sur le VPS, effectue donc la
-même requête toutes les 4 secondes et conserve 15 minutes de points dans un
+même requête toutes les 4 secondes et conserve 30 minutes de points dans un
 tampon circulaire en RAM. Il ne stocke pas d'archive durable : après un
 redémarrage, le tampon se reconstitue progressivement. Son endpoint agrégé
 n'est appelé qu'à l'activation du calque pour fournir le début des traces à
 tous les visiteurs sans multiplier la collecte amont.
 
 Le navigateur continue ensuite sa collecte directe, conserve les points pendant
-15 minutes et dessine les 10 dernières minutes, même si le calque est brièvement
+30 minutes et dessine les 30 dernières minutes, même si le calque est brièvement
 décoché. Le service du VPS reste un enrichissement facultatif : en cas d'échec,
 la trace se construit localement à partir de l'activation. Le navigateur
 abandonne l'amorçage après 4 secondes, rejette les formats inattendus, les ICAO24

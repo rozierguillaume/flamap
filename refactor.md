@@ -1,0 +1,807 @@
+# Plan canonique de refactorisation de Flamap
+
+Ce document est la source de vérité du chantier de refactorisation. Il doit
+permettre à chaque nouvelle conversation Codex de reprendre le travail sans
+dépendre de l'historique d'une conversation précédente.
+
+Le chantier porte sur le front, le collecteur Python et les workflows de
+publication. Son objectif est de rendre le code beaucoup plus clair, testable
+et facile à maintenir, sans modifier les fonctionnalités visibles, la
+sémantique des données, les performances ou la robustesse opérationnelle.
+
+Le projet reste volontairement simple : site statique, modules ES natifs,
+bibliothèque standard Python, aucun bundler, aucun gestionnaire de paquets et
+aucune donnée générée suivie par Git.
+
+---
+
+## 1. Mode d'emploi pour les conversations Codex
+
+Chaque conversation doit :
+
+1. lire intégralement `AGENTS.md` et ce fichier avant toute modification ;
+2. inspecter `git status` et les derniers commits du chantier ;
+3. traiter un seul lot non terminé ;
+4. annoncer précisément son périmètre avant d'écrire ;
+5. préserver les noms, commentaires et comportements pendant une extraction ;
+6. noter les améliorations hors périmètre dans « Repéré en chemin » ;
+7. exécuter les contrôles automatisés et manuels proportionnés au lot ;
+8. faire relire le diff à froid avant validation ;
+9. mettre à jour la checklist et le journal de ce fichier ;
+10. ne pas committer, pousser ou fusionner sans demande explicite de l'utilisateur.
+
+Un agent principal est responsable du diff. Les sous-agents sont réservés aux
+travaux indépendants et principalement en lecture seule : exploration, tests,
+analyse de performances et relecture. Plusieurs agents ne doivent jamais
+modifier simultanément les mêmes fichiers.
+
+### Prompt d'ouverture d'une conversation d'implémentation
+
+> Refactor Flamap, lot **N** de `refactor.md`.
+>
+> Lis `AGENTS.md` et `refactor.md` en entier avant toute modification. Inspecte
+> aussi l'état Git et les lots déjà terminés.
+>
+> Fais uniquement le lot N. Pendant une extraction, conserve les mêmes noms,
+> commentaires, valeurs, ordre d'initialisation et comportements. Toute idée
+> hors périmètre va dans « Repéré en chemin ».
+>
+> Exécute les contrôles requis par le lot, puis demande à des sous-agents en
+> lecture seule de rechercher les changements de comportement et les
+> régressions de performances. Corrige les problèmes confirmés, mets à jour
+> `refactor.md`, et montre le diff final. Ne committe ni ne pousse sans mon
+> accord explicite.
+
+### Prompt de relecture à froid
+
+> Relis ce diff de refactorisation de Flamap avec `AGENTS.md` et `refactor.md`.
+> Il est censé préserver strictement les fonctionnalités et les performances.
+>
+> Cherche uniquement : changement de comportement, ordre d'exécution modifié,
+> variable auparavant partagée qui ne l'est plus, valeur capturée au chargement
+> au lieu d'être lue à l'appel, listener perdu ou doublé, requête supplémentaire,
+> boucle d'animation plus coûteuse, régression mobile, accessibilité ou repli
+> réseau cassé. Donne des références de fichiers et de lignes. Ne propose pas
+> de changement esthétique ou fonctionnel sans lien avec une régression.
+
+---
+
+## 2. Stratégie Git et worktrees
+
+- Le chantier ne se fait jamais directement sur `main`, car tout push sur
+  `main` peut déclencher une publication.
+- Branche d'intégration recommandée : `codex/refactor-integration`.
+- Une branche courte par lot : `codex/refactor-N-nom-du-lot`.
+- Chaque branche de lot part de la branche d'intégration à jour et y revient
+  seulement après vérification.
+- Le front est refactoré séquentiellement. Le Python peut avancer en parallèle
+  du front uniquement après le lot de référence et dans un worktree distinct.
+- Si deux branches avancent en parallèle, une seule conversation coordinatrice
+  met à jour le journal de ce fichier afin d'éviter les conflits.
+- Un commit porte une seule préoccupation et doit être vérifiable et
+  réversible. Un lot peut contenir plusieurs commits cohérents.
+- Aucun message de commit ou de PR ne doit mentionner un agent IA, conformément
+  à `AGENTS.md`.
+
+`AGENTS.md` est actuellement un fichier local ignoré. Avant d'utiliser des
+worktrees Codex, créer et suivre un fichier `.worktreeinclude` contenant :
+
+```text
+AGENTS.md
+```
+
+---
+
+## 3. Règles absolues du chantier
+
+### 3.1 Préservation fonctionnelle
+
+- Une extraction ne doit ajouter, supprimer ou renommer aucune fonctionnalité.
+- Une correction d'un défaut préexistant doit vivre dans un lot explicitement
+  identifié comme correctif, jamais cachée dans un déplacement de code.
+- L'ordre des sources et couches MapLibre reste identique.
+- L'ordre d'attachement des listeners et l'ordre de démarrage restent identiques.
+- Les formats des JSON et GeoJSON publics restent compatibles.
+- Les URLs, paramètres, cadences, valeurs par défaut et textes restent
+  inchangés sauf correction explicitement listée.
+- Les replis en cas de données manquantes restent opérationnels.
+- Le site doit fonctionner en HTTP statique sans étape de compilation.
+
+### 3.2 Préservation des performances
+
+- Aucun `setFilter` ne doit entrer dans la boucle d'animation temporelle.
+- `applyBurnt()` ne doit pas être rappelé à chaque frame.
+- Les boucles vent et fumée gardent leurs plafonds de particules, DPR et FPS.
+- Aucun module ne doit créer une seconde boucle `requestAnimationFrame` pour un
+  effet déjà piloté par une boucle existante.
+- Les listeners `move`, `moveend`, `resize` et `visibilitychange` ne doivent pas
+  être dupliqués par une réinitialisation de contrôleur.
+- Le chargement des zones reste progressif, dédupliqué, borné et protégé par
+  son jeton de course.
+- Le nombre d'appels aux APIs externes reste identique. Les avions restent
+  activés par défaut et leur polling s'arrête s'ils sont décochés, dans un
+  onglet masqué ou au passé.
+- L'extraction en modules conserve un graphe d'import peu profond. Éviter les
+  dizaines de fichiers minuscules et les imports en cascade.
+- Les nouveaux fichiers statiques doivent être copiés par les trois workflows
+  de publication et correctement servis par GitHub Pages.
+
+### 3.3 Architecture et dépendances
+
+Sens autorisé des dépendances :
+
+```text
+config/utilitaires -> données/état -> fonctionnalités/effets/UI -> main
+```
+
+- `util` ne dépend ni du DOM, ni de MapLibre, ni d'un module métier.
+- `state` ne contient ni instance MapLibre, ni élément DOM, ni cache réseau,
+  ni particules.
+- Les états du vent, de la fumée, des avions, des zones et des popups restent
+  privés à leurs contrôleurs.
+- Un module fonctionnel n'importe jamais `main.js`.
+- Le module de création de carte n'importe pas les fonctionnalités.
+- `main.js` est la seule racine qui connaît et assemble tous les contrôleurs.
+- Les dépendances entre fonctionnalités passent par une petite API explicite
+  ou des callbacks injectés, pas par des variables globales importées.
+- Aucun objet mutable global ne doit remplacer le monolithe actuel.
+
+---
+
+## 4. Invariants historiques à protéger
+
+Cette liste résume les points les plus exposés. `AGENTS.md` reste la référence
+complète et ne doit pas être supprimé après le découpage.
+
+- EFFIS émet ses coordonnées dans l'ordre `[lat, lon]` : `swap_axes()` reste
+  obligatoire.
+- EFFIS ne doit jamais être appelé depuis le front.
+- Le démarrage MapLibre conserve le sondage de `isStyleLoaded()` et ne revient
+  pas à un simple `map.on('load')`.
+- Les crans EFFIS restent bornés à la fenêtre temporelle FIRMS.
+- Le curseur reste fondé sur un timestamp continu en secondes epoch.
+- La rampe d'ancienneté reste continue et la légende reste générée depuis la
+  même source que le rendu de la carte.
+- `lockWidths()` continue à figer les largeurs de la lecture et du vent.
+- La ligne de vent conserve sa place quand le champ manque, mais disparaît
+  lorsque la couche est désactivée.
+- Les rafales restent déjà exprimées en km/h dans les fichiers produits.
+- Les canvas de vent et de fumée gardent `width: 100%; height: 100%`.
+- La grille de vent conserve sa marge de 60 km.
+- Les prévisions restent désactivables avec `FORECAST_H` sans supprimer le
+  mécanisme.
+- Les surfaces brûlées utilisent l'opacité, pas `visibility`, pour leur fondu.
+- Un seul routeur de clic carte et une seule popup restent actifs.
+- `popTarget()` continue à écarter les objets transparents mais rendus.
+- Les popups restent entre les nappes et les panneaux sans ajouter de
+  `z-index` à `#map`.
+- `fitPopup()` continue à dégager le dock mobile.
+- Le point météo épinglé ne suit pas `moveend`.
+- Le cadrage initial ne retient que les incendies significatifs et récents.
+- Les crédits restent hors du flux du dock sur ordinateur.
+
+---
+
+## 5. Architecture cible du front
+
+La cible reste volontairement compacte. Un module de fonctionnalité n'est
+transformé en sous-dossier que s'il reste réellement trop gros après son
+extraction.
+
+```text
+index.html
+css/
+  app.css                    # première extraction, ordre CSS inchangé
+  tokens.css                 # phase de finition seulement
+  base.css
+  map.css
+  components.css
+  responsive.css
+js/
+  app.js                     # monolithe externe temporaire pendant la migration
+  main.js                    # orchestration finale, remplace app.js à la fin
+  config.js
+  state.js                   # état partagé minimal, API contrôlée
+  map/
+    create-map.js
+    base-style.js
+  data/
+    client.js
+    initial.js
+    zones.js
+  timeline/
+    model.js
+    controller.js
+    activity.js
+  features/
+    fires.js
+    burnt.js
+    weather.js
+    psfdf.js
+    aircraft.js
+  fx/
+    wind.js
+    smoke.js
+  ui/
+    panel-manager.js
+    popup-router.js
+    popup-view.js
+    legend.js
+    layers-menu.js
+    updates.js
+  export/
+    map-export.js
+  util/
+    format.js
+    grid.js
+    geo.js
+```
+
+### 5.1 État partagé
+
+`state.js` peut porter uniquement les valeurs réellement transversales, par
+exemple le timestamp courant, le dernier timestamp observé et la visibilité
+des familles de couches.
+
+Il ne doit pas exporter un objet modifiable directement. API attendue :
+
+```js
+getState()
+setCurrentTime(timestamp)
+setTimeline(steps)
+setLayerVisibility(layer, visible)
+subscribe(listener)
+```
+
+`steps` est une donnée initialisée une fois. Les contrôleurs conservent leur
+état technique privé et exposent des méthodes explicites comme `setTime()`,
+`setEnabled()`, `resize()` et `destroy()`.
+
+### 5.2 Carte
+
+`map/create-map.js` crée MapLibre, le fond IGN/Sentinel, les toponymes et les
+contrôles généraux. Il ne connaît pas les couches métier.
+
+Chaque fonctionnalité installe ses propres sources et couches via une API du
+type :
+
+```js
+install(map)
+setTime(timestamp)
+setEnabled(enabled)
+setData(data)
+destroy()
+```
+
+### 5.3 Panneaux et popups
+
+`panel-manager.js` centralise l'ouverture exclusive, `aria-expanded`, Escape,
+le focus initial, le retour du focus et la fermeture extérieure.
+
+`popup-router.js` possède la priorité des couches, `popTarget()` et le clic
+unique sur la carte. `popup-view.js` fournit seulement les primitives communes.
+Les fonctionnalités fabriquent le contenu de leur propre fiche.
+
+---
+
+## 6. Architecture cible du collecteur et des workflows
+
+Le collecteur reste fondé sur la bibliothèque standard Python.
+
+```text
+flamap/
+  __init__.py
+  config.py
+  http.py
+  geo.py
+  firms.py
+  effis.py
+  psfdf.py
+  meteo.py
+  timeline.py
+  validation.py
+  writer.py
+fetch_fires.py              # CLI et orchestration seulement
+scripts/
+  download_live_artifact.py
+  assemble_site.py
+  validate_export.py
+tests/
+  python/
+  js/
+  fixtures/
+```
+
+- Les clients de source reçoivent une fonction HTTP injectable afin d'être
+  testés avec des fixtures locales.
+- Les exceptions réseau attendues sont distinguées des erreurs de programmation.
+- Les données sont produites dans un répertoire de préparation, validées, puis
+  substituées seulement après succès.
+- Le manifeste reste le dernier point d'entrée publié.
+- Les trois workflows appellent des scripts partagés au lieu de dupliquer de
+  gros blocs Python inline.
+
+---
+
+## 7. Filet de sécurité et budgets de performance
+
+### 7.1 Contrôles automatisés minimaux
+
+Sans `package.json` ni dépendance supplémentaire :
+
+```bash
+python3 -m py_compile fetch_fires.py notify_telegram.py make_og.py
+python3 -m unittest discover tests/python
+find js -name '*.js' -print0 | while IFS= read -r -d '' file; do
+  node --input-type=module --check < "$file"
+done
+node --experimental-default-type=module --test tests/js/*.test.js
+```
+
+Les commandes ne deviennent obligatoires qu'après la création des répertoires
+concernés. Un workflow `checks.yml` doit les exécuter sur push et pull request.
+
+### 7.2 Scénarios de référence à mesurer au lot 0
+
+Servir le projet avec `python3 -m http.server 8777` et remplir le tableau :
+
+| Mesure | Référence avant refactor | Seuil maximal après lot |
+|---|---:|---:|
+| Affichage initial de la carte, cache froid | à mesurer | +10 % ou +200 ms |
+| Octets JS/CSS transférés, hors données | à mesurer | +5 % hors vendoring |
+| Requêtes de données au démarrage | à mesurer | aucune supplémentaire |
+| Coût de `show()` pendant la lecture | à mesurer | +10 % maximum |
+| Frames perdues sur 30 s de lecture | à mesurer | +5 points maximum |
+| Mémoire après 5 min vent + fumée | à mesurer | +10 % maximum |
+
+Les mesures sont comparatives, sur la même machine et le même navigateur. Un
+écart au-delà du seuil bloque le lot jusqu'à explication et correction. La
+cible reste **zéro régression mesurable** : les tolérances du tableau absorbent
+le bruit d'une mesure locale, elles n'autorisent pas un ralentissement. Une
+hausse plus faible mais répétable sur plusieurs mesures doit elle aussi être
+analysée et corrigée, ou explicitement soumise à l'utilisateur.
+
+### 7.3 Vérification courte à chaque commit
+
+- Syntaxe et tests disponibles.
+- Chargement local sans nouvelle erreur console.
+- Vérification ciblée de la fonctionnalité déplacée.
+- Vérification du nombre de listeners et boucles d'animation concernés.
+- Relecture du diff à froid.
+
+### 7.4 Checklist complète avant fusion d'un lot
+
+#### Carte et données
+
+- [ ] La carte s'affiche avec le cadrage initial attendu.
+- [ ] Les foyers suivent la rampe continue d'ancienneté.
+- [ ] Les surfaces brûlées, contours et zones PSFDF sont visibles.
+- [ ] Le zoom charge et décharge les zones détaillées sans erreur.
+- [ ] Une zone manquante dégrade le détail sans casser la carte nationale.
+
+#### Frise et lecture
+
+- [ ] Le curseur atteint exactement les timestamps publiés.
+- [ ] La lecture reprend, se met en pause et s'arrête au dernier cran.
+- [ ] Les marques restent alignées avec le curseur.
+- [ ] La largeur du curseur et de la légende ne varie pas entre les crans.
+- [ ] Les surfaces brûlées apparaissent et disparaissent au même instant.
+
+#### Vent et fumée
+
+- [ ] Le vent s'anime, se redimensionne et s'arrête quand il est décoché.
+- [ ] La fumée part des foyers récents et suit le vent.
+- [ ] La légende du vent garde sa place si le champ manque.
+- [ ] Un déplacement de carte ne duplique aucune boucle ou traînée.
+- [ ] Les performances respectent les budgets de référence.
+
+#### Panneaux et popups
+
+- [ ] Un seul panneau principal est ouvert à la fois.
+- [ ] Escape, focus et `aria-expanded` restent cohérents.
+- [ ] Clic foyer, agrégat, périmètre, NRT, avion et fond de carte.
+- [ ] Un objet transparent ne reçoit pas de clic.
+- [ ] La météo d'une popup lit le timestamp courant.
+- [ ] Un point météo épinglé reste fixe pendant un déplacement.
+- [ ] Une seule popup reste ouverte et `fitPopup()` dégage le dock.
+
+#### PSFDF et avions
+
+- [ ] Les raccourcis et le panneau PSFDF affichent le même feu qu'avant.
+- [ ] Le graphique d'activité locale conserve ses valeurs et son échelle.
+- [ ] Les avions démarrent au chargement et s'arrêtent dès qu'ils sont décochés.
+- [ ] Le polling avions s'arrête au passé et dans un onglet masqué.
+- [ ] Les traces, libellés et popups des appareils restent cohérents.
+
+#### Export
+
+- [ ] PNG 1920 x 1080 identique dans son contenu et son cadrage.
+- [ ] GIF instantané et GIF d'évolution fonctionnent.
+- [ ] Vent et fumée exportés ne modifient pas l'état de la carte vivante.
+- [ ] Le partage mobile et le téléchargement desktop restent opérationnels.
+
+#### Responsive et accessibilité
+
+- [ ] Vérification à 1440 px, 820 px, 375 px et 320 px.
+- [ ] Aucun panneau ne recouvre une commande indispensable.
+- [ ] Une popup mobile reste au-dessus du dock.
+- [ ] Navigation clavier et focus visible sur les contrôles principaux.
+- [ ] Le mode de réduction des animations conserve une interface utilisable.
+
+#### Arrière-plan
+
+- [ ] Ouvrir le site dans un onglet non actif, attendre 30 secondes, revenir :
+      la carte est rendue et utilisable.
+- [ ] Masquer l'onglet pendant la lecture puis revenir : aucun saut temporel.
+- [ ] Vent, fumée et avions reprennent sans dupliquer leur boucle.
+
+#### Publication
+
+- [ ] Les workflows incluent tous les nouveaux fichiers CSS, JS et vendor.
+- [ ] Les données générées restent absentes du diff Git.
+- [ ] L'artefact Pages contient exactement les zones du manifeste.
+- [ ] Le front publié fonctionne sans chemin absolu ni secret.
+
+---
+
+## 8. Lots de réalisation
+
+Un lot ne commence que lorsque ses dépendances sont terminées. Les extractions
+doivent rester mécaniques ; les nettoyages viennent après la stabilisation.
+
+### Lot 0 — Socle du chantier et références
+
+- [x] Suivre `refactor.md` et créer `.worktreeinclude` pour `AGENTS.md`.
+- [x] Créer la branche d'intégration.
+- [x] Mesurer et consigner les performances de référence.
+- [x] Capturer des screenshots de référence desktop et mobile.
+- [x] Documenter les requêtes réseau du chargement initial et des avions.
+- [x] Ajouter les premiers contrôles de syntaxe sans changer l'application.
+
+Critère de sortie : références reproductibles et chantier reprenable depuis une
+nouvelle conversation.
+
+### Lot 1 — Correctifs préexistants isolés
+
+- [x] Ajouter l'import `shutil` manquant au workflow front.
+- [x] Conserver les avions activés par défaut, conformément à la décision
+      explicite de l'utilisateur.
+- [x] Uniformiser les textes de fréquence sur 30 minutes.
+- [x] Afficher un état d'erreur si l'initialisation principale échoue.
+- [x] Vérifier chaque correction séparément.
+
+Ce lot modifie intentionnellement des défauts connus. Il ne doit contenir aucun
+déplacement architectural.
+
+### Lot 2 — Filet de tests et CI
+
+- [x] Créer les fixtures minimales FIRMS, EFFIS, PSFDF et météo.
+- [x] Tester les dates PSFDF, `swap_axes`, les agrégats, la frise, les bornes
+      géographiques et les exports météo.
+- [x] Préparer les tests JavaScript purs sans `package.json`.
+- [x] Ajouter `.github/workflows/checks.yml`.
+- [x] Exécuter les tests sans réseau.
+
+Critère de sortie : les règles métier les plus risquées échouent clairement en
+cas de régression.
+
+### Lot 3 — Extraction mécanique des assets
+
+- [x] Déplacer le CSS inline, sans réordonner une règle, vers `css/app.css`.
+- [x] Déplacer le grand script inline, sans le modulariser, vers `js/app.js`.
+- [x] Conserver MapLibre et l'ordre d'exécution actuels pendant ce déplacement.
+- [x] Adapter les trois workflows, leurs filtres de chemins et l'assemblage de
+      l'artefact pour inclure `css/` et `js/`.
+- [x] Vérifier que `index.html` ne contient plus que le HTML et les petits blocs
+      indispensables au `<head>`.
+
+Critère de sortie : diff mécanique, comportement et mesures identiques.
+
+### Lot 4 — Utilitaires purs
+
+- [x] Passer `js/app.js` en module ES natif.
+- [x] Adapter le banc du lot 0 à une API de mesure explicite avant que `show`
+      et l'état de lecture deviennent privés au module ; ne pas exposer d'objet
+      mutable global pour cela.
+- [x] Extraire `util/format.js`, `util/grid.js` et `util/geo.js`.
+- [x] Extraire uniquement les fonctions sans DOM, MapLibre ou état global.
+- [x] Ajouter des tests de caractérisation pour chaque fonction extraite.
+- [x] Conserver les signatures et résultats numériques.
+
+Critère de sortie : utilitaires testés, aucune nouvelle dépendance circulaire.
+
+### Lot 5 — Modèle temporel et activité
+
+- [x] Extraire la construction de la frise dans `timeline/model.js`.
+- [x] Extraire le warp et les calculs d'activité purs.
+- [x] Extraire le rendu/contrôleur dans `timeline/controller.js` et
+      `timeline/activity.js` sans changer l'animation.
+- [x] Tester timestamps irréguliers, publications EFFIS et moyennes mobiles.
+
+Critère de sortie : calculs temporels testables sans carte ni DOM.
+
+### Lot 6 — État partagé minimal
+
+- [x] Introduire `state.js` avec getters, setters et abonnements contrôlés.
+- [x] Ne migrer que l'état réellement transversal.
+- [x] Garder les états techniques privés dans leurs blocs actuels.
+- [x] Vérifier qu'aucune valeur dépendant du temps n'est capturée à l'import.
+
+Critère de sortie : aucun objet mutable global exporté et aucune boucle créée
+par un abonnement.
+
+### Lot 7 — Chargement des données et des zones
+
+- [x] Extraire le client JSON et le chargement initial.
+- [x] Extraire le cache LRU, les zones visibles, la fusion et la déduplication.
+- [x] Conserver le jeton anti-course et tous les replis.
+- [x] Tester cache, zone absente, mouvement rapide et mode legacy.
+
+Critère de sortie : mêmes requêtes, mêmes données MapLibre, cache toujours borné.
+
+### Lot 8 — Vent et fumée
+
+- [x] Extraire `fx/wind.js` avec état privé et API de contrôleur.
+- [x] Extraire `fx/smoke.js` après le vent, avec injection de la lecture du vent.
+- [x] Conserver les plafonds, timings, DPR, interpolation et reprises de boucle.
+- [x] Vérifier redimensionnement, masquage d'onglet et déplacement de carte.
+
+Critère de sortie : budgets de frames et mémoire respectés.
+
+### Lot 9 — Foyers et surfaces brûlées
+
+- [x] Extraire rampes, installation des couches et mises à jour des foyers.
+- [x] Extraire installation et fondu des surfaces brûlées.
+- [x] Conserver les expressions MapLibre et leur ordre à l'identique.
+- [x] Tester les fonctions pures de rampe et les instants de bascule.
+
+Critère de sortie : rendu visuel et coût de `show()` inchangés.
+
+### Lot 10 — Météo, PSFDF et avions
+
+Ce lot est obligatoirement exécuté en trois sous-lots et trois conversations
+distinctes : `10A-weather`, `10B-psfdf`, puis `10C-aircraft`. Chaque sous-lot
+doit être relu et intégré avant le suivant.
+
+- [x] Sous-lot `10A-weather` : extraire le contrôleur météo, ses grilles, son
+      cache de géocodage, son graphique et son point épinglé.
+- [x] Sous-lot `10B-psfdf` : extraire le suivi et les graphiques PSFDF.
+- [x] Sous-lot `10C-aircraft` : extraire les avions, leur historique et leur
+      polling.
+- [x] Extraire chaque fonctionnalité dans un contrôleur autonome.
+- [x] Conserver l'état métier privé et injecter les dépendances temporelles.
+- [x] Ne créer des sous-dossiers internes que si un module reste trop gros.
+- [x] Vérifier polling, abort, caches, graphiques et repli météo.
+
+Critère de sortie : fonctionnalités identiques et aucune requête supplémentaire.
+
+### Lot 11 — Gestion commune des panneaux et popups
+
+- [x] Introduire `panel-manager.js` sans changer la disposition.
+- [x] Extraire le routeur de clic unique et les primitives de popup.
+- [x] Laisser chaque fonctionnalité produire le contenu de sa fiche.
+- [x] Vérifier focus, Escape, clic extérieur, priorité et objets transparents.
+
+Critère de sortie : une seule popup, un seul panneau principal et mêmes fiches.
+
+### Lot 12 — Export image et GIF
+
+- [x] Extraire l'export seulement après stabilisation des APIs carte, vent,
+      fumée, temps et zones.
+- [x] Renommer le module `export/map-export.js`.
+- [x] Remplacer les accès directs aux états internes par des snapshots/APIs.
+- [x] Vérifier que l'état vivant est restauré même après erreur d'export.
+
+Critère de sortie : PNG/GIF identiques et aucune boucle vivante perturbée.
+
+### Lot 13 — Carte et orchestration finale
+
+- [x] Extraire la création de carte et le style de base.
+- [x] Laisser les fonctionnalités installer leurs couches métier.
+- [x] Réduire `js/app.js` à une composition explicite, puis le renommer
+      `js/main.js`.
+- [x] Ajouter un chemin unique de démarrage, d'erreur et de destruction.
+- [x] Vérifier le démarrage en arrière-plan avant tout nettoyage.
+
+Critère de sortie : `main.js` orchestre sans logique métier et sans cycle
+d'import.
+
+### Lot 14 — Découpage du collecteur Python
+
+Ce lot est obligatoirement découpé par frontière de source : socle HTTP/géo,
+FIRMS/frise, EFFIS/PSFDF, météo, puis écriture/orchestration. Une conversation
+et un diff révisable par sous-lot.
+
+- [x] Sous-lot `14A-http-geo` : extraire le socle HTTP et les utilitaires
+      géographiques purs.
+- [x] Sous-lot `14B-firms-timeline` : extraire FIRMS et la frise.
+- [x] Sous-lot `14C-effis-psfdf` : extraire EFFIS et PSFDF.
+- [x] Sous-lot `14D-meteo` : extraire la collecte météo.
+- [x] Sous-lot `14E-writer-orchestration` : extraire l'écriture, la validation
+      et l'orchestration finale.
+
+- [x] Créer le package `flamap/` selon l'architecture cible.
+- [x] Déplacer une source à la fois avec tests et fixtures.
+- [x] Garder `fetch_fires.py` comme CLI compatible.
+- [x] Réduire les `except Exception` aux frontières réellement facultatives.
+- [x] Introduire l'écriture en répertoire de préparation et la validation avant
+      substitution.
+
+Critère de sortie : mêmes fichiers produits sur les fixtures, CLI inchangée et
+aucune donnée partielle substituée.
+
+### Lot 15 — Simplification des workflows
+
+- [x] Extraire reprise, assemblage et validation dans `scripts/`.
+- [x] Paramétrer les différences fire/front/weather sans dupliquer le code.
+- [x] Conserver les verrous, délais, replis et validations actuels.
+- [x] Tester les trois modes sur des fixtures d'artefact.
+
+Critère de sortie : YAML déclaratif, artefacts équivalents et replis conservés.
+
+### Lot 16 — Finition CSS, dépendances et sécurité
+
+- [x] Découper `css/app.css` seulement après stabilisation fonctionnelle.
+- [x] Extraire les vrais tokens communs sans remplacer mécaniquement les IDs.
+- [x] Vendorer des versions exactes de MapLibre et `gifenc` avec leurs licences.
+- [x] Mesurer à nouveau taille et chargement après vendoring.
+- [x] Construire une CSP à partir de l'inventaire réel : scripts, styles,
+      connexions, tuiles, fontes, images, workers, `blob:` et `data:`.
+- [x] Ajouter `prefers-reduced-motion` sans rendre les données inaccessibles.
+
+Critère de sortie : dépendances reproductibles, CSP fonctionnelle et budgets
+de performance respectés.
+
+### Lot 16bis — Intégrité de l’artefact météo
+
+Correctif explicite issu de « Repéré en chemin ». La reprise de l’artefact
+publié par le workflow météo est encore une liste manuelle datant d’avant les
+lots 8 et 16. Elle omet les modules `fx/`, les feuilles CSS importées, les
+dépendances vendored et les fontes : un déploiement météo peut donc republier
+un front incomplet.
+
+- [x] Remplacer ou compléter l’inventaire de reprise afin qu’il couvre toute la
+      fermeture statique réellement chargée par le front (HTML, CSS importé,
+      modules ES, vendor et fontes), sans reprendre de données générées en plus
+      de celles déjà prévues.
+- [x] Conserver le principe du workflow météo : reprendre l’artefact publié et
+      ne substituer que `data/thermal.json` ; ne pas y injecter le front du
+      checkout ni coupler sa cadence à celle de la grille thermique.
+- [x] Faire échouer la validation de l’artefact si une ressource locale
+      référencée par le front est absente ; couvrir notamment les sous-feuilles
+      CSS, `fx/wind.js`, `fx/smoke.js`, MapLibre, gifenc et la police.
+- [x] Ajouter une fixture d’artefact complète et vérifier les trois modes de
+      publication, puis démarrer l’artefact météo localement sans erreur de
+      ressource ni console.
+
+Critère de sortie : un déploiement météo conserve à l’identique le front
+publié et toutes les données non thermiques, avec une seule substitution de
+`thermal.json`.
+
+### Lot 17 — Revue finale et retrait du chantier
+
+- [~] Exécuter toute la checklist sur desktop et mobile. 30 items vérifiés sur
+      l'arbre final, sans régression ; 13 restent hors de portée d'un
+      environnement automatisé et demandent une passe manuelle (voir le journal
+      du lot 17). Attention : `MOBILE` est figé au chargement par
+      `matchMedia('(max-width: 720px)')` dans `js/main.js`. Redimensionner la
+      fenêtre ne bascule pas l'application en mode mobile et produit de faux
+      chevauchements ; toute vérification mobile exige un rechargement à la
+      largeur voulue.
+- [ ] Comparer toutes les mesures aux références du lot 0.
+- [x] Faire une relecture parallèle : comportement, performances,
+      accessibilité, données et workflows. Les défauts CSP, Escape et banc ont
+      été corrigés et relus à froid. L'écart de performance qui bloquait le lot
+      venait du banc lui-même et non du front : voir le journal du lot 17. Les
+      mesures d'initialisation et de frames restent à reprendre.
+- [x] Vérifier l'absence de secret, chemin absolu et donnée générée.
+- [ ] Mettre à jour README, SOURCES et AGENTS seulement si l'architecture finale
+      l'exige.
+- [ ] Fusionner vers `main` uniquement après validation explicite, lots 17 et
+      18 compris.
+- [ ] Décider de conserver ce fichier comme historique ou de le supprimer.
+
+### Lot 18 — Optimisations de performances
+
+Premier lot du chantier qui n'est pas une extraction : il modifie délibérément
+du code pour le rendre plus rapide, à comportement observable constant. Il est
+donc isolé du lot 17 et doit être relu à froid pour lui-même.
+
+Objectif : rendre au chemin critique et aux boucles d'animation ce que la
+structure en modules et en feuilles séparées leur avait coûté en aller-retours
+et en allocations, sans toucher aux fonctionnalités, aux cadences, aux plafonds
+de particules ni au DPR.
+
+- [x] Supprimer la chaîne d'`@import` du CSS : les cinq feuilles du lot 16 sont
+      liées directement dans `index.html`, dans l'ordre exact de la cascade
+      historique. `css/app.css` n'a plus d'objet et disparaît.
+- [x] Passer MapLibre en `defer` pour libérer l'analyseur, en s'appuyant sur le
+      fait que scripts différés et modules partagent la même file d'exécution
+      après analyse : l'ordre relatif est conservé.
+- [x] Déclarer les vingt-quatre modules en `modulepreload` afin d'aplatir la
+      découverte du graphe, qui se faisait en trois vagues successives.
+- [x] Ouvrir par `preconnect` les connexions vers les trois hôtes de tuiles,
+      dont le TileJSON qu'attend `isStyleLoaded()`.
+- [x] Retirer les allocations par particule et par frame des boucles vent et
+      fumée, sans changer le nombre de particules, le DPR ni la cadence.
+- [x] Vérifier chaque commit isolément : syntaxe, tests JS et Python.
+
+Critère de sortie : aucune fonctionnalité modifiée, budgets de référence tenus
+ou améliorés, et relecture à froid dédiée. Les mesures de bout en bout sous
+Chromium en 1280×720 restent à faire, comme pour le lot 17.
+
+---
+
+## 9. Journal du chantier
+
+| Lot | Statut | Branche/commit | Date | Vérifications et notes |
+|---:|---|---|---|---|
+| 0 | terminé | `codex/refactor-0-socle` | 2026-08-01 | Références et protocole dans `docs/refactor/lot-0-baseline.md` ; captures 1440/375 px ; trois séries mémoire, deux lectures finales ; syntaxe Python/JS et console vérifiées ; doubles relectures comportement/performance. |
+| 1 | terminé | `codex/refactor-1-correctifs` | 2026-08-02 | Points du lot vérifiés séparément ; avions conservés actifs par défaut sur décision explicite de l'utilisateur, avec 1 requête d'historique et 2 requêtes Airplanes.live observées dans les 5 premières secondes ; syntaxe Python/JS, bloc Python du workflow et `git diff --check` valides ; échec des données forcé et état d'erreur contrôlé ; initialisation finale à 401 ms, carte prête à 1 331 ms et aucune requête de données supplémentaire ; rendu desktop 1440 px et console contrôlés ; relecture à froid sans régression confirmée ; validation mobile 375 px confirmée par l'utilisateur. |
+| 2 | terminé | `codex/refactor-2-tests-ci` | 2026-08-02 | Fixtures locales FIRMS, EFFIS, PSFDF et météo ; garde réseau actif avant l'import du collecteur ; 11 tests Python et 7 tests JavaScript purs valides sous Python 3.12 et Node 22, y compris sous plusieurs fuseaux ; syntaxe Python/JS, YAML et `git diff --check` valides ; doubles relectures comportement et CI/performance sans constat résiduel. Après validation du lot, correction séparée demandée explicitement : les 30 minutes de traces d'avions sont conservées et rendues dès l'amorçage VPS, avec 3 tests de non-régression et documentation alignée. |
+| 3 | terminé | `codex/refactor-3-assets` | 2026-08-02 | CSS et JavaScript extraits byte à byte (empreintes identiques aux blocs inline) ; ordre MapLibre et exécution classique conservés ; trois workflows adaptés et artefact local contrôlé ; 11 tests Python et 7 tests JavaScript, syntaxe Python/JS, YAML et `git diff --check` valides ; assets servis en 200 avec les bons types MIME ; 11 requêtes de données inchangées ; médianes courtes à 633 ms pour l'initialisation et 1 492 ms pour la carte prête ; lecture longue : `show()` à 0,75/0,70/0,90 ms moyenne/médiane/p95, aucune frame perdue, mémoire médiane à 26 510 731 octets (+4,3 %) ; rendu et console contrôlés à 1440, 820, 375 et 320 px ; relecture à froid sans régression confirmée. Le navigateur intégré garde `visibilityState=visible` entre ses onglets : le scénario réellement masqué n'y est pas reproductible, mais le démarrage et son listener sont inchangés dans l'extraction. |
+| 4 | terminé | `codex/refactor-4-utilitaires` | 2026-08-02 | `app.js` passé en module natif ; utilitaires de formatage, grille et géométrie extraits mécaniquement et couverts par 11 nouveaux tests (18 JS au total). API de mesure gelée, état privé et banc lot 0 adapté ; 11 requêtes de données et séquence avions inchangées. Front propriétaire à 277 645 octets bruts (+0,76 %) et 83 577 octets gzip (+2,56 %). Comparaison directe lot 3/lot 4 à 120 Hz : initialisation 555/545,9 ms, carte prête 1 701,1/1 703,1 ms, 3 600 frames et 14 manquées dans les deux cas, `show()` 1,175/1,152 ms de moyenne et 1,3/1,3 ms au p95, aucune hausse mémoire. 11 tests Python, syntaxe, YAML, artefact, `git diff --check`, fuseaux UTC/Honolulu et rendu 1440/820/375/320 px contrôlés ; doubles relectures à froid sans constat. |
+| 5 | terminé | `codex/refactor-5-timeline` | 2026-08-02 | Modèle de frise, prévisions, warp et contrôleurs de lecture/activité extraits ; 21 tests JS et 11 tests Python valides, dont timestamps irréguliers, bornage EFFIS, prévisions et moyennes mobiles compte/FRP ; syntaxe, YAML, bloc Python du workflow météo, fuseaux UTC/Honolulu et `git diff --check` contrôlés. Les trois workflows publient les nouveaux modules ; 11 requêtes de données inchangées. Front propriétaire brut à 282 927 octets (+1,9 % sur le lot 4). Banc complet : initialisation 845,5 ms, carte prête 1 816,9 ms, aucune frame perdue sur 30 s, `show()` à 1,02/1,00/1,20 ms moyenne/médiane/p95, mémoire médiane à 25 366 145 octets après cinq minutes. Lecture, pause, curseur et largeurs vérifiés ; graphiques national et PSFDF, métriques compte/FRP et rendu 1440/820/375/320 px contrôlés. Double relecture à froid : aucune régression comportementale ; lecture de l'état de lecture sortie de la boucle des particules après constat performance, correctif confirmé. Comme aux lots 3 et 4, le navigateur intégré ne permet pas de rendre réellement l'onglet masqué ; le listener `visibilitychange` et son ordre ont été conservés et relus. |
+| 6 | terminé | `codex/refactor-6-state` | 2026-08-02 | Store sans DOM ni MapLibre, snapshots et frise immuables, abonnements synchrones sans boucle ; seuls frise, dernier instant observé, heure courante et visibilité transversale sont migrés. 11 tests Python et 22 tests JS, syntaxe, YAML, artefact et `git diff --check` valides ; listeners, rAF, `fetch`, `setFilter` et appels à `applyBurnt()` inchangés. Rendu et interactions contrôlés à 1440/820/375/320 px, 10 requêtes de données présentes plus le 404 thermique attendu. Taille brute/gzip à +1,43/+1,41 % sur le lot 5. Comparaison directe 120 Hz : `show()` à 1,34/1,30/1,50 ms moyenne/médiane/p95 contre 1,30/1,30/1,50 ms au lot 5, 14 frames manquées contre 35 ; mémoire à 30,6–30,9 Mo contre 45,1 Mo au lot 5. Relecture à froid sans régression confirmée. Le masquage réel d'onglet reste non reproductible dans le navigateur intégré ; le listener `visibilitychange` et son ordre sont inchangés. |
+| 7 | terminé | `codex/refactor-7-data-zones` | 2026-08-02 | Client JSON, chargement initial et contrôleur de zones extraits avec cache et état privés ; ordre des requêtes, repli PSFDF, repli legacy, jeton anti-course, fusion et déduplication conservés. 9 nouveaux tests couvrent succès et données MapLibre, cache LRU, zone absente, mouvement rapide et legacy ; 11 tests Python et 31 tests JS, syntaxe, YAML et `git diff --check` valides. Les trois workflows publient les modules ; front brut/gzip à +0,69/+1,44 % sur le lot 6. Mode legacy, lecture et largeur du curseur, console, canvas et rendu contrôlés à 1440/820/375/320 px ; relecture à froid corrigée puis rejouée sans constat résiduel. |
+| 8 | terminé | `codex/refactor-8-wind-smoke` | 2026-08-02 | Contrôleurs vent et fumée extraits avec grilles, particules, dimensions et rAF privés ; lecture du vent injectée dans la fumée et APIs ciblées pour météo, zones et export. Un nouveau test contrôle DPR, arrêt/reprise et absence de boucle dupliquée : 32 tests JS et 11 tests Python valides, syntaxe et `git diff --check` contrôlés. rAF, annulations, listeners, `fetch` et `setFilter` inchangés ; 11 requêtes de données. Front brut/gzip à +1,71/+2,81 % sur le lot 7. Banc long : initialisation 678 ms, carte prête 1 569 ms, aucune frame manquée sur 30 s, `show()` à 1,18/1,20/1,40 ms moyenne/médiane/p95, mémoire médiane à 27 612 567 octets utilisés et 33 486 208 octets alloués. Redimensionnement, zoom, lecture, arrêt/reprise des effets, console et rendu contrôlés à 1440/820/375/320 px ; relecture à froid corrigée puis rejouée sans constat résiduel. Le navigateur intégré ne rend toujours pas l'onglet réellement masqué ; le listener `visibilitychange`, son ordre et les gardes `document.hidden` ont été conservés et relus. |
+| 9 | terminé | `codex/refactor-9-fires-burnt` | 2026-08-02 | Rampes, expressions, filtres et couches des foyers extraits dans `features/fires.js` ; couches, visibilité et fondu EFFIS extraits dans `features/burnt.js`. Quatre nouveaux tests portent le total à 36 tests JS, avec 11 tests Python ; syntaxe, YAML et `git diff --check` valides. Ordre des couches, appels `setFilter`, `applyBurnt()`, listeners, rAF et requêtes inchangés ; 11 requêtes de données au banc. Comparaison isolée lot 8/lot 9 à 120 Hz : `show()` à 0,827/0,800/1,000 ms contre 0,820/0,800/1,000 ms moyenne/médiane/p95, 14 contre 15 frames manquées sur 3 600. La mémoire absolue du processus était contaminée par les séries précédentes, mais la répétition directe lot 9/lot 8 ne montre aucune hausse (43,9 contre 44,7 Mo utilisés ; 100 contre 101 Mo alloués). Front brut/gzip à +0,07/+0,32 % sur le lot 8. Passage passé/dernier instant, bascules foyers/EFFIS, export, console, canvas et rendu 1440/820/375/320 px contrôlés ; double relecture à froid sans constat résiduel. L'omission préexistante des modules `fx/` dans le workflow météo est consignée dans « Repéré en chemin ». |
+| 10 | terminé | `codex/refactor-10c-aircraft` | 2026-08-02 | Sous-lot 10A terminé : panneau, géocodage/cache, grilles thermique et de repli, graphique, point épinglé et badge extraits dans un contrôleur à état privé ; temps du vent, manifeste et callbacks de panneaux injectés. Deux tests de caractérisation portent le total à 38 tests JS, avec 11 tests Python ; syntaxe Python/JS, YAML et `git diff --check` valides. Listeners, rAF, `fetch`, `setFilter`, appels à `applyBurnt()` et deux requêtes météo initiales inchangés ; front brut à +1,02 % sur le lot 9. Panneau, fiche, point épinglé, recentrage, repli sans grille thermique, console et rendu contrôlés à 1440/820/375/320 px. Le `thermal.json` local manque, comme autorisé : le graphique complet est couvert avec fixture et le repli visuel a été vérifié. Relecture à froid sans constat résiduel. Sous-lot 10B terminé : couches, filtrage des signalements récents, raccourcis, panneau de suivi et graphique local PSFDF extraits dans `features/psfdf.js`, avec état privé et dépendances temporelles injectées ; l’accès des avions passe par une requête de proximité ciblée. Deux tests de caractérisation portent le total à 40 tests JS, avec 11 tests Python ; syntaxe Python/JS et `git diff --check` valides. `fetch`, rAF, timers, listeners MapLibre et `setFilter` inchangés ; front brut/gzip à +0,87/+1,54 % sur 10A. Raccourcis, métriques foyers/FRP, bascule passé/présent, case PSFDF, proximité avions, console et rendu contrôlés à 1440/820/375/320 px ; relecture à froid corrigée puis rejouée sans constat résiduel. Sous-lot 10C terminé : avions, historique, traces, polling, aborts, icônes, couches et fiche extraits dans `features/aircraft.js`, avec état privé et lectures temporelles/PSFDF injectées. Les 40 tests JS et 11 tests Python, syntaxe, workflow météo et `git diff --check` sont valides ; nombres de rAF, timers, aborts et listeners inchangés, deux requêtes aériennes inchangées, front brut/gzip à +1,17/+2,84 % sur 10B. Démarrage actif, arrêt/reprise par case, masquage au passé, retour au direct, console et rendu contrôlés à 1440 et 375 px ; relecture à froid corrigée puis rejouée sans constat résiduel. |
+| 11 | terminé | `codex/refactor-11-panels-popups` | 2026-08-02 | Coordination d’exclusivité des panneaux extraite dans `ui/panel-manager.js` en conservant les fermetures et retours de focus propres à chaque panneau ; état, ancrage, recadrage et timer des fiches extraits dans `ui/popup-view.js` ; priorité, tolérance tactile et rejet des objets transparents extraits dans `ui/popup-router.js`. Trois tests portent le total à 43 tests JS, avec 11 tests Python ; syntaxe Python/JS et `git diff --check` valides. Ordre du clic carte, listeners, rAF, timers, `setFilter` et requêtes inchangés ; le workflow météo publie les trois modules. Exclusivité Calques/Météo, focus, Escape, clic extérieur, unicité des popups, fiche météo du fond de carte et rendu contrôlés à 1440 et 375 px ; relecture à froid corrigée puis rejouée sans constat résiduel. |
+| 12 | terminé | `codex/refactor-12-export` | 2026-08-02 | Export PNG, GIF instantané et GIF d’évolution extrait dans `export/map-export.js` avec lectures vivantes injectées et état des boucles vent/fumée restauré sous `finally`, y compris quand une restauration ou le chargement parallèle de l’encodeur échoue. Un test porte le total à 44 tests JS, avec 11 tests Python ; syntaxe Python/JS et `git diff --check` valides. Listeners, rAF et appels à `setFilter` inchangés ; front brut/gzip à +0,80/+1,53 % sur le lot 11. PNG et deux modes GIF générés sans erreur console ; bouton et boucle vivante rendus disponibles après export ; panneaux et rendu contrôlés à 1440/820/375/320 px. Relecture à froid sans constat résiduel. |
+| 13 | terminé | `codex/refactor-13-map-orchestration` | 2026-08-02 | Style IGN/Sentinel et toponymes extrait dans `map/base-style.js`, création MapLibre et contrôles dans `map/create-map.js`, racine renommée `main.js` ; ordre des sources, couches métier et démarrage par sondage conservé. Destruction idempotente sur départ réel, compatible bfcache ; 47 tests JS et 11 tests Python, syntaxe, graphe de 24 modules sans cycle et `git diff --check` valides. Front brut/gzip à +0,45/+0,62 % sur le lot 12 ; banc court à 268 ms pour l'initialisation et 1 155 ms pour la carte prête, huit requêtes locales de données initiales et aucune erreur applicative. Rendu, console, panneaux et lecture contrôlés à 1440/820/375/320 px ; doubles relectures à froid, correctif bfcache appliqué puis relu. Le navigateur intégré conserve `visibilityState=visible` entre ses onglets : le masquage réel reste non reproductible, mais le sondage `isStyleLoaded()`, ses deux listeners, l'intervalle de secours et `visibilitychange` ont été conservés et relus avant tout nettoyage. |
+| 14 | terminé | `codex/refactor-14e-writer-orchestration` | 2026-08-02 | Sous-lot 14A terminé : primitives HTTP et géographiques extraites dans `flamap/http.py` et `flamap/geo.py`, avec les mêmes noms réexportés par la CLI ; filtre du workflow de collecte étendu à `flamap/**` après relecture à froid. Trois tests de caractérisation portent le total à 14 tests Python, avec 47 tests JavaScript ; syntaxe Python/JS, compatibilité CLI, absence de cycle et `git diff --check` valides. Aucun appel réseau, retry, `except` ou comportement de source modifié ; doubles relectures comportement/performance sans constat résiduel. Sous-lot 14B terminé : collecte, reprise historique et agrégation FIRMS extraites dans `flamap/firms.py`, frises courante et sociale dans `flamap/timeline.py`, avec façades CLI conservant les signatures et la lecture dynamique des constantes et chemins historiques. Six tests de caractérisation portent le total à 20 tests Python, avec 47 tests JavaScript ; syntaxe Python/JS, compatibilité CLI et `git diff --check` valides. Quatre téléchargements concurrents, deux tentatives à 60 s, pause de 5 s, code temporaire 75, fenêtres de 10/14 jours, déduplication, bornage EFFIS et replis inchangés ; aucun appel réseau supplémentaire ; relectures à froid comportement/performance sans constat résiduel après correction de la façade. Sous-lot 14C terminé : collecte et normalisation EFFIS extraites dans `flamap/effis.py`, collecte et rapprochement PSFDF dans `flamap/psfdf.py`, avec façades CLI conservant signatures, helpers et configuration lus à l'appel. Six tests de caractérisation portent le total à 26 tests Python, avec 47 tests JavaScript ; syntaxe Python/JS, compatibilité CLI, graphe Python de huit modules sans cycle et `git diff --check` valides. Un appel EFFIS daté obligatoire, un NRT facultatif, trois tentatives à 300 s et pauses de 4/8 s, un appel PSFDF à 30 s, permutations d'axes, filtres, tri, regroupement exclusif et replis inchangés ; aucun appel réseau supplémentaire ; doubles relectures à froid comportement/performance sans constat résiduel après correction des façades. Sous-lot 14D terminé : collecte Open-Meteo, grilles, lots, délais, replis AROME et exports extraits dans `flamap/meteo.py`, avec façades CLI conservant les signatures, l'horloge et les helpers injectables. Cinq tests de caractérisation portent le total à 31 tests Python, avec 47 tests JavaScript ; syntaxe Python/JS, compatibilité CLI, graphe Python de neuf modules sans cycle et `git diff --check` valides. Quatre tentatives, délais 429/réseau, timeout de 30 s, pauses de 6 s, lots séquentiels, budgets fin/thermique et aucun appel réseau supplémentaire sont inchangés ; double relecture à froid comportement/performance, avec correction de la façade `keep_recent`, sans constat résiduel. Sous-lot 14E terminé : écriture JSON, validation structurelle et publication extraites dans `flamap/writer.py` et `flamap/validation.py` ; les exports incendie sont préparés, validés, puis substitués avec `manifest.json` en dernier, tandis que `thermal.json` et les fichiers hors périmètre sont préservés. Trois tests portent le total à 34 tests Python, avec 47 tests JavaScript ; syntaxe Python/JS et `git diff --check` valides. Double relecture à froid : copie inutile des zones supprimée, aucun changement de comportement ni coût d'E/S résiduel identifié. |
+| 15 | terminé | `codex/refactor-15-workflows` / commit lot 15 | 2026-08-03 | Reprise de l’artefact, assemblage et validation extraits dans trois scripts standard-library, avec modes fire/front/weather ; 36 tests Python (dont les trois artefacts de fixture), 47 tests JavaScript, syntaxe Python/JS, YAML et `git diff --check` valides. Deux relectures à froid confirment la conservation des cadences, verrous, délais, reprises (0/3/9 s, 12 téléchargements), replis, validations et notification. L’omission préexistante de `js/fx/wind.js` et `js/fx/smoke.js` par le workflow météo reste volontairement hors lot, conformément à « Repéré en chemin ». Commit créé, intégration locale en attente. |
+| 16 | terminé | `codex/refactor-16-css-deps-securite` | 2026-08-03 | Cascade CSS découpée mécaniquement en base, tokens, carte, composants et responsive : la concaténation des règles historiques est identique octet pour octet. Les tokens existants et réellement communs sont isolés sans remplacement d’IDs. MapLibre GL JS 5.24.0 et gifenc 1.0.3 sont servis depuis `vendor/`, avec licences, README et empreintes SHA-256 ; les assemblages fire/front copient `vendor/` et `fonts/`, tandis que l’assemblage météo préserve le front publié ; le workflow front les déclenche. La CSP autorise seulement les scripts locaux et l’amorce analytique hashée, puis les API, tuiles, fontes, images `data:`/`blob:` et workers réellement observés ; `upgrade-insecure-requests` en est volontairement absent afin de conserver le démarrage HTTP statique local. Le banc de mesure a été rendu compatible CSP sans `unsafe-eval`. `prefers-reduced-motion` retire les transitions décoratives sans masquer données ni contrôles. Syntaxe Python/JS, 36 tests Python, 47 tests JS, artefact de fixture, `git diff --check`, chargement local et console sont valides. Rendu contrôlé à 1440×900 et 375×812 ; banc sans cache : init 528,5 ms, carte prête 1 647,5 ms (références 910/1 935 ms), 11 requêtes de données inchangées. Front CSS/JS/vendor : 1 428 161 octets bruts et 384 698 octets gzip par fichier (MapLibre est la même version que la référence, désormais locale). Relecture à froid sans régression confirmée. |
+| 16bis | terminé | `codex/refactor-16bis-weather-artifact` | 2026-08-03 | La reprise météo parcourt désormais la fermeture statique du front publié par niveaux parallèles (12 téléchargements) : documents, CSS importées, modules ES et imports dynamiques, vendor et police. Les notices de distribution sont conservées lorsqu’elles existent, sans bloquer la transition depuis l’artefact antérieur au lot 16. La validation rejette toute ressource locale requise manquante. Fixture complète : sous-feuilles CSS, vent, fumée, MapLibre, gifenc, police et notices ; les trois modes fire/front/weather et la substitution exclusive de `thermal.json` sont contrôlés. 37 tests Python, 47 tests JS, syntaxe Python/JS et `git diff --check` valides ; artefact météo local validé (235 fichiers, 20,2 Mio) et chargé sans erreur console. Double relecture à froid : parallélisme et intégrité des notices corrigés, aucun constat résiduel. |
+| 17 | bloqué | `codex/refactor-17-final-review` | 2026-08-03 | Correctifs : hash CSP analytics rectifié (script effectivement chargé), Escape ferme Calques et Sources & crédits en conservant leurs chemins de fermeture, banc lot 0 fiabilisé contre le chargement initial `about:blank`, garde du workflow front adaptée aux fichiers auxiliaires du lot. Contrôles : 37 tests Python, 47 JS, syntaxe complète, 3 tests de workflows et `git diff --check` valides ; carte chargée sans erreur console à 1440×900 et 375×812, dock/réglette mobile sans chevauchement ; relectures à froid ciblées sans régression. Banc visible complet : `show()` 0,832/0,800/1,000 ms moyenne/médiane/p95 et mémoire médiane 26 036 028 octets, dans les références. **Les deux dépassements relevés d'abord — initialisation 1 131 ms et 8,35 % de frames perdues — sont invalidés.** Le banc comparait l'URL entière de l'iframe pour attendre le document mesuré, alors que MapLibre y écrit `#map=zoom/lat/lon` dès la création de la carte : l'égalité devenait définitivement fausse. Selon que la comparaison tombait avant ou après cette écriture, la boucle sortait aussitôt ou épuisait ses trente secondes, et le nombre de sondages de 25 ms consommés s'ajoutait à une mesure prise depuis un `start` fixe. Le défaut a été reproduit puis corrigé sur `origine + chemin + requête`. L'écart lot 16 (528,5 ms) / lot 17 s'explique en outre par le hash CSP : le lot 16 mesurait une page où la mesure d'audience était bloquée, le lot 17 une page où elle est chargée. **L'initialisation et les frames perdues restent donc à mesurer avec le banc corrigé, onglet visible en continu en 1280×720, avant toute conclusion et avant de lever le statut.** Aucun merge ni push effectué ; les optimisations de performances sont sorties au lot 18. Reprise du banc corrigé, passage long complet du 2026-08-03 : **le budget de frames est tenu, 0 frame perdue et 0,00 point sur 29 961 ms**, cadence au repos et en lecture à 17 ms, 1 789 intervalles rendus pour 1 763 attendus ; `show()` à 0,99/1/1 ms moyenne/médiane/p95, dans la référence. Les 8,35 % de frames perdues ne se reproduisent pas. Ce passage a toutefois été pris sous Safari 27 en 1512×789, alors que la référence du lot 0 est Chromium 150 en 1280×720 : `performance.memory` y est absent, donc la mémoire n'est pas mesurée ; `performance.now()` y est quantifié à la milliseconde, donc les durées fines ne sont pas directement opposables ; la fenêtre plus large charge une quatrième zone et `thermal.json` répond désormais 200 au lieu de 404, soit 12 requêtes de données au lieu de 11. **`initReadyMs` 1 935 ms et `mapReadyMs` 3 447 ms ne sont donc pas comparables aux 910 et 1 935 ms de référence** ; une tuile IGN de ce passage a mis à elle seule 1 370 ms, et `mapReady()` attend `areTilesLoaded()`. Restent à mesurer sous Chromium en 1280×720, en trois passages : initialisation, carte prête et mémoire. Checklist fonctionnelle déroulée le 2026-08-03 sur l'arbre final : 30 items vérifiés, 13 hors de portée de l'environnement (zone manquante, champ de vent absent, popups agrégat/NRT/avion, point météo épinglé, polling avions live, traces d'appareils, GIF, partage mobile, onglet réellement masqué). **Aucune régression.** Points saillants : bornes et pas du curseur exacts sur les timestamps publiés ; légende à 230 px et lecture du vent à 128 px invariantes sur sept crans ; `past` bascule au seul franchissement et les surfaces brûlées suivent, vérifié à z11,5 ; arrêt de lecture au dernier cran ; un seul panneau ouvert sur cinq transitions avec `aria-expanded` cohérent et Échap fermant Calques et crédits ; popups foyer et sol conformes, horodatage AROME au cran courant, une seule popup ; export PNG au canvas 1920×1080 sans altérer caméra, vent, fumée ni cran ; à 375 et 320 px rechargés nativement, zéro chevauchement de commandes, rien hors écran, pas de défilement horizontal, dix commandes focusables et nommées ; les deux règles `prefers-reduced-motion` ne touchent que `animation*`, `transition-*` et `scroll-behavior`. |
+| 18 | à relire | `codex/refactor-17-final-review` | 2026-08-03 | Premier lot non-extractif : il modifie du code pour la performance, à comportement observable constant, et demande donc une relecture à froid dédiée. Chargement : les cinq feuilles du lot 16 passent d'une chaîne d'`@import` — invisible au scanner de préchargement, donc un aller-retour bloquant de plus — à des `<link>` directs dans l'ordre exact de la cascade ; `css/app.css` devient sans objet et est supprimé, la fermeture statique restant complète (45 fichiers résolus, assemblage front réel validé à 237 fichiers). MapLibre passe en `defer`, les vingt-quatre modules sont déclarés en `modulepreload`, et `preconnect` ouvre les connexions vers OpenFreeMap, IGN et EOX. A/B à cache froid des deux côtés, une origine par passage, médiane de trois : **chemin critique 64,3 → 54,3 ms** et **cascade des modules 12,0 → 0,5 ms** ; sur un réseau réel l'écart est plus grand qu'en local, où un aller-retour vaut 0,3 ms. Le gain du `preconnect` n'a pas pu être isolé. Boucles d'animation : `windAtGrid` n'alloue plus une fermeture par appel — les quatre poids bilinéaires sont calculés une fois — et `gridBilinear` perd son tableau de coins ; `at()` et `advect()` réutilisent leurs objets de lecture, la nappe de vent ses tampons de segments, et la fumée reçoit `windController.at` sans tableau de reste. Le `splice()` par disparition de `advance()` devient un tassement en place, ordre relatif conservé, vérifié identique à 0, 2, 8, 25, 60 et 100 % de disparition. Mesures : échantillonnage du champ pour 1 700 particules **415 → 285 µs par frame** ; tassement de 2 200 bouffées 104 → 54 µs à 8 % de disparition et 498 → 29 µs à 60 %, coût nul au repos, seule bande défavorable ~2 % à +48 µs. Fidélité numérique de `windAtGrid` : écart relatif maximal 2,1e-13 sur vingt mille tirages, booléen de couverture identique — même formule bilinéaire, factorisée autrement. Plafonds de particules, DPR (vent 2880×1800, fumée 2160×1350 à 1440×900) et cadences inchangés. 47 tests JS, 37 tests Python, syntaxe et `git diff --check` valides. Mesures de bout en bout sous Chromium en 1280×720 à faire, comme au lot 17. |
+
+Statuts autorisés : `à faire`, `en cours`, `bloqué`, `terminé`.
+
+---
+
+## 10. Repéré en chemin
+
+Noter ici les idées qui ne font pas partie du lot courant. Ne jamais les
+implémenter opportunément dans un diff d'extraction.
+
+- Évaluer des variables CSS pour les valeurs visuelles réellement répétées :
+  fond, rayon, flou, durée de fondu et taille tactile.
+- Extraire seulement les tokens de marque réellement communs à `index.html`,
+  `social.html` et `mentions-legales.html`.
+- Étudier une stratégie de cache-busting fondée sur la génération appropriée à
+  chaque fichier, en respectant la cadence indépendante de `thermal.json`.
+- Évaluer la spécificité CSS sélecteur par sélecteur ; conserver les IDs pour
+  les éléments réellement uniques.
+- Ne mémoïser les lectures de styles calculés qu'après mesure et seulement pour
+  les tokens garantis immuables.
+- Les assemblages fire/front copient désormais `fonts/` (corrigé au lot 16).
+- La liste explicite de reprise du workflow météo omet les modules `fx/` depuis
+  le lot 8, puis les sous-feuilles CSS, dépendances vendored et fontes ajoutées
+  au lot 16. Son correctif est isolé dans le lot 16bis.
+- Le message d'état des avions reste périmé : après un retour au présent dans un
+  onglet masqué, `sync()` laisse « Masqués pendant la lecture du passé. » car il
+  ne réinitialise le texte que dans ses branches « décoché » et « passé ». Défaut
+  préexistant, identique au code d'avant refactorisation.
+- La cible tactile du lien « crédits » fait 34 × 15 px sur mobile, sous le seuil
+  recommandé. Choix préexistant, à arbitrer hors chantier.
+- Durcissement éventuel : valider les identifiants de zones du manifeste avant
+  de les concaténer dans des chemins locaux de reprise d’artefact, afin
+  d’écarter toute traversée de répertoires provenant d’un manifeste compromis.
+
+---
+
+## 11. Conditions d'arrêt
+
+Un lot doit s'arrêter et demander une décision si :
+
+- préserver le comportement exige une modification fonctionnelle non prévue ;
+- une dépendance circulaire impose de changer l'architecture cible ;
+- une mesure dépasse un budget de performance ;
+- une vérification ne peut pas être exécutée dans l'environnement disponible ;
+- le diff recouvre des modifications utilisateur non liées ;
+- une source externe ou une donnée nécessaire manque pour valider le résultat ;
+- le lot devient trop grand pour être relu avec confiance.
+
+Dans ce dernier cas, découper le lot dans ce document avant de poursuivre.

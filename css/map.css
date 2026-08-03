@@ -1,0 +1,49 @@
+  /* la carte est un canvas WebGL : ce texte la decrit pour les lecteurs
+     d'ecran et les robots d'indexation, qui n'en voient rien */
+  .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px;
+             padding: 0; overflow: hidden; clip-path: inset(50%); border: 0; }
+  html, body { margin: 0; height: 100%; overflow: hidden;
+               background: var(--bg); color: var(--ink);
+               font: 14px/1.45 "Instrument Sans", -apple-system, BlinkMacSystemFont,
+                     "Segoe UI", sans-serif;
+               -webkit-text-size-adjust: 100%; }
+  #map { position: absolute; inset: 0; background: var(--bg); }
+  /* Les nappes atmospheriques sont peintes a la main, au-dessus de la carte
+     mais sous les panneaux, et ne doivent jamais intercepter un geste.
+     `width`/`height` sont
+     explicites : un canvas est un element remplace, `inset: 0` ne l'etire pas —
+     il garderait sa taille intrinseque, et le code qui recopie clientWidth dans
+     l'attribut width l'agrandirait d'un facteur dpr a chaque appel. */
+  #smoke, #wind { position: absolute; inset: 0; width: 100%; height: 100%;
+                  pointer-events: none; }
+  #smoke { z-index: 399; }
+  #wind  { z-index: 400; }
+  /* Repère du point réellement échantillonné par la légende et le volet météo.
+     Il reste assez fin pour ne pas donner l'impression d'un viseur. */
+  #center-probe {
+    position: absolute; z-index: 401; left: 50%; top: 50%;
+    width: 11px; height: 11px; transform: translate(-50%, -50%);
+    border: 1px solid rgba(191,227,255,.76); border-radius: 50%;
+    box-shadow: 0 0 0 1px rgba(13,15,18,.58);
+    pointer-events: none; opacity: .78;
+  }
+  #center-probe[hidden] { display: none; }
+  #center-probe::before, #center-probe::after {
+    content: ""; position: absolute; background: rgba(191,227,255,.76);
+    box-shadow: 0 0 0 1px rgba(13,15,18,.28);
+  }
+  #center-probe::before { width: 17px; height: 1px; left: -4px; top: 4px; }
+  #center-probe::after  { width: 1px; height: 17px; left: 4px; top: -4px; }
+  .maplibregl-ctrl-attrib { display: none; }   /* credits en clair dans #credits */
+
+  .glass {
+    background: rgba(13,15,18,.84); backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid rgba(255,255,255,.10); border-radius: 12px;
+  }
+  #init-error {
+    position: fixed; z-index: 700; top: 50%; left: 50%;
+    width: min(380px, calc(100vw - 28px)); margin: 0;
+    padding: 16px 18px; transform: translate(-50%, -50%);
+    color: var(--ink); text-align: center;
+  }

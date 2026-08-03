@@ -34,8 +34,8 @@ Le graphique ouvert depuis la frise reprend ce choix avec deux onglets —
 La fumée peut elle aussi être masquée dans **Calques**. Elle est indicative :
 ce n'est ni une observation satellite de fumée ni une mesure de qualité de
 l'air.
-Le calque **Moyens aériens** est désactivé par défaut. Son activation interroge
-directement Airplanes.live depuis le navigateur, toutes les 4 secondes et
+Le calque **Moyens aériens** est activé par défaut. Il interroge directement
+Airplanes.live depuis le navigateur, toutes les 4 secondes et
 uniquement lorsque l'onglet est visible. Une liste de 112 adresses ICAO24
 connues limite la requête aux appareils susceptibles de participer aux
 opérations ; leur proximité avec un incendie récent est signalée, mais ne
@@ -387,7 +387,7 @@ front retombe alors sur la température grossière que `wind_coarse.json`
 transporte toujours.
 
 Le service `flamap-aircraft-history` est déployé séparément sur le VPS. Il
-conserve quinze minutes en RAM et expose
+conserve trente minutes en RAM et expose
 `https://api.flamap.fr/aircraft-history` derrière nginx. Il n'est pas inclus
 dans l'artefact GitHub Pages.
 

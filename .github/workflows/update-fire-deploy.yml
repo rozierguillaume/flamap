@@ -1,20 +1,17 @@
 # Foyers, périmètres, vent national et vent fin des cellules actives.
-# La grille de température est collectée à part par update-weather-deploy.yml,
-# sur une cadence plus lente : voir la section « Trois workflows » du README.
 name: update-fire-deploy
 
 on:
-  # Toutes les 30 min. Décalé de 17 min : les tâches planifiées à l'heure
-  # ronde partent dans une file d'attente saturée et démarrent avec du retard.
   schedule:
     - cron: "17,47 * * * *"
   push:
     branches: [main]
-    # Une modification du front est livree par update-front-deploy.yml, qui
-    # reutilise les donnees deja publiees. On ne refait la collecte longue que
-    # lorsque le collecteur ou ce workflow change.
     paths:
       - fetch_fires.py
+      - flamap/**
+      - scripts/download_live_artifact.py
+      - scripts/assemble_site.py
+      - scripts/validate_export.py
       - .github/workflows/update-fire-deploy.yml
   workflow_dispatch:
 
@@ -23,11 +20,7 @@ permissions:
   pages: write
   id-token: write
 
-# Groupe partagé par les trois workflows, et volontairement : un groupe de
-# concurrence est global au dépôt, pas propre à un workflow. Deux d'entre eux ne
-# peuvent donc jamais publier en même temps et s'écraser l'un l'autre — le second
-# attend, puisque `cancel-in-progress` est faux, et repart des données que le
-# premier vient de publier.
+# Les trois workflows partagent ce verrou : Pages remplace l'artefact entier.
 concurrency:
   group: pages
   cancel-in-progress: false
@@ -44,135 +37,15 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      # Les CSV publics FIRMS s'arrêtent à sept jours. Reprendre les paquets de
-      # zones actuellement publiés permet au collecteur de conserver trois
-      # jours supplémentaires, sans clé d'API. Une première publication ou une
-      # indisponibilité du site dégrade simplement la fenêtre à sept jours.
-      #
-      # Le même jeu repris sert de référence à la notification Telegram : il est
-      # recopié dans `prev/` avant que le collecteur n'écrase `data/`. C'est le
-      # seul état « avant » disponible, puisque les données ne vivent pas dans
-      # git. Le manifeste de `prev/` ne liste que les zones réellement reprises :
-      # une tuile perdue est écartée du diff au lieu d'y verser des centaines de
-      # faux nouveaux foyers.
-      #
-      # Les reprises comptent : 176 requêtes par cycle, 48 cycles par jour, un
-      # 503 de CDN finit toujours par tomber. Sans elles, un incident sur une
-      # seule tuile coûtait à la fois trois jours d'historique FIRMS et la
-      # notification du cycle.
+      # Trois tentatives 0/3/9 s, 12 zones concurrentes ; la reprise prépare
+      # également prev/ pour la notification Telegram.
       - name: Reprendre l'historique FIRMS publié
-        shell: bash
-        run: |
-          python3 - <<'PY'
-          import json
-          import os
-          import pathlib
-          import shutil
-          import time
-          import urllib.parse
-          import urllib.request
-          from concurrent.futures import ThreadPoolExecutor
+        run: python3 scripts/download_live_artifact.py --mode history
 
-          base = os.environ['LIVE_SITE'].rstrip('/')
-          root = pathlib.Path('data/zones')
-          BACKOFF = (0, 3, 9)
-
-          def fetch(url):
-              for attempt, pause in enumerate(BACKOFF, start=1):
-                  if pause:
-                      time.sleep(pause)
-                  try:
-                      with urllib.request.urlopen(url, timeout=60) as response:
-                          body = response.read()
-                  except Exception as error:
-                      last = error
-                      continue
-                  if body:
-                      return body, None
-                  last = 'réponse vide'
-              return None, f"{last} (après {len(BACKOFF)} tentatives)"
-
-          payload, error = fetch(f"{base}/data/manifest.json")
-          if payload is None:
-              print(f"::warning::Historique FIRMS indisponible : {error}")
-              raise SystemExit(0)
-          manifest = json.loads(payload)
-
-          social, social_error = fetch(f"{base}/data/social_timeline.json")
-          if social is None:
-              print(f"::warning::Historique social indisponible : {social_error}")
-          else:
-              pathlib.Path('data/social_timeline.json').write_bytes(social)
-
-          root.mkdir(parents=True, exist_ok=True)
-
-          def download(zone_id):
-              encoded = urllib.parse.quote(str(zone_id), safe='')
-              body, error = fetch(f"{base}/data/zones/{encoded}.json")
-              if body is None:
-                  print(f"::warning::Historique {zone_id} ignoré : {error}")
-                  return None
-              (root / f"{zone_id}.json").write_bytes(body)
-              return zone_id
-
-          zones = manifest.get('zones', [])
-          with ThreadPoolExecutor(max_workers=12) as pool:
-              taken = [zone_id for zone_id in pool.map(download, zones)
-                       if zone_id]
-
-          if not taken:
-              print('::warning::Aucune zone reprise : pas de référence pour la '
-                    'notification Telegram.')
-              raise SystemExit(0)
-
-          prev = pathlib.Path('prev')
-          (prev / 'zones').mkdir(parents=True, exist_ok=True)
-          for zone_id in taken:
-              shutil.copy(root / f"{zone_id}.json", prev / 'zones')
-          manifest['zones'] = taken
-          (prev / 'manifest.json').write_text(json.dumps(manifest))
-          missing = len(zones) - len(taken)
-          print(f"Référence Telegram : {len(taken)} zones reprises"
-                + (f", {missing} écartées du diff" if missing else ""))
-          PY
-
-      # `thermal.json` appartient à update-weather-deploy.yml. Ce workflow ne le
-      # produit pas mais doit le republier tel quel : chaque déploiement Pages
-      # remplace l'artefact entier, donc l'oublier ici effacerait la grille de
-      # température jusqu'au prochain passage du workflow météo. Son absence est
-      # normale avant la première collecte météo — le front retombe alors sur la
-      # température grossière de `wind_coarse.json`.
+      # thermal.json est produit par le workflow météo et reste facultatif.
       - name: Reprendre la grille de température publiée
-        shell: bash
-        run: |
-          python3 - <<'PY'
-          import os
-          import pathlib
-          import urllib.request
+        run: python3 scripts/download_live_artifact.py --mode thermal
 
-          base = os.environ['LIVE_SITE'].rstrip('/')
-          target = pathlib.Path('data/thermal.json')
-          target.parent.mkdir(parents=True, exist_ok=True)
-          try:
-              with urllib.request.urlopen(f"{base}/data/thermal.json",
-                                          timeout=60) as response:
-                  body = response.read()
-              if not body:
-                  raise ValueError('réponse vide')
-          except Exception as error:
-              print(f"::warning::Grille de température non reprise : {error}. "
-                    "Le front retombera sur le champ large.")
-          else:
-              target.write_bytes(body)
-              print(f"Grille de température reprise : {len(body) / 1e6:.2f} Mo")
-          PY
-
-      # La génération nationale prend quelques minutes : quatre flux FIRMS
-      # parallèles, deux requêtes EFFIS et les grilles Open-Meteo séquentielles.
-      # Les 25 min laissent une large marge aux reprises HTTP 429 et au WFS lent.
-      # Une panne FIRMS totale reporte la mise à jour et conserve le site actif.
-      # Les autres erreurs restent fatales ; une grille fine seule se dégrade
-      # vers le vent national. Aucun de ces cas ne publie une carte vide.
       - name: Récupérer les données
         id: collect
         shell: bash
@@ -186,69 +59,14 @@ jobs:
             echo "deploy=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          if [ "$status" -ne 0 ]; then
-            exit "$status"
-          fi
+          if [ "$status" -ne 0 ]; then exit "$status"; fi
           echo "deploy=true" >> "$GITHUB_OUTPUT"
         timeout-minutes: 25
 
-      # Garde-fou : sans foyers, la page planterait au premier cran.
       - name: Vérifier les données
         if: steps.collect.outputs.deploy == 'true'
-        run: |
-          python3 - <<'PY'
-          import json, pathlib, sys
-          manifest = json.load(open('data/manifest.json'))
-          timeline = json.load(open('data/timeline.json'))
-          overview = json.load(open('data/overview_hotspots.geojson'))
-          psfdf = json.load(open('data/psfdf_fires.geojson'))
-          weather = json.load(open('data/weather_forecast.json'))
-          zone_paths = list(pathlib.Path('data/zones').glob('*.json'))
-          expected = {f"{zone_id}.json" for zone_id in manifest['zones']}
-          actual = {path.name for path in zone_paths}
-          print(f"{manifest['hotspot_count']} foyers, {manifest['dated_count']} "
-                f"polygones datés, {len(zone_paths)} zones")
-          if not manifest['hotspot_count'] or not timeline or actual != expected:
-              sys.exit("export national incomplet, déploiement annulé")
-          allowed = {'Hors de contrôle', 'En cours', 'Fixé', 'Maîtrisé', 'Éteint'}
-          if (psfdf.get('type') != 'FeatureCollection'
-                  or any(feature.get('properties', {}).get('status') not in allowed
-                         for feature in psfdf.get('features', []))):
-              sys.exit("export PSFDF invalide")
-          passages = [step for step in timeline if step['kind'] == 'sat']
-          if (not passages
-              or any(not isinstance(step.get('frp'), (int, float)) for step in passages)
-              or any(not isinstance(feature['properties'].get('frp'), (int, float))
-                     for feature in overview['features'])):
-              sys.exit("puissance radiative FIRMS absente des agrégats")
-          # `weather_forecast.json` ne porte plus que le vent. La température
-          # vient de `thermal.json`, produit par update-weather-deploy.yml, et
-          # son absence est un état valide : le front retombe sur la température
-          # grossière que `wind_coarse.json` transporte toujours.
-          weather_rows = weather.get('nt', 0)
-          if (weather_rows < 2
-              or any(len(weather.get(name, [])) != weather_rows
-                     for name in ('u', 'v', 'gust'))):
-              sys.exit("export météo absent ou incomplet")
-          coarse = json.load(open('data/wind_coarse.json'))
-          if any(len(coarse.get(name, [])) != coarse.get('nt', 0)
-                 for name in ('temperature', 'precipitation')):
-              sys.exit("température de repli absente de wind_coarse.json")
-          thermal_path = pathlib.Path('data/thermal.json')
-          if not thermal_path.exists():
-              print('::warning::aucune grille de température reprise, le front '
-                    'affichera le champ large')
-          fine = set(manifest['fine_wind_zones'])
-          for path in zone_paths:
-              zone = json.load(open(path))
-              if zone.get('id') != path.stem:
-                  sys.exit(f"identifiant de zone incohérent : {path}")
-              if path.stem in fine and not zone.get('wind'):
-                  sys.exit(f"vent fin absent : {path}")
-          PY
+        run: python3 scripts/validate_export.py fire-data data
 
-      # Le message n'est pas envoyé ici : la publication peut encore échouer, et
-      # annoncer des foyers absents du site serait pire que de se taire.
       - name: Comparer aux données publiées
         id: diff
         if: steps.collect.outputs.deploy == 'true'
@@ -256,38 +74,11 @@ jobs:
 
       - name: Assembler le site
         if: steps.collect.outputs.deploy == 'true'
-        run: |
-          mkdir -p _site/data
-          cp index.html mentions-legales.html social.html og.png favicon.svg favicon.ico \
-             apple-touch-icon.png icon-192.png icon-512.png \
-             site.webmanifest robots.txt sitemap.xml _site/
-          cp data/manifest.json data/overview_hotspots.geojson \
-             data/burnt_recent.geojson \
-             data/psfdf_fires.geojson \
-             data/timeline.json data/social_timeline.json \
-             data/wind_coarse.json data/weather_forecast.json _site/data/
-          # Repris du site publié, pas produit ici : absent avant la première
-          # collecte météo.
-          if [ -f data/thermal.json ]; then cp data/thermal.json _site/data/; fi
-          cp -r data/zones _site/data/
+        run: python3 scripts/assemble_site.py fire
 
-      # Pages accepte jusqu'à 1 Go, mais Flamap doit rester très en dessous.
-      # Le seuil de 100 Mio laisse plus de cinq fois le volume actuel tout en
-      # bloquant une croissance accidentelle avant la création de l'artefact.
       - name: Vérifier la taille du site
         if: steps.collect.outputs.deploy == 'true'
-        run: |
-          python3 - <<'PY'
-          import pathlib, sys
-          root = pathlib.Path('_site')
-          files = [path for path in root.rglob('*') if path.is_file()]
-          size = sum(path.stat().st_size for path in files)
-          largest = max(files, key=lambda path: path.stat().st_size)
-          print(f"{len(files)} fichiers, {size / 1024 / 1024:.1f} Mio "
-                f"(plus gros : {largest}, {largest.stat().st_size / 1024 / 1024:.1f} Mio)")
-          if size > 100 * 1024 * 1024:
-              sys.exit("site supérieur à 100 Mio, déploiement annulé")
-          PY
+        run: python3 scripts/validate_export.py size _site
 
       - uses: actions/upload-pages-artifact@v3
         if: steps.collect.outputs.deploy == 'true'
@@ -305,8 +96,6 @@ jobs:
       - id: deployment
         uses: actions/deploy-pages@v4
 
-  # Un seul message par cycle, seulement si la carte publiée montre vraiment du
-  # neuf : de nouveaux foyers FIRMS ou un nouveau périmètre EFFIS.
   notify:
     needs: [build, deploy]
     if: needs.build.outputs.fresh == 'true'
@@ -319,17 +108,13 @@ jobs:
           MESSAGE: ${{ needs.build.outputs.message }}
         shell: bash
         run: |
-          # Les secrets ne sont pas lisibles dans un `if` de job : le dépôt sans
-          # bot configuré doit se contenter d'un avertissement, pas d'un échec.
           if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_CHAT_ID" ]; then
             echo "::warning::Secrets Telegram absents, message non envoyé."
             exit 0
           fi
           curl -sS --fail-with-body -X POST \
             "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
-            -d chat_id="$TELEGRAM_CHAT_ID" \
-            -d parse_mode=HTML \
+            -d chat_id="$TELEGRAM_CHAT_ID" -d parse_mode=HTML \
             -d link_preview_options='{"is_disabled":true}' \
-            --data-urlencode "text=$MESSAGE" \
-            -o response.json
+            --data-urlencode "text=$MESSAGE" -o response.json
           python3 -c "import json;print(json.load(open('response.json'))['ok'])"

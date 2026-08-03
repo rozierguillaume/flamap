@@ -1,0 +1,48 @@
+[
+  {
+    "ID": "fr-date",
+    "Statut": "Hors de contrôle",
+    "Longitude": "6,10",
+    "Latitude": "43,50",
+    "Commune": "Alpha",
+    "Département": "83",
+    "Date_MAJ": "01/08/2026 à 14:30:05",
+    "Surface": "1 234,5",
+    "Personnel": "80"
+  },
+  {
+    "ID": "us-date",
+    "Statut": "Maitrise",
+    "Longitude": "7.20",
+    "Latitude": "44.20",
+    "Commune": "Bravo",
+    "Département": "06",
+    "Date_MAJ": "8/1/2026 15:45",
+    "Surface": "12,5",
+    "Canadair": "2"
+  },
+  {
+    "ID": "old",
+    "Statut": "En cours",
+    "Longitude": "5.00",
+    "Latitude": "45.00",
+    "Commune": "Ancien",
+    "Date_MAJ": "20/07/2026 12:00"
+  },
+  {
+    "ID": "outside",
+    "Statut": "Fixé",
+    "Longitude": "11.00",
+    "Latitude": "45.00",
+    "Commune": "Hors zone",
+    "Date_MAJ": "01/08/2026 12:00"
+  },
+  {
+    "ID": "unknown",
+    "Statut": "À confirmer",
+    "Longitude": "5.00",
+    "Latitude": "45.00",
+    "Commune": "Statut inconnu",
+    "Date_MAJ": "01/08/2026 12:00"
+  }
+]
