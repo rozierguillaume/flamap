@@ -8,11 +8,15 @@ export function gridBilinear(grid, values, lon, lat) {
   const gy = (lat - grid.bbox[1]) / (grid.bbox[3] - grid.bbox[1]) * (grid.ny - 1);
   if (!(gx >= 0 && gy >= 0 && gx <= grid.nx - 1 && gy <= grid.ny - 1)) return null;
   const ix = Math.min(gx | 0, grid.nx - 2), iy = Math.min(gy | 0, grid.ny - 2);
-  const fx = gx - ix, fy = gy - iy, k = iy * grid.nx + ix;
-  const cells = [values[k], values[k + 1], values[k + grid.nx], values[k + grid.nx + 1]];
-  if (!cells.every(Number.isFinite)) return null;
-  return (cells[0] * (1 - fx) + cells[1] * fx) * (1 - fy)
-       + (cells[2] * (1 - fx) + cells[3] * fx) * fy;
+  const fx = gx - ix, fy = gy - iy, k = iy * grid.nx + ix, k2 = k + grid.nx;
+  // Les quatre coins sont lus dans des variables plutôt que dans un tableau
+  // intermédiaire : la valeur rendue est identique, sans allocation par appel.
+  const c00 = values[k], c10 = values[k + 1];
+  const c01 = values[k2], c11 = values[k2 + 1];
+  if (!Number.isFinite(c00) || !Number.isFinite(c10)
+      || !Number.isFinite(c01) || !Number.isFinite(c11)) return null;
+  return (c00 * (1 - fx) + c10 * fx) * (1 - fy)
+       + (c01 * (1 - fx) + c11 * fx) * fy;
 }
 
 /* Interpole une nappe d'une grille horaire à un instant quelconque. Le champ
@@ -38,10 +42,20 @@ export function windAtGrid(d, g, lon, lat, out) {
   if (!(gx >= 0 && gy >= 0 && gx <= d.nx - 1 && gy <= d.ny - 1)) return false;
 
   const i = Math.min(gx | 0, d.nx - 2), j = Math.min(gy | 0, d.ny - 2);
-  const fx = gx - i, fy = gy - j, k = j * d.nx + i;
-  const bil = a => (a[k] * (1 - fx) + a[k + 1] * fx) * (1 - fy)
-                 + (a[k + d.nx] * (1 - fx) + a[k + d.nx + 1] * fx) * fy;
+  const fx = gx - i, fy = gy - j, k = j * d.nx + i, k2 = k + d.nx;
+  /* La nappe de particules appelle cette fonction une fois par particule et par
+   * frame, soit quelques milliers de fois par seconde. La fermeture `bil` qui
+   * portait k, fx et fy y était allouée à chaque appel ; les quatre poids sont
+   * désormais calculés une fois et appliqués en ligne. C'est la même formule
+   * bilinéaire, seulement factorisée autrement : le regroupement des produits
+   * change, l'écart reste au dernier bit d'un flottant et se perd très en deçà
+   * du pixel comme du décimètre par seconde. */
+  const w00 = (1 - fx) * (1 - fy), w10 = fx * (1 - fy);
+  const w01 = (1 - fx) * fy,       w11 = fx * fy;
+  const u = g.u, v = g.v, gust = g.gust;
 
-  out.u = bil(g.u); out.v = bil(g.v); out.g = bil(g.gust);
+  out.u = u[k] * w00 + u[k + 1] * w10 + u[k2] * w01 + u[k2 + 1] * w11;
+  out.v = v[k] * w00 + v[k + 1] * w10 + v[k2] * w01 + v[k2 + 1] * w11;
+  out.g = gust[k] * w00 + gust[k + 1] * w10 + gust[k2] * w01 + gust[k2 + 1] * w11;
   return true;
 }

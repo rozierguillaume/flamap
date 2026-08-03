@@ -57,14 +57,30 @@ export function createWindController({
     parts: [], raf: null, last: 0, w: 0, h: 0,
   };
 
+  /* `at()` est le point chaud du rendu : la nappe l'appelle une fois par
+   * particule et par frame, la fumée jusqu'à douze fois par bouffée et par
+   * frame. Les deux objets de travail sont donc alloués une fois pour toutes
+   * plutôt qu'à chaque appel. Ils restent privés au contrôleur, ne survivent
+   * jamais à l'appel qui les remplit, et `at()` n'est pas réentrant : aucune
+   * lecture ne peut observer les valeurs d'un autre point. */
+  const coarse = { u: 0, v: 0, g: 0 };
+  const fine = { u: 0, v: 0, g: 0 };
+
+  /* Segments à tracer, groupés par classe de vitesse. Une particule alimente
+   * exactement une classe, d'où quatre nombres par particule et par classe dans
+   * le pire cas. Les tampons sont en double précision, comme les positions
+   * qu'ils transportent, et remplis jusqu'à `laneCount` : les trois tableaux
+   * qui étaient reconstruits et agrandis à chaque frame disparaissent. */
+  const lanePaths = lanes.map(() => new Float64Array(particleCount * 4));
+  const laneCount = new Int32Array(lanes.length);
+  const sampled = { u: 0, v: 0, g: 0 };   // lecture du champ, réutilisée par frame
+
   function at(lon, lat, out) {
-    const coarse = {};
     const hasCoarse = windAtGrid(W.data, W.cur, lon, lat, coarse);
     const manifest = getManifest();
     if (manifest && map.getZoom() >= manifest.detail_zoom) {
       let weight = 0, blend = 0, fineU = 0, fineV = 0, fineG = 0;
       for (const tile of W.tiles.values()) {
-        const fine = {};
         if (!tile || !windAtGrid(tile, tile._cur, lon, lat, fine)) continue;
         const [west, south, east, north] = tile.bbox;
         const dx = Math.min(lon - west, east - lon)
@@ -76,11 +92,10 @@ export function createWindController({
         weight += mix; blend = Math.max(blend, mix);
       }
       if (weight) {
-        const fine = { u: fineU / weight, v: fineV / weight, g: fineG / weight };
         const a = hasCoarse ? 1 - blend : 0;
-        out.u = coarse.u * a + fine.u * (1 - a);
-        out.v = coarse.v * a + fine.v * (1 - a);
-        out.g = coarse.g * a + fine.g * (1 - a);
+        out.u = coarse.u * a + fineU / weight * (1 - a);
+        out.v = coarse.v * a + fineV / weight * (1 - a);
+        out.g = coarse.g * a + fineG / weight * (1 - a);
         return true;
       }
     }
@@ -175,30 +190,33 @@ export function createWindController({
     ctx.fillRect(0, 0, W.w, W.h);
     ctx.globalCompositeOperation = 'source-over';
 
-    const o = {}, paths = lanes.map(() => []);
+    for (let lane = 0; lane < laneCount.length; lane++) laneCount[lane] = 0;
     for (const p of W.parts) {
       p.age += dt;
       const lon = W.lon0 + p.x * W.dLon;
       const lat = (2 * Math.atan(Math.exp(W.y0 + p.y * W.dY)) - Math.PI / 2) * 57.29577951;
       // hors grille ou en fin de vie : on renaît ailleurs, sans tracer le saut
-      if (p.age > WIND_LIFE || !at(lon, lat, o)) { spawn(p); continue; }
+      if (p.age > WIND_LIFE || !at(lon, lat, sampled)) { spawn(p); continue; }
 
-      const nx = p.x + o.u * WIND_K * dt, ny = p.y - o.v * WIND_K * dt;
+      const nx = p.x + sampled.u * WIND_K * dt, ny = p.y - sampled.v * WIND_K * dt;
       if (nx < -4 || ny < -4 || nx > W.w + 4 || ny > W.h + 4) { spawn(p); continue; }
 
-      const speed = Math.hypot(o.u, o.v);
-      paths[speed < lanes[0][0] ? 0 : speed < lanes[1][0] ? 1 : 2]
-        .push(p.x, p.y, nx, ny);
+      const speed = Math.hypot(sampled.u, sampled.v);
+      const lane = speed < lanes[0][0] ? 0 : speed < lanes[1][0] ? 1 : 2;
+      const path = lanePaths[lane];
+      let n = laneCount[lane];
+      path[n++] = p.x; path[n++] = p.y; path[n++] = nx; path[n++] = ny;
+      laneCount[lane] = n;
       p.x = nx; p.y = ny;
     }
 
-    for (let lane = 0; lane < paths.length; lane++) {
-      const path = paths[lane];
-      if (!path.length) continue;
+    for (let lane = 0; lane < lanePaths.length; lane++) {
+      const path = lanePaths[lane], used = laneCount[lane];
+      if (!used) continue;
       ctx.strokeStyle = lanes[lane][1];
       ctx.lineWidth = lanes[lane][2];
       ctx.beginPath();
-      for (let i = 0; i < path.length; i += 4) {
+      for (let i = 0; i < used; i += 4) {
         ctx.moveTo(path[i], path[i + 1]); ctx.lineTo(path[i + 2], path[i + 3]);
       }
       ctx.stroke();

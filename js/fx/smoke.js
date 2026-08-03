@@ -22,6 +22,10 @@ export const SMOKE_WINDOW = 6 * H;              // zone jaune de la rampe d'anci
 export const SMOKE_LIVE_K = 180;                // dernier instant : 3 min physiques/s
 const SMOKE_LIVE_DENSITY = 2.2;                 // compense le peu de passages récents
 
+// Latitude → y de Mercator. Hissée hors de la boucle de rendu, qui la
+// reconstruisait à chaque frame pour la rappeler une fois par bouffée.
+const merc = lat => Math.log(Math.tan(Math.PI / 4 + lat * Math.PI / 360));
+
 export function createSmokeController({
   mobile,
   canvas,
@@ -77,8 +81,14 @@ export function createSmokeController({
     return S.emitters[S.emitters.length - 1];
   }
 
+  /* Lecture du vent réutilisée d'un appel à l'autre : `advect()` est appelée une
+   * fois par bouffée et par sous-pas, soit jusqu'à quelques dizaines de milliers
+   * de fois par frame en lecture accélérée. La valeur ne sert jamais au-delà de
+   * l'appel qui la remplit. */
+  const sampled = { u: 0, v: 0, g: 0 };
+
   function advect(p, seconds) {
-    const out = {};
+    const out = sampled;
     if (!windAt(p.lon, p.lat, out)) return false;
     // Diffusion turbulente lente. Deux particules parties du même front ne
     // parcourent ainsi jamais exactement la même ligne de courant : la nappe
@@ -218,10 +228,31 @@ export function createSmokeController({
     const count = Math.min(12, Math.max(1, Math.ceil(seconds / (5 * 60))));
     const dt = seconds / count;
     for (let step = 0; step < count; step++) {
-      for (let i = S.parts.length - 1; i >= 0; i--) {
+      /* Balayage décroissant, comme avant, pour que les bouffées consomment le
+       * hasard de la diffusion dans le même ordre. Les survivantes sont ensuite
+       * tassées vers la fin du tableau puis ramenées d'un bloc, au lieu d'un
+       * `splice()` par disparition qui recopiait toute la queue à chaque fois :
+       * en lecture accélérée, où un panache s'éteint en masse, cette recopie
+       * répétée devenait quadratique. L'ordre relatif — donc l'ordre de dessin
+       * et la superposition des alphas — est conservé.
+       *
+       * `write` reste à -1 tant que rien n'a disparu : au dernier instant, où la
+       * quasi-totalité des bouffées survit d'une frame à l'autre, la passe ne
+       * coûte alors pas une seule écriture. */
+      const before = S.parts.length;
+      let write = -1;
+      for (let i = before - 1; i >= 0; i--) {
         const p = S.parts[i];
         p.age += dt;
-        if (p.age >= p.life || !advect(p, dt)) S.parts.splice(i, 1);
+        if (p.age >= p.life || !advect(p, dt)) {
+          if (write < 0) write = i;   // première disparition : le tassement commence
+          continue;
+        }
+        if (write >= 0) S.parts[write--] = p;
+      }
+      if (write >= 0) {
+        S.parts.copyWithin(0, write + 1);
+        S.parts.length = before - write - 1;
       }
       // Le débit est défini en temps physique : à l'équilibre, six heures
       // d'émission donnent `target` bouffées. Accélérer la frise accélère donc à
@@ -261,7 +292,6 @@ export function createSmokeController({
 
     ctx.clearRect(0, 0, S.w, S.h);
     if (!wind.current || !S.parts.length) return;
-    const merc = lat => Math.log(Math.tan(Math.PI / 4 + lat * Math.PI / 360));
     for (let i = S.parts.length - 1; i >= 0; i--) {
       const p = S.parts[i];
       const x = (p.lon - wind.lon0) / wind.dLon;

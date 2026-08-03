@@ -34,9 +34,64 @@
 <meta name="twitter:image" content="https://flamap.fr/og.png">
 <meta name="twitter:image:alt" content="Flamap, carte satellite des incendies en France.">
 
+<!-- `initReady` attend `isStyleLoaded()`, donc le TileJSON d'OpenFreeMap, et
+     `mapReady` attend les tuiles IGN et Sentinel-2. Ouvrir les trois connexions
+     pendant l'analyse du document sort leur DNS et leur TLS du chemin critique.
+     Les tuiles sont demandées par MapLibre en mode CORS, d'où `crossorigin` ;
+     la mesure d'audience est un script classique sans CORS et conditionnée au
+     stockage local, elle se contente d'une résolution de nom anticipée. -->
+<link rel="preconnect" href="https://tiles.openfreemap.org" crossorigin>
+<link rel="preconnect" href="https://data.geopf.fr" crossorigin>
+<link rel="preconnect" href="https://tiles.maps.eox.at" crossorigin>
+<link rel="dns-prefetch" href="https://analytics.flamap.fr">
+
 <link rel="stylesheet" href="/vendor/maplibre-gl/maplibre-gl.css">
-<script src="/vendor/maplibre-gl/maplibre-gl.js"></script>
-<link rel="stylesheet" href="/css/app.css">
+<!-- `defer` plutôt qu'un script bloquant : le mégaoctet de MapLibre ne retient
+     plus l'analyseur, donc le scanner de préchargement atteint tout de suite les
+     feuilles et les modules ci-dessous. Les scripts différés et les modules
+     partagent la même file d'exécution après analyse : MapLibre, déclaré ici,
+     s'exécute toujours avant `/js/main.js` déclaré en fin de corps. -->
+<script defer src="/vendor/maplibre-gl/maplibre-gl.js"></script>
+
+<!-- Les cinq feuilles du lot 16, dans l'ordre exact de la cascade historique.
+     Elles étaient chaînées par `@import` depuis `css/app.css` : invisibles au
+     scanner de préchargement, elles coûtaient un aller-retour bloquant de plus
+     avant le premier rendu. -->
+<link rel="stylesheet" href="/css/base.css">
+<link rel="stylesheet" href="/css/tokens.css">
+<link rel="stylesheet" href="/css/map.css">
+<link rel="stylesheet" href="/css/components.css">
+<link rel="stylesheet" href="/css/responsive.css">
+
+<!-- Le graphe de modules est peu profond mais large : sans ces indications, le
+     navigateur ne découvre `util/`, `data/client.js` et `map/base-style.js`
+     qu'après avoir analysé leurs importateurs, soit trois vagues successives.
+     Ce sont des préchargements, pas des exécutions : l'ordre d'évaluation
+     reste celui des `import` de `/js/main.js`. -->
+<link rel="modulepreload" href="/js/main.js">
+<link rel="modulepreload" href="/js/state.js">
+<link rel="modulepreload" href="/js/util/format.js">
+<link rel="modulepreload" href="/js/util/geo.js">
+<link rel="modulepreload" href="/js/util/grid.js">
+<link rel="modulepreload" href="/js/data/client.js">
+<link rel="modulepreload" href="/js/data/initial.js">
+<link rel="modulepreload" href="/js/data/zones.js">
+<link rel="modulepreload" href="/js/map/base-style.js">
+<link rel="modulepreload" href="/js/map/create-map.js">
+<link rel="modulepreload" href="/js/features/burnt.js">
+<link rel="modulepreload" href="/js/features/fires.js">
+<link rel="modulepreload" href="/js/features/psfdf.js">
+<link rel="modulepreload" href="/js/features/aircraft.js">
+<link rel="modulepreload" href="/js/features/weather.js">
+<link rel="modulepreload" href="/js/fx/wind.js">
+<link rel="modulepreload" href="/js/fx/smoke.js">
+<link rel="modulepreload" href="/js/timeline/model.js">
+<link rel="modulepreload" href="/js/timeline/controller.js">
+<link rel="modulepreload" href="/js/timeline/activity.js">
+<link rel="modulepreload" href="/js/ui/panel-manager.js">
+<link rel="modulepreload" href="/js/ui/popup-router.js">
+<link rel="modulepreload" href="/js/ui/popup-view.js">
+<link rel="modulepreload" href="/js/export/map-export.js">
 
 <script type="application/ld+json">
 {

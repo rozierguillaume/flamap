@@ -403,7 +403,10 @@ const windController = createWindController({
 smokeController = createSmokeController({
   mobile: MOBILE,
   canvas: smokeCv,
-  windAt: (...args) => windController.at(...args),
+  // `windController` est déjà construit : passer la fonction telle quelle évite
+  // le tableau de reste alloué à chaque lecture du vent, et la fumée en fait une
+  // par bouffée et par sous-pas.
+  windAt: windController.at,
   getWindProjection: out => windController.getProjection(out),
   getState,
   isPlaying: () => timelineController.isPlaying(),
