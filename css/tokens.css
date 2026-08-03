@@ -1,0 +1,16 @@
+  :root {
+    --burnt:      #2a2320;   /* terre brulee, feu eteint     */
+    --burnt-edge: #6b5a4e;
+    --nrt:        #5c4a42;   /* emprise NRT, sans date       */
+    --nrt-edge:   #8d7a6b;
+    --old:        #7d3b28;   /* brule il y a plus de 72 h    */
+    --recent:     #b1341f;   /* brule il y a 24-72 h         */
+    --hot:        #ff6b1a;   /* brule il y a 6-24 h          */
+    --front:      #ffd84d;   /* front actif (< 6 h)          */
+    --wind:       #bfe3ff;   /* nappe de vent, seul bleu de la carte */
+    --bg:         #0d0f12;
+    --ink:        #e8e6e3;
+    --ink-dim:    #a8a29c;
+    --safe-b:     env(safe-area-inset-bottom, 0px);
+  }
+  * { box-sizing: border-box; }

@@ -48,8 +48,12 @@ app.addEventListener('load', async () => {
   let win = null;
   try {
   win = app.contentWindow;
-  const { getMeasurementApi } = await win.eval('import("/js/main.js")');
-  const measurement = getMeasurementApi();
+  const apiDeadline = performance.now() + 30000;
+  while (!win.__flamapMeasurement) {
+    if (performance.now() > apiDeadline) throw new Error('API de mesure indisponible');
+    await sleep(25);
+  }
+  const measurement = win.__flamapMeasurement;
   result.environment = {
     userAgent: win.navigator.userAgent,
     viewport: [win.innerWidth, win.innerHeight],

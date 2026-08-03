@@ -1,0 +1,305 @@
+
+  /* =======================  DESKTOP  ======================= */
+  @media (min-width: 721px) {
+    /* Les trois blocs ancres a gauche gardent une respiration genereuse sans
+       ajouter de bande ou de decor par-dessus l'imagerie. */
+    #head, #incidents { left: 26px; }
+    #dock { position: absolute; z-index: 500; left: 0; right: 0; bottom: 14px;
+            height: 62px; pointer-events: none; }
+    #dock > * { pointer-events: auto; }
+    #legend {
+      position: absolute; left: 26px; bottom: 0; width: 230px;
+      display: block; padding: 0; overflow: hidden; font-size: 11px;
+      transition: width .22s ease, height .22s ease;
+    }
+    #legend.collapsed {
+      width: 42px; height: 42px;
+    }
+    #legend-head {
+      height: 38px; display: flex; align-items: center;
+      justify-content: space-between; padding: 7px 8px 6px 12px;
+      border-bottom: 1px solid rgba(255,255,255,.08);
+    }
+    #legend-title {
+      color: var(--ink-dim); font-size: 10.5px; font-weight: 650;
+      letter-spacing: .025em; text-transform: uppercase;
+    }
+    #legend-collapse {
+      display: grid; place-items: center; flex: none; width: 26px; height: 26px;
+      padding: 0; border: 0; border-radius: 7px; background: transparent;
+      color: #c9c5c0; cursor: pointer;
+    }
+    #legend-collapse:hover, #legend-collapse:focus-visible {
+      background: rgba(255,255,255,.08); color: var(--ink);
+    }
+    #legend-collapse svg {
+      width: 16px; height: 16px; fill: none; stroke: currentColor;
+      stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+      transition: transform .22s ease;
+    }
+    #legend.collapsed #legend-head {
+      height: 42px; padding: 8px; border-bottom: 0;
+    }
+    #legend.collapsed #legend-title, #legend.collapsed #legend-content {
+      display: none;
+    }
+    #legend.collapsed #legend-collapse svg {
+      transform: rotate(180deg);
+    }
+    #legend-content {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 7px 10px; padding: 9px 12px 11px;
+    }
+    #legend .burnt-key { min-width: 0; }
+    #legend #agekey { grid-column: 1 / -1; width: 100%; min-width: 0; }
+    #legend #ageramp { width: 100%; }
+    #legend #psfdf-key {
+      grid-column: 1 / -1; display: grid;
+      grid-template-columns: 1fr 1fr; width: 100%;
+    }
+    #legend #psfdf-key > b { grid-column: 1 / -1; }
+    #legend #tempkey, #legend #windkey { grid-column: 1 / -1; }
+    #timebar {
+      position: absolute; left: 50%; bottom: 0; transform: translateX(-50%);
+      width: min(620px, calc(100vw - 500px)); margin: 0; padding: 13px 16px;
+    }
+    /* Le bouton reste dans la ligne du dock, le panneau vient se poser au-dessus
+       de lui plutôt qu'à côté : hors du flux, il ne rétrécit pas la réglette en
+       s'ouvrant. C'est aussi ce qui rendait la barre du bas inutilisable entre
+       721 et 900 px de large, où les 280 px de crédits mangeaient le curseur. */
+    #cr-btn { position: absolute; right: 14px; bottom: 0; padding: 8px 12px; }
+    /* Au-dessus de toute la barre, pas seulement du bouton : la réglette est
+       centrée dans la place qui reste et, sous 1300 px de large, il n'y a plus
+       les 280 px du panneau entre son bord droit et celui de l'écran — il
+       viendrait mordre dessus. */
+    /* Panneau ancre a droite mais texte a gauche : la liste a besoin d'un bord
+       de lecture commun, un alignement a droite casserait les libelles. */
+    #credits { position: absolute; right: 14px; bottom: calc(100% + 10px);
+               width: 280px; padding: 11px 14px; text-align: left; }
+    #updates-panel { position: fixed; z-index: 502; right: 14px; bottom: 84px;
+                     width: 350px; max-height: min(570px, calc(100vh - 120px));
+                     padding: 15px 17px; }
+    #updates-list { max-height: min(470px, calc(100vh - 220px)); }
+    #activity-panel { position: fixed; z-index: 503; top: 88px; right: 14px;
+                      width: min(450px, calc(100vw - 28px)); padding: 17px 19px; }
+    #weather-panel { position: fixed; z-index: 504; top: 64px; right: 14px;
+                     width: min(470px, calc(100vw - 28px)); padding: 16px 18px; }
+  }
+
+  @media (min-width: 721px) and (max-width: 1180px) {
+    #legend { bottom: 80px; }
+    #timebar { width: min(620px, calc(100vw - 80px)); }
+  }
+
+  /* =======================  MOBILE  ======================== */
+  @media (max-width: 720px) {
+    #psfdf-panel {
+      position: fixed; z-index: 499; top: 73px; right: 10px; left: 10px;
+      width: auto; max-height: 44px; padding: 0; overflow: hidden;
+      opacity: 0; visibility: hidden; pointer-events: none;
+      transform: translateY(5px);
+      transition: opacity .24s ease, transform .24s ease,
+                  max-height .25s ease, visibility 0s linear .24s;
+    }
+    #psfdf-panel[hidden] { display: none; }
+    body.psfdf-focus #psfdf-panel {
+      opacity: 1; visibility: visible; pointer-events: auto;
+      transform: none; transition-delay: 0s;
+    }
+    #psfdf-panel header {
+      position: relative; min-height: 42px; margin: 0; padding: 8px 39px 8px 12px;
+      display: flex; align-items: center;
+    }
+    #psfdf-panel .psfdf-panel-heading {
+      width: 100%; display: grid; align-items: center;
+      grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 8px;
+    }
+    #psfdf-panel h2 {
+      min-width: 0; overflow: hidden; text-overflow: ellipsis;
+      white-space: nowrap; font-size: 13px;
+    }
+    #psfdf-panel .psfdf-relative {
+      grid-column: 3; justify-self: end; padding: 0; background: transparent;
+      color: #b8b2ac; font-size: 9.5px; font-weight: 550;
+    }
+    #psfdf-panel .panel-sub { display: none; }
+    #psfdf-panel .psfdf-head-status {
+      grid-column: 2; grid-row: 1;
+      display: inline-flex; align-items: center; gap: 5px; flex: none;
+      font-size: 10.5px; font-weight: 650; white-space: nowrap;
+    }
+    #psfdf-panel-toggle {
+      position: absolute; inset: 0; display: block; width: 100%; padding: 0;
+      border: 0; border-radius: inherit; background: transparent; color: var(--ink);
+      cursor: pointer;
+    }
+    #psfdf-panel-toggle svg {
+      position: absolute; right: 12px; top: 13px; width: 16px; height: 16px;
+      fill: none; stroke: currentColor; stroke-width: 2;
+      transition: transform .22s ease;
+    }
+    #psfdf-panel.open { right: 10px; max-height: min(66vh, 520px); }
+    #psfdf-panel.open #psfdf-panel-toggle svg { transform: rotate(180deg); }
+    #psfdf-panel-body { display: none; padding: 0 12px 12px; }
+    #psfdf-panel.open #psfdf-panel-body { display: block; overflow-y: auto; }
+    #psfdf-panel .psfdf-activity-chart { height: 108px; }
+    #psfdf-panel .psfdf-detail-status { display: none; }
+    #head { top: 10px; left: 10px; padding: 9px 15px 10px; }
+    #head .brand { gap: 8px; }
+    #head .mark { width: 36px; }
+    #head h1 { font-size: 19px; }
+    #incidents {
+      top: 73px; left: 10px; right: 10px; flex-wrap: nowrap; max-width: none;
+      padding-right: 56px; overflow-x: auto; scrollbar-width: none;
+      transition: opacity .24s ease, transform .24s ease,
+                  visibility 0s linear 0s;
+      -webkit-mask-image: linear-gradient(to right, #000 0,
+        #000 calc(100% - 72px), transparent 100%);
+      mask-image: linear-gradient(to right, #000 0,
+        #000 calc(100% - 72px), transparent 100%);
+    }
+    body.psfdf-focus #incidents {
+      opacity: 0; visibility: hidden; pointer-events: none;
+      transform: translateY(-5px); transition-delay: 0s, 0s, .24s;
+    }
+    #incidents::-webkit-scrollbar { display: none; }
+    #incidents button {
+      flex: none; min-height: 40px; max-width: 220px;
+      padding: 9px 11px; font-size: 12px;
+    }
+    #incidents.layers-open, #incidents.credits-open, #incidents.activity-open,
+    #incidents.weather-open, #incidents.export-open { display: none; }
+
+    /* les calques repliés derrière un bouton : sur 375 px de large, le panneau
+       ouvert en permanence mangeait le quart supérieur de l'écran */
+    #layers-btn { position: fixed; top: auto; right: 10px;
+                  width: 42px; height: 42px; padding: 0;
+                  color: var(--ink); font-size: 17px; line-height: 1; }
+    #layers-btn::after { content: none; }
+    #layers-btn .wide { display: none; }
+    #layers-btn svg { width: 19px; height: 19px; margin: 0; vertical-align: 0; }
+    /* La colonne de 42 px reste reservee aux quatre commandes : le panneau
+       s'ouvre a leur gauche, sans recouvrir son bouton ni faire disparaitre
+       les commandes suivantes. */
+    #layers { position: fixed; top: 60px; right: 62px;
+              max-height: calc(100vh - 130px); overflow-y: auto;
+              padding: 10px 13px; font-size: 12px; }
+    #weather-btn { position: fixed; top: auto; right: 10px; width: 42px;
+                   height: 42px; padding: 0; font-size: 17px; }
+    #weather-btn .weather-label { display: none; }
+    #weather-btn .weather-icon { margin: 0; }
+    #weather-btn::after { content: none; }
+    #export-btn { position: fixed; top: auto; right: 10px;
+                  width: 42px; height: 42px; }
+    #export-btn .export-icon, #export-btn .export-loader { width: 19px; height: 19px; }
+    #export-panel { top: auto; right: 62px;
+                    width: min(270px, calc(100vw - 72px));
+                    max-height: calc(100vh - 130px); overflow-y: auto; }
+    #export-toast { top: auto; right: 62px; }
+    /* La fiche doit tenir dans la bande laissée par le dock : `fitPopup()`
+       remonte la carte, encore faut-il que la fiche soit assez basse pour y
+       entrer. Au-delà, elle défile dans son propre cadre. */
+    .maplibregl-popup-content { max-height: 42vh; overflow-y: auto; }
+
+    /* Le bas est compose de cartes flottantes distinctes : la legende explique
+       la carte, la frise la pilote. Les fondre dans une seule feuille donnait
+       l'impression d'un gros formulaire et mangeait inutilement l'imagerie. */
+    #dock {
+      position: absolute; z-index: 500; left: 10px; right: 10px;
+      bottom: calc(10px + var(--safe-b));
+      display: grid; grid-template-columns: 1fr;
+      grid-template-areas: "legend" "timeline" "credits";
+      align-items: end; gap: 6px; pointer-events: none;
+    }
+    #dock > * { pointer-events: auto; }
+    #legend {
+      grid-area: legend; display: grid;
+      grid-template-columns: auto minmax(110px, 1fr);
+      gap: 7px 12px; padding: 10px 12px; font-size: 11.5px;
+    }
+    #legend:not(.open) { display: none; }
+    #legend-head { display: none; }
+    #legend-content { display: contents; }
+    #legend-btn {
+      position: fixed; z-index: 501; top: auto; right: 10px;
+      display: grid; place-items: center;
+      width: 42px; height: 42px; padding: 0;
+    }
+    #legend-btn svg { width: 21px; height: 21px; }
+    /* Les deux emprises s'empilent dans la colonne etroite, le degrade tient
+       la colonne large sur leurs deux rangs plutot que de laisser un trou. */
+    #legend .burnt-key { grid-column: 1; }
+    #agekey { grid-column: 2; grid-row: 1 / span 2; width: 100%; min-width: 0; }
+    #psfdf-key { grid-column: 1 / -1; }
+    #ageramp { width: 100%; }
+    #tempkey { grid-column: 1; }
+    #windkey { grid-column: 2; }
+    #legend i { width: 10px; height: 10px; }
+    #play { width: 42px; height: 38px; }   /* cible tactile */
+    #updates-btn { width: 42px; height: 38px; font-size: 17px; } /* cible tactile */
+    #slider { height: 32px; }
+    #timebar { grid-area: timeline; width: 100%; padding: 9px 12px; }
+    #clock { font-size: clamp(18px, 5vw, 22px); }
+
+    #cr-btn {
+      grid-area: credits; position: static; justify-self: center;
+      height: auto; padding: 0; border: 0; border-radius: 0;
+      background: transparent; box-shadow: none; backdrop-filter: none;
+      -webkit-backdrop-filter: none; color: #aaa49e; white-space: nowrap;
+      font-size: 10.5px; font-weight: 500; text-decoration: underline;
+      text-decoration-color: #625e59; text-underline-offset: 3px;
+    }
+    #cr-btn::after { content: none; }
+    #cr-btn .wide { display: none; }
+    /* Le panneau s'ouvre sous les deux rangées de commandes de l'en-tête, sans
+       modifier la hauteur des commandes temporelles en bas. Sa liste peut
+       défiler sur les écrans courts plutôt que de passer sous le dock. */
+    #credits {
+      position: fixed; z-index: 501; top: 60px; right: 10px; bottom: auto;
+      width: min(330px, calc(100vw - 20px)); max-height: calc(100vh - 300px);
+      overflow: auto; padding: 12px 14px; text-align: left;
+    }
+    /* Laisser la rangée d'en-tête (crédits + menu) accessible : la croix du
+       panneau ne vient plus se poser sur le bouton sandwich. */
+    #updates-panel { position: fixed; z-index: 503; top: 60px; right: 10px;
+                     bottom: 10px; left: 10px; padding: 18px; }
+    #updates-panel h2 { font-size: 17px; }
+    #updates-close { width: 38px; height: 38px; font-size: 25px; } /* cible tactile */
+    #updates-list { max-height: calc(100vh - 100px); }
+    #updates-list li { grid-template-columns: 84px 1fr; padding: 13px 0; }
+    #updates-list time { font-size: 12px; }
+    #updates-list strong { font-size: 13px; }
+    #updates-list span { font-size: 12px; }
+    #activity-panel { position: fixed; z-index: 504; top: 60px; right: 10px;
+                      bottom: auto; left: 10px; max-height: calc(100vh - 70px);
+                      overflow-y: auto; padding: 18px; }
+    #activity-panel h2 { font-size: 17px; }
+    #activity-panel-close { width: 38px; height: 38px; font-size: 25px; }
+    #activity-large { flex: none; min-height: 210px; height: clamp(210px, 32vh, 280px); }
+    #activity-large b { width: 5px; margin-left: -2.5px; }
+    #weather-panel { position: fixed; z-index: 504; top: 110px; right: 10px;
+                     left: 10px; max-height: calc(100vh - 280px);
+                     overflow: auto; padding: 15px; }
+    #weather-panel h2 { font-size: 17px; }
+    #weather-close { width: 38px; height: 38px; font-size: 25px; }
+  }
+
+  @media (max-width: 360px) {
+    /* A 320 px, la legende repasse sur trois lignes plutôt que de comprimer le
+       degrade. */
+    #legend { grid-template-columns: 1fr; }
+    #legend .burnt-key, #agekey, #tempkey, #windkey, #psfdf-key {
+      grid-column: 1; grid-row: auto;
+    }
+  }
+  /* Les données et contrôles restent pleinement disponibles ; seules les
+     transitions décoratives et le chargeur cessent de produire du mouvement. */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: .01ms !important;
+      animation-iteration-count: 1 !important;
+      scroll-behavior: auto !important;
+      transition-duration: .01ms !important;
+      transition-delay: 0ms !important;
+    }
+  }

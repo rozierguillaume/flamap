@@ -24,7 +24,7 @@ def copy_front(source: pathlib.Path, target: pathlib.Path) -> None:
     target.mkdir(parents=True, exist_ok=True)
     for name in FRONT_FILES:
         shutil.copy2(source / name, target / name)
-    for name in ("css", "js"):
+    for name in ("css", "js", "vendor", "fonts"):
         shutil.copytree(source / name, target / name, dirs_exist_ok=True)
 
 

@@ -347,6 +347,12 @@ export function getMeasurementApi() {
   return measurementApi;
 }
 
+// Le banc local charge l'application dans un iframe avec une CSP stricte :
+// exposer son API gelée sur ce seul chemin évite d'y évaluer un import dynamique.
+if (new URLSearchParams(location.search).has('lot0')) {
+  globalThis.__flamapMeasurement = measurementApi;
+}
+
 const applyBurnt = () => burntController.apply();
 let psfdfController, aircraftController;
 

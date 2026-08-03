@@ -76,7 +76,9 @@ class WorkflowScriptsTest(unittest.TestCase):
             target = root / name
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(f"local:{name}")
-        for name in ("css/app.css", "js/main.js", "js/fx/wind.js"):
+        for name in ("css/app.css", "js/main.js", "js/fx/wind.js",
+                     "vendor/maplibre-gl/maplibre-gl.js",
+                     "vendor/gifenc/gifenc.esm.js", "fonts/instrument-sans-latin.woff2"):
             target = root / name
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(f"local:{name}")
@@ -99,6 +101,10 @@ class WorkflowScriptsTest(unittest.TestCase):
             VALIDATE.validate_fire_data(data)
             VALIDATE.check_size(fire_site)
             self.assertEqual((fire_site / "js/fx/wind.js").read_text(), "local:js/fx/wind.js")
+            self.assertEqual((fire_site / "vendor/gifenc/gifenc.esm.js").read_text(),
+                             "local:vendor/gifenc/gifenc.esm.js")
+            self.assertEqual((fire_site / "fonts/instrument-sans-latin.woff2").read_text(),
+                             "local:fonts/instrument-sans-latin.woff2")
 
             front_site = root / "front"
             DOWNLOAD.download_artifact("https://fixture", front_site,

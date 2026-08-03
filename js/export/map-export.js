@@ -461,7 +461,7 @@ function buildExportSmoke(ts, limit = 320) {
 }
 
 function loadGifEncoder() {
-  gifEncoderPromise ||= import('https://unpkg.com/gifenc@1.0.3/dist/gifenc.esm.js')
+  gifEncoderPromise ||= import('/vendor/gifenc/gifenc.esm.js')
     .catch(error => { gifEncoderPromise = null; throw error; });
   return gifEncoderPromise;
 }
