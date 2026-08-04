@@ -42,8 +42,9 @@ async function showDetail(id, { push = true } = {}) {
     detailElements.statusEl.textContent = 'Ce feu est introuvable — il a peut-être été renommé depuis.';
     return;
   }
+  // openFire() a déjà mis à jour le statut lui-même (vidé s'il rejoue le feu,
+  // ou message « pas assez de données » sinon) : ne pas l'écraser ici.
   currentFire = result;
-  detailElements.statusEl.textContent = '';
 }
 
 backBtn.addEventListener('click', () => {
@@ -63,8 +64,12 @@ async function init() {
     await showDetail(id, { push: false });
     return;
   }
+  listStatusEl.textContent = '';
+  listStatusEl.append(Object.assign(document.createElement('span'), { className: 'archive-loader' }),
+    document.createTextNode('Chargement des feux…'));
   try {
     const fires = await fetchFireList();
+    listStatusEl.textContent = '';
     renderList(cardsEl, fires, fireId => showDetail(fireId));
   } catch (error) {
     console.error('Liste des feux archivés indisponible', error);
