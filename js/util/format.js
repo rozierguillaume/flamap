@@ -16,17 +16,16 @@ export const nf = (value, digits = 0) =>
   Number(value).toLocaleString('fr-FR', { maximumFractionDigits: digits });
 
 /* Ancienneté relative au cran affiché, pas à l'heure murale : c'est ce que la
- * couleur du foyer raconte quand on remonte la frise. */
+ * couleur du foyer raconte quand on remonte la frise. Une seule unité, la plus
+ * grande atteinte : la précision de la donnée ne justifie pas « 5 h 12 », et
+ * l'échelle de couleurs se lit de toute façon à l'heure près. */
 export function ago(seconds) {
   if (!Number.isFinite(seconds) || seconds < 0) return '';
   if (seconds < 90) return "à l'instant";
   const minutes = Math.round(seconds / 60);
   if (minutes < 60) return `il y a ${minutes} min`;
   const hours = Math.floor(seconds / 3600);
-  if (hours < 24) {
-    const rest = Math.round((seconds - hours * 3600) / 60);
-    return `il y a ${hours} h${rest ? ' ' + String(rest).padStart(2, '0') : ''}`;
-  }
+  if (hours < 24) return `il y a ${hours} h`;
   const days = Math.round(seconds / DAY);
   return `il y a ${days} jour${days > 1 ? 's' : ''}`;
 }

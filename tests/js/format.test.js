@@ -21,7 +21,8 @@ test('ago conserve ses seuils et arrondis', () => {
   assert.equal(ago(-1), '');
   assert.equal(ago(89), "à l'instant");
   assert.equal(ago(90), 'il y a 2 min');
-  assert.equal(ago(3660), 'il y a 1 h 01');
+  assert.equal(ago(3660), 'il y a 1 h');
+  assert.equal(ago(5 * 3600 + 50 * 60), 'il y a 5 h');
   assert.equal(ago(25 * 3600), 'il y a 1 jour');
   assert.equal(ago(48 * 3600), 'il y a 2 jours');
 });
