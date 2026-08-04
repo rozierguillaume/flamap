@@ -13,7 +13,8 @@ import tempfile
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 PYTHON_FILES = tuple(sorted(
-    [ROOT / "fetch_fires.py", ROOT / "notify_telegram.py", ROOT / "make_og.py"]
+    [ROOT / "fetch_fires.py", ROOT / "notify_telegram.py", ROOT / "make_og.py",
+     ROOT / "make_icons.py"]
     + list((ROOT / "scripts").glob("*.py"))
     + list((ROOT / "flamap").glob("*.py"))
 ))
