@@ -78,6 +78,7 @@ export function createPsfdfController({
   trackUsage,
   stopTimeline,
   setTime,
+  backToFrance,
   elements,
 }) {
   const {
@@ -89,6 +90,7 @@ export function createPsfdfController({
     headStatus: psfdfHeadStatus,
     relative: psfdfRelative,
     panelToggle: psfdfPanelToggle,
+    panelBack: psfdfPanelBack,
   } = elements;
 
   // `overview` reste utilisé par le graphique FIRMS local et `features` par le
@@ -142,6 +144,13 @@ export function createPsfdfController({
   psfdfPanelToggle.addEventListener('click', () => {
     if (!mobile) return;
     setPsfdfPanelOpen(!psfdfPanel.classList.contains('open'));
+  });
+
+  // Le dézoom fait repasser `updatePsfdfPanelDuringZoom()` sous le seuil : le
+  // bandeau s'efface de lui-même, inutile de le masquer ici.
+  psfdfPanelBack.addEventListener('click', () => {
+    trackUsage('psfdf-back-france');
+    backToFrance();
   });
 
   function focusIncident(feature, duration = 850, targetZoom = 8.5) {

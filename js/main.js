@@ -598,6 +598,7 @@ psfdfController = createPsfdfController({
   trackUsage,
   stopTimeline: () => timelineController.stop(),
   setTime,
+  backToFrance: () => backToFrance(),
   elements: {
     incidents: document.getElementById('incidents'),
     panel: document.getElementById('psfdf-panel'),
@@ -607,6 +608,7 @@ psfdfController = createPsfdfController({
     headStatus: document.getElementById('psfdf-head-status'),
     relative: document.getElementById('psfdf-relative'),
     panelToggle: document.getElementById('psfdf-panel-toggle'),
+    panelBack: document.getElementById('psfdf-back'),
   },
 });
 
@@ -639,10 +641,14 @@ function fitFrance(duration = 850) {
   });
 }
 
-document.getElementById('home-btn').addEventListener('click', () => {
-  trackUsage('home-france');
+function backToFrance() {
   timelineController.stop();
   fitFrance();
+}
+
+document.getElementById('home-btn').addEventListener('click', () => {
+  trackUsage('home-france');
+  backToFrance();
 });
 
 /* Le niveau national emploie les cellules agrégées ; dès que les paquets

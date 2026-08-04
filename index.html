@@ -205,6 +205,14 @@
   </header>
   <div id="psfdf-panel-body"></div>
 </aside>
+<!-- Placé après le panneau pour que `#psfdf-panel.open ~ #psfdf-back` puisse
+     l'effacer : la fiche dépliée reprend toute la largeur. -->
+<button id="psfdf-back" class="glass" type="button" title="Revenir à la vue France"
+        aria-label="Retour à la vue France">
+  <svg viewBox="0 0 24 24" aria-hidden="true">
+    <path d="m15 6-6 6 6 6" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>
+</button>
 
 <noscript>
   <p style="position:relative;z-index:600;margin:80px 14px;text-align:center">

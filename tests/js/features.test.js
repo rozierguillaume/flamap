@@ -200,9 +200,10 @@ test('le contrôleur PSFDF conserve ordre, priorité et bascule des couches', ()
     trackUsage() {},
     stopTimeline() {},
     setTime() {},
+    backToFrance() {},
     elements: Object.fromEntries([
       'incidents', 'panel', 'panelTitle', 'panelSub', 'panelBody', 'headStatus',
-      'relative', 'panelToggle',
+      'relative', 'panelToggle', 'panelBack',
     ].map(name => [name, fakeElement()])),
   });
 

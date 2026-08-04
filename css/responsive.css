@@ -93,8 +93,32 @@
 
   /* =======================  MOBILE  ======================== */
   @media (max-width: 720px) {
+    /* Le retour laisse sa place au bandeau : `left` démarre après le bouton. */
+    #psfdf-back {
+      position: fixed; z-index: 499; top: 73px; left: 10px;
+      width: 44px; height: 44px; padding: 0;
+      display: grid; place-items: center;
+      color: var(--ink); cursor: pointer;
+      opacity: 0; visibility: hidden; pointer-events: none;
+      transform: translateY(5px);
+      transition: opacity .24s ease, transform .24s ease,
+                  visibility 0s linear .24s;
+    }
+    body.psfdf-focus #psfdf-back {
+      opacity: 1; visibility: visible; pointer-events: auto;
+      transform: none; transition-delay: 0s;
+    }
+    /* Fiche dépliée : elle reprend toute la largeur, le retour s'efface avec
+       le bandeau qui le portait. */
+    #psfdf-panel.open ~ #psfdf-back {
+      opacity: 0; visibility: hidden; pointer-events: none;
+    }
+    #psfdf-back svg {
+      width: 20px; height: 20px;
+      fill: none; stroke: currentColor; stroke-width: 2.1;
+    }
     #psfdf-panel {
-      position: fixed; z-index: 499; top: 73px; right: 10px; left: 10px;
+      position: fixed; z-index: 499; top: 73px; right: 10px; left: 64px;
       width: auto; max-height: 44px; padding: 0; overflow: hidden;
       opacity: 0; visibility: hidden; pointer-events: none;
       transform: translateY(5px);
@@ -110,9 +134,11 @@
       position: relative; min-height: 42px; margin: 0; padding: 8px 39px 8px 12px;
       display: flex; align-items: center;
     }
+    /* Statut et ancienneté serrés à droite, comme sur ordinateur : toute la
+       place restante va au nom de la commune, qui se tronque assez tôt. */
     #psfdf-panel .psfdf-panel-heading {
       width: 100%; display: grid; align-items: center;
-      grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 8px;
+      grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px;
     }
     #psfdf-panel h2 {
       min-width: 0; overflow: hidden; text-overflow: ellipsis;
@@ -138,7 +164,7 @@
       fill: none; stroke: currentColor; stroke-width: 2;
       transition: transform .22s ease;
     }
-    #psfdf-panel.open { right: 10px; max-height: min(66vh, 520px); }
+    #psfdf-panel.open { left: 10px; right: 10px; max-height: min(66vh, 520px); }
     #psfdf-panel.open #psfdf-panel-toggle svg { transform: rotate(180deg); }
     #psfdf-panel-body { display: none; padding: 0 12px 12px; }
     #psfdf-panel.open #psfdf-panel-body { display: block; overflow-y: auto; }
