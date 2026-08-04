@@ -19,15 +19,42 @@ const detailElements = {
 };
 
 let currentFire = null; // { destroy }
+// Incrémenté à chaque navigation : une réponse asynchrone qui revient après
+// coup (retour/avant rapide, double clic) se reconnaît obsolète et se détruit
+// sans toucher à l'affichage courant, au lieu d'écraser une carte plus récente.
+let navToken = 0;
+
+// Chargée une seule fois et mise en cache : la liste doit être prête même si
+// on atterrit directement sur un lien `?id=…`, sinon un retour arrière la
+// montre vide (elle n'avait jamais été demandée).
+let fireListPromise = null;
+function loadFireList() {
+  if (fireListPromise) return fireListPromise;
+  listStatusEl.textContent = '';
+  listStatusEl.append(Object.assign(document.createElement('span'), { className: 'archive-loader' }),
+    document.createTextNode('Chargement des feux…'));
+  fireListPromise = fetchFireList().then(fires => {
+    listStatusEl.textContent = '';
+    renderList(cardsEl, fires, fireId => showDetail(fireId));
+  }).catch(error => {
+    console.error('Liste des feux archivés indisponible', error);
+    listStatusEl.textContent = 'Liste indisponible pour le moment — réessayez plus tard.';
+    fireListPromise = null; // un retour ultérieur sur la liste retentera l'appel
+  });
+  return fireListPromise;
+}
 
 function showList() {
+  navToken++;
   currentFire?.destroy();
   currentFire = null;
   detailEl.hidden = true;
   listEl.hidden = false;
+  loadFireList();
 }
 
 async function showDetail(id, { push = true } = {}) {
+  const token = ++navToken;
   currentFire?.destroy();
   currentFire = null;
   listEl.hidden = true;
@@ -37,7 +64,20 @@ async function showDetail(id, { push = true } = {}) {
 
   if (push) history.pushState({ id }, '', `?id=${encodeURIComponent(id)}`);
 
-  const result = await openFire(id, detailElements);
+  let result;
+  try {
+    result = await openFire(id, detailElements);
+  } catch (error) {
+    console.error('Détail du feu indisponible', error);
+    if (token === navToken) detailElements.statusEl.textContent = 'Détail indisponible pour le moment — réessayez plus tard.';
+    return;
+  }
+  if (token !== navToken) {
+    // une navigation plus récente a eu lieu pendant le chargement : cette
+    // réponse est obsolète, on la détruit sans l'appliquer à l'affichage.
+    result.destroy();
+    return;
+  }
   if (result.notFound) {
     detailElements.statusEl.textContent = 'Ce feu est introuvable — il a peut-être été renommé depuis.';
     return;
@@ -58,23 +98,12 @@ addEventListener('popstate', () => {
   else showList();
 });
 
-async function init() {
+function init() {
+  // Toujours amorcée, même en démarrant sur un lien direct vers un feu : voir
+  // loadFireList() ci-dessus.
+  loadFireList();
   const id = new URLSearchParams(location.search).get('id');
-  if (id) {
-    await showDetail(id, { push: false });
-    return;
-  }
-  listStatusEl.textContent = '';
-  listStatusEl.append(Object.assign(document.createElement('span'), { className: 'archive-loader' }),
-    document.createTextNode('Chargement des feux…'));
-  try {
-    const fires = await fetchFireList();
-    listStatusEl.textContent = '';
-    renderList(cardsEl, fires, fireId => showDetail(fireId));
-  } catch (error) {
-    console.error('Liste des feux archivés indisponible', error);
-    listStatusEl.textContent = 'Liste indisponible pour le moment — réessayez plus tard.';
-  }
+  if (id) showDetail(id, { push: false });
 }
 
 init();
