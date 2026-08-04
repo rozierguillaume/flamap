@@ -84,6 +84,36 @@
                       width: min(450px, calc(100vw - 28px)); padding: 17px 19px; }
     #weather-panel { position: fixed; z-index: 504; top: 64px; right: 14px;
                      width: min(470px, calc(100vw - 28px)); padding: 16px 18px; }
+    /* Fiche ouverte par défaut ici ; repliée, elle se réduit à sa ligne de
+       titre et le statut remonte du corps vers l'en-tête, seule partie qui
+       reste visible. */
+    #psfdf-panel:not(.open) header { margin-bottom: 0; }
+    #psfdf-panel:not(.open) .panel-sub,
+    #psfdf-panel:not(.open) #psfdf-panel-body { display: none; }
+    #psfdf-panel:not(.open) .psfdf-head-status {
+      display: inline-flex; align-items: center; gap: 6px; flex: none;
+      font-size: 11px; font-weight: 650; white-space: nowrap;
+    }
+    /* Même lecture que le bandeau mobile : nom, statut, puis ancienneté. */
+    #psfdf-panel:not(.open) .psfdf-relative { order: 1; }
+    /* Centré sur la ligne de titre (18 px) et non sur l'en-tête, qui porte
+       aussi le sous-titre une fois la fiche ouverte. */
+    #psfdf-panel-toggle {
+      position: absolute; top: -4px; right: -4px;
+      width: 26px; height: 26px; padding: 0;
+      display: grid; place-items: center;
+      border: 0; border-radius: 8px; background: transparent;
+      color: var(--ink-dim); cursor: pointer;
+    }
+    #psfdf-panel-toggle:hover, #psfdf-panel-toggle:focus-visible {
+      background: rgba(255, 255, 255, .08); color: var(--ink);
+    }
+    #psfdf-panel-toggle svg {
+      width: 16px; height: 16px;
+      fill: none; stroke: currentColor; stroke-width: 2;
+      transition: transform .22s ease;
+    }
+    #psfdf-panel.open #psfdf-panel-toggle svg { transform: rotate(180deg); }
   }
 
   @media (min-width: 721px) and (max-width: 1180px) {

@@ -142,9 +142,11 @@ export function createPsfdfController({
     if (!visible) setPsfdfPanelOpen(false);
   }
   psfdfPanelToggle.addEventListener('click', () => {
-    if (!mobile) return;
     setPsfdfPanelOpen(!psfdfPanel.classList.contains('open'));
   });
+  // Sur ordinateur la fiche complète est l'état d'accueil ; sur mobile elle
+  // masquerait la carte, le bandeau y reste le point de départ.
+  setPsfdfPanelOpen(!mobile);
 
   // Le dézoom fait repasser `updatePsfdfPanelDuringZoom()` sous le seuil : le
   // bandeau s'efface de lui-même, inutile de le masquer ici.
