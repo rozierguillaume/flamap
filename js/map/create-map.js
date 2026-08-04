@@ -1,10 +1,10 @@
 import { createBaseStyle } from './base-style.js';
 
-export function createMap({ maplibregl, mobile }) {
+export function createMap({ maplibregl, mobile, container = 'map', hash = 'map' }) {
   const map = new maplibregl.Map({
-    container: 'map',
+    container,
     attributionControl: false,
-    hash: 'map',
+    hash,
     center: [2.2, 46.5], zoom: 5,
     style: createBaseStyle(),
   });

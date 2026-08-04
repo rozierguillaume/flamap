@@ -5,7 +5,7 @@ import { distanceKm } from '../util/geo.js';
 /* Les incendies éditorialisés par PSFDF remplacent la détection heuristique des
  * « gros feux ». Leur statut est courant et non historique : les cercles sont
  * donc masqués quand la frise quitte son dernier cran. */
-const PSFDF_COLORS = {
+export const PSFDF_COLORS = {
   'Hors de contrôle': '#2f2933',
   'En cours': '#e33b32',
   'Fixé': '#f28c28',

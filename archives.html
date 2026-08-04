@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+
+<title>Feux archivés | Flamap</title>
+<meta name="description" content="Liste des incendies archivés par Flamap et rejeu de leur évolution : foyers satellite, surfaces brûlées et statut, feu par feu.">
+<link rel="canonical" href="https://flamap.fr/archives.html">
+<meta name="theme-color" content="#0d0f12">
+<meta name="robots" content="noindex, follow">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://data.geopf.fr https://tiles.maps.eox.at; font-src 'self'; connect-src 'self' https://api.flamap.fr https://data.geopf.fr https://tiles.openfreemap.org https://tiles.maps.eox.at; worker-src blob:; manifest-src 'self'; form-action 'self'">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml" sizes="any">
+<link rel="preload" href="/fonts/instrument-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
+
+<link rel="preconnect" href="https://tiles.openfreemap.org" crossorigin>
+<link rel="preconnect" href="https://data.geopf.fr" crossorigin>
+<link rel="preconnect" href="https://tiles.maps.eox.at" crossorigin>
+
+<link rel="stylesheet" href="/vendor/maplibre-gl/maplibre-gl.css">
+<script defer src="/vendor/maplibre-gl/maplibre-gl.js"></script>
+
+<link rel="stylesheet" href="/css/base.css">
+<link rel="stylesheet" href="/css/tokens.css">
+<link rel="stylesheet" href="/css/archive.css">
+
+<link rel="modulepreload" href="/js/archive/main.js">
+<link rel="modulepreload" href="/js/archive/api.js">
+<link rel="modulepreload" href="/js/archive/adapt.js">
+<link rel="modulepreload" href="/js/archive/state.js">
+<link rel="modulepreload" href="/js/archive/list.js">
+<link rel="modulepreload" href="/js/archive/detail.js">
+</head>
+<body>
+
+<header class="archive-head">
+  <a class="brand" href="/" aria-label="Retour à Flamap">
+    <svg class="mark" viewBox="0 0 36 34" aria-hidden="true" focusable="false">
+      <circle cx="19" cy="13" r="7" fill="#ffd84d"/>
+      <circle cx="9" cy="22" r="5" fill="#ff6b1a"/>
+      <circle cx="27" cy="25" r="5.2" fill="#b1341f"/>
+      <circle cx="8.5" cy="6.5" r="1.6" fill="#ffd84d"/>
+      <circle cx="25" cy="3.5" r="1.4" fill="#b1341f"/>
+      <circle cx="34" cy="11.5" r="1.5" fill="#b1341f"/>
+      <circle cx="2" cy="29.5" r="1.4" fill="#ff6b1a"/>
+      <circle cx="17" cy="31.5" r="1.5" fill="#ffd84d"/>
+      <circle cx="34" cy="30" r="1.4" fill="#ff6b1a"/>
+    </svg>
+    <strong>Fla<span>map</span></strong>
+  </a>
+  <a href="/">Voir la carte en direct</a>
+</header>
+
+<main id="archive-list" class="archive-list">
+  <h1>Feux archivés</h1>
+  <p class="archive-intro">
+    Tous les incendies signalés par PSFDF et suivis par Flamap, du plus récent
+    au plus ancien. Cliquez sur un feu pour rejouer son évolution.
+  </p>
+  <p id="archive-list-status" class="archive-status" aria-live="polite"></p>
+  <ul id="archive-cards" class="archive-cards"></ul>
+</main>
+
+<div id="archive-detail" class="archive-detail" hidden>
+  <div class="archive-detail-head">
+    <button id="archive-back" type="button" class="archive-back">&larr; Liste des feux</button>
+    <div id="archive-summary" class="archive-summary"></div>
+  </div>
+  <p id="archive-detail-status" class="archive-status" aria-live="polite"></p>
+  <div class="archive-map-wrap">
+    <div id="archive-map"></div>
+  </div>
+  <div id="archive-timebar" class="archive-timebar">
+    <button id="archive-play" type="button" aria-label="Lancer l'animation">▶</button>
+    <input id="archive-slider" type="range" aria-label="Curseur temporel">
+    <span id="archive-clock"></span>
+  </div>
+</div>
+
+<script type="module" src="/js/archive/main.js"></script>
+</body>
+</html>

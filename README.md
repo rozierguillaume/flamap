@@ -25,6 +25,12 @@ Un **curseur temporel** rejoue la progression du feu sur dix jours. Un menu
 donne les prévisions horaires d'un point, et un bouton d'export produit une
 image PNG ou un GIF de l'évolution.
 
+Une page séparée, [**Feux archivés**](https://flamap.fr/archives.html), liste
+tous les incendies suivis par PSFDF depuis le début de l'archive et permet de
+rejouer l'évolution de chacun (foyers, périmètres brûlés, statut) au-delà de
+la fenêtre de dix jours de la carte principale — voir « Archivage de
+l'historique » plus bas.
+
 La position et le zoom sont conservés dans le fragment `#map=` de l'URL : le
 lien copié rouvre exactement la même vue.
 
@@ -81,6 +87,9 @@ js/features/          foyers, surfaces brûlées, météo, PSFDF, moyens aérien
 js/fx/                vent et fumée, dessinés au canvas
 js/ui/, js/export/    panneaux, fiches au clic, export PNG et GIF
 js/util/              fonctions pures, testées
+
+archives.html          page "Feux archivés", page statique séparée
+js/archive/            liste et rejeu d'un feu, lus depuis api.flamap.fr
 
 fetch_fires.py        le collecteur, en ligne de commande
 flamap/               un module par source : firms, effis, psfdf, meteo…
@@ -159,6 +168,13 @@ collecte suivante, qui réexpédie la même fenêtre.
 Le code serveur, la procédure d'installation et l'exploitation du journal vivent
 dans le dépôt `flamap-archive`. Ce dépôt-ci ne contient que la moitié qui tourne
 dans GitHub Actions.
+
+Un service séparé, `flamap-archive-fires`, relit ce journal en continu et
+l'expose en lecture seule sur `https://api.flamap.fr/fires` (liste) et
+`/fires/{id}` (détail rejouable d'un feu). La page [`archives.html`](archives.html)
+et les modules [`js/archive/`](js/archive) sont le seul point du front qui
+interroge cette API — le reste du site continue de lire uniquement les
+fichiers statiques de `data/`.
 
 ## Contribuer
 
