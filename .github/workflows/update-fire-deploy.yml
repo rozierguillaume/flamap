@@ -10,6 +10,7 @@ on:
       - fetch_fires.py
       - flamap/**
       - scripts/download_live_artifact.py
+      - scripts/archive_push.py
       - scripts/assemble_site.py
       - scripts/validate_export.py
       - .github/workflows/update-fire-deploy.yml
@@ -66,6 +67,44 @@ jobs:
       - name: Vérifier les données
         if: steps.collect.outputs.deploy == 'true'
         run: python3 scripts/validate_export.py fire-data data
+
+      # L'archive est un enrichissement hors du site : son indisponibilité ne
+      # doit jamais retarder la publication des foyers. Le lot reste dans les
+      # journaux du job et la fusion suivante rattrapera ce qui manque, chaque
+      # ligne portant son empreinte de contenu.
+      - name: Archiver la collecte
+        if: steps.collect.outputs.deploy == 'true'
+        continue-on-error: true
+        env:
+          ARCHIVE_HOST: ${{ secrets.ARCHIVE_SSH_HOST }}
+          ARCHIVE_USER: ${{ secrets.ARCHIVE_SSH_USER }}
+          ARCHIVE_KEY: ${{ secrets.ARCHIVE_SSH_KEY }}
+          ARCHIVE_KNOWN_HOSTS: ${{ secrets.ARCHIVE_SSH_KNOWN_HOSTS }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${ARCHIVE_HOST:-}" ] || [ -z "${ARCHIVE_KEY:-}" ]; then
+            echo "::warning::Secrets d'archive absents, collecte non archivée."
+            exit 0
+          fi
+          python3 scripts/archive_push.py --data data --outbox outbox \
+            --run "${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          lot=$(ls -1 outbox | head -n 1)
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$ARCHIVE_KEY" > "$HOME/.ssh/archive_key"
+          chmod 600 "$HOME/.ssh/archive_key"
+          printf '%s\n' "$ARCHIVE_KNOWN_HOSTS" > "$HOME/.ssh/archive_known_hosts"
+          # `rsync -e` découpe cette chaîne lui-même et n'appelle aucun shell :
+          # un `~` y resterait littéral et la clé serait introuvable.
+          ssh_cmd="ssh -i $HOME/.ssh/archive_key -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$HOME/.ssh/archive_known_hosts -o BatchMode=yes"
+          # Deux passes : le manifeste part seul, en dernier. Sans cet ordre le
+          # serveur pourrait fusionner un lot dont les fichiers sont encore en
+          # cours de transfert, et le croire complet.
+          rsync -rt --exclude meta.json -e "$ssh_cmd" \
+            "outbox/$lot/" "$ARCHIVE_USER@$ARCHIVE_HOST:$lot/"
+          rsync -t -e "$ssh_cmd" \
+            "outbox/$lot/meta.json" "$ARCHIVE_USER@$ARCHIVE_HOST:$lot/meta.json"
+          echo "lot $lot expédié"
 
       - name: Comparer aux données publiées
         id: diff

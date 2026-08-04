@@ -134,6 +134,32 @@ vide.
 plusieurs fois par heure, dans un dépôt dont le code utile tient en quelques
 dizaines de ko.
 
+## Archivage de l'historique
+
+Le site ne montre qu'une fenêtre glissante : dix jours de foyers, la saison EFFIS
+en cours, sept jours de PSFDF. Comme un artefact Pages remplace toujours le
+précédent, tout ce qui sort de cette fenêtre disparaît définitivement.
+
+Un journal séparé conserve l'historique complet, hors du site. À la fin de
+chaque collecte, `scripts/archive_push.py` relit l'export validé et expédie par
+`rsync` un lot de quatre fichiers NDJSON gzippés vers le VPS, qui les fusionne
+dans des partitions mensuelles append-only.
+
+Chaque ligne porte une **empreinte de contenu** calculée par
+[`flamap/archive.py`](flamap/archive.py). C'est la seule base de la
+déduplication, et elle donne le versionnement recherché : une détection FIRMS,
+immuable, n'est jamais archivée deux fois, tandis qu'un périmètre EFFIS affiné
+ou une fiche PSFDF dont le statut, la surface ou les moyens changent produisent
+chacun une nouvelle version.
+
+L'étape est en `continue-on-error` : l'archive est un enrichissement, jamais une
+raison de retarder la publication de la carte. Un lot perdu est rattrapé par la
+collecte suivante, qui réexpédie la même fenêtre.
+
+Le code serveur, la procédure d'installation et l'exploitation du journal vivent
+dans le dépôt `flamap-archive`. Ce dépôt-ci ne contient que la moitié qui tourne
+dans GitHub Actions.
+
 ## Contribuer
 
 Les contributions sont bienvenues, en particulier les corrections de données,
