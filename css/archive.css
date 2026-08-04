@@ -28,7 +28,19 @@ button { font: inherit; }
 .archive-list h1 { margin: 0 0 10px; font-size: clamp(28px, 6vw, 40px); letter-spacing: -.04em; }
 .archive-intro { margin: 0 0 28px; color: var(--ink-dim); font-size: 15px; max-width: 60ch; }
 
-.archive-status { color: var(--ink-dim); font-size: 13.5px; }
+.archive-status {
+  color: var(--ink-dim); font-size: 13.5px;
+  display: flex; align-items: center; gap: 9px;
+}
+.archive-loader {
+  width: 13px; height: 13px; flex: none; border-radius: 50%;
+  border: 2px solid rgba(255,255,255,.18); border-top-color: var(--hot);
+  animation: archive-spin .8s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .archive-loader { animation: none; border-top-color: rgba(255,255,255,.18); }
+}
+@keyframes archive-spin { to { transform: rotate(360deg); } }
 
 .archive-cards { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
 .archive-card button {
@@ -49,7 +61,14 @@ button { font: inherit; }
   color: #0d0f12; background: var(--incident-color, var(--ink-dim));
 }
 
-.archive-detail { display: flex; flex-direction: column; height: 100vh; }
+/* 100vh seul ignore la hauteur du bandeau au-dessus : la frise finissait sous
+   le pli sur petit écran. Le bandeau a une hauteur fixe (min-height: 72px +
+   1px de bordure), d'où le calc ; dvh corrige en plus la barre d'adresse
+   mobile quand le navigateur le permet. */
+.archive-detail {
+  display: flex; flex-direction: column;
+  height: calc(100vh - 73px); height: calc(100dvh - 73px);
+}
 .archive-detail[hidden] { display: none; }
 .archive-detail-head {
   display: flex; align-items: flex-start; gap: 16px; padding: 14px 20px;
