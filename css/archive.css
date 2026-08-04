@@ -1,0 +1,116 @@
+/* Page "Feux archivés" — autonome, ne dépend pas de css/map.css ni
+   css/components.css (pensées pour la carte plein écran de l'accueil). Les
+   quelques règles de popup ci-dessous sont recopiées depuis
+   css/components.css (sélecteurs .pop) pour rester identiques visuellement. */
+
+html { color-scheme: dark; }
+body {
+  margin: 0; min-height: 100%; color: var(--ink); background: var(--bg);
+  font: 14px/1.45 "Instrument Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  -webkit-text-size-adjust: 100%;
+}
+a { color: #ffc18d; text-underline-offset: 3px; }
+a:hover { color: var(--front); }
+button { font: inherit; }
+
+.archive-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 20px;
+  min-height: 72px; padding: 0 20px;
+  border-bottom: 1px solid rgba(255,255,255,.10);
+}
+.archive-head .brand { display: flex; align-items: center; gap: 10px; color: var(--ink); text-decoration: none; }
+.archive-head .mark { display: block; width: 34px; height: auto; flex: none; }
+.archive-head .brand strong { font-size: 20px; line-height: 1; letter-spacing: -.04em; color: var(--hot); }
+.archive-head .brand strong span { color: var(--ink); }
+.archive-head > a { color: var(--ink-dim); font-size: 14px; }
+
+.archive-list { width: min(880px, calc(100% - 36px)); margin: 0 auto; padding: 40px 0 70px; }
+.archive-list h1 { margin: 0 0 10px; font-size: clamp(28px, 6vw, 40px); letter-spacing: -.04em; }
+.archive-intro { margin: 0 0 28px; color: var(--ink-dim); font-size: 15px; max-width: 60ch; }
+
+.archive-status { color: var(--ink-dim); font-size: 13.5px; }
+
+.archive-cards { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.archive-card button {
+  width: 100%; display: grid; grid-template-columns: 1fr auto; align-items: center;
+  gap: 4px 14px; text-align: left; color: var(--ink);
+  background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.10);
+  border-radius: 10px; padding: 13px 16px; cursor: pointer;
+}
+.archive-card button:hover { border-color: var(--hot); background: rgba(255,255,255,.06); }
+.archive-card button:focus-visible { outline: 2px solid var(--front); outline-offset: 2px; }
+.archive-card strong { grid-column: 1; font-size: 15px; letter-spacing: -.01em; }
+.archive-card-sub { grid-column: 1; color: var(--ink-dim); font-size: 12.5px; }
+.archive-card-dates { grid-column: 1; color: var(--ink-dim); font-size: 12px; margin-top: 2px; }
+.archive-card-surface { grid-column: 2; grid-row: 1; justify-self: end; font-size: 13px; color: #ffc19c; }
+.archive-badge {
+  grid-column: 2; grid-row: 2 / span 2; justify-self: end; align-self: start;
+  font-size: 11.5px; font-weight: 600; padding: 2px 8px; border-radius: 999px;
+  color: #0d0f12; background: var(--incident-color, var(--ink-dim));
+}
+
+.archive-detail { display: flex; flex-direction: column; height: 100vh; }
+.archive-detail[hidden] { display: none; }
+.archive-detail-head {
+  display: flex; align-items: flex-start; gap: 16px; padding: 14px 20px;
+  border-bottom: 1px solid rgba(255,255,255,.10); flex-wrap: wrap;
+}
+.archive-back {
+  color: var(--ink); background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.14);
+  border-radius: 8px; padding: 8px 12px; cursor: pointer; flex: none;
+}
+.archive-back:hover { border-color: var(--hot); }
+.archive-summary { flex: 1; min-width: 220px; }
+.archive-summary h2 { margin: 0; font-size: 19px; letter-spacing: -.02em; }
+.archive-sub { margin: 2px 0 0; color: var(--ink-dim); font-size: 13px; }
+.archive-dates { margin: 6px 0 0; font-size: 13px; color: var(--ink-dim); }
+.archive-surface { margin-top: 4px; font-size: 19px; font-weight: 700; color: #ffc19c; letter-spacing: -.02em; }
+.archive-surface .unit { font-size: 12.5px; font-weight: 600; }
+.archive-statuses { margin: 6px 0 0; font-size: 12.5px; color: var(--ink-dim); }
+#archive-detail-status:empty { display: none; }
+
+.archive-map-wrap { position: relative; flex: 1; min-height: 260px; }
+#archive-map { position: absolute; inset: 0; background: var(--bg); }
+
+.archive-timebar {
+  display: flex; align-items: center; gap: 12px; padding: 10px 20px;
+  border-top: 1px solid rgba(255,255,255,.10); background: rgba(13,15,18,.9);
+}
+#archive-play {
+  flex: none; width: 34px; height: 34px; border-radius: 50%;
+  color: var(--ink); background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.16);
+  cursor: pointer; font-size: 13px;
+}
+#archive-play:hover { border-color: var(--hot); }
+#archive-slider { flex: 1; accent-color: var(--hot); }
+#archive-clock { flex: none; font-size: 12.5px; color: var(--ink-dim); min-width: 11ch; text-align: right; }
+
+@media (max-width: 640px) {
+  .archive-head { padding: 0 14px; }
+  .archive-list { padding: 26px 0 50px; }
+  .archive-card button { grid-template-columns: 1fr; }
+  .archive-badge, .archive-card-surface { grid-column: 1; justify-self: start; }
+}
+
+/* Popups au clic sur un foyer / périmètre — mêmes règles que .pop dans
+   css/components.css, recopiées ici pour ne pas dépendre de cette feuille. */
+.pop > b { font-size: 13.5px; }
+.pop .sub { display: block; margin-top: 1px; color: var(--ink-dim); font-size: 11.5px; }
+.pop .row { margin-top: 5px; }
+.pop .dim { color: var(--ink-dim); font-size: 11.5px; }
+.pop .big { margin-top: 6px; font-size: 21px; font-weight: 700; color: #ffc19c; letter-spacing: -.02em; }
+.pop .big .unit { font-size: 13px; font-weight: 600; }
+.pop .cover { margin-top: 7px; display: grid; gap: 3px; }
+.pop .cover span { padding: 2px 7px; border-radius: 4px; font-size: 11.5px;
+  display: flex; justify-content: space-between; gap: 10px;
+  background: linear-gradient(90deg, rgba(255,107,26,.34) var(--p), rgba(255,255,255,.05) var(--p)); }
+.pop .cover span em { font-style: normal; color: var(--ink-dim); }
+.maplibregl-popup-content { background: #171a1f; color: var(--ink);
+  border-radius: 10px; padding: 11px 26px 12px 14px; font-size: 13px; line-height: 1.42; box-shadow: none; }
+.maplibregl-popup-tip { border-top-color: #171a1f !important; border-bottom-color: #171a1f !important; }
+.maplibregl-popup-close-button { color: var(--ink-dim); font-size: 17px; padding: 2px 7px; }
+.maplibregl-ctrl-attrib { font-size: 10.5px; }
+.maplibregl-ctrl-group { background: rgba(13,15,18,.84) !important;
+  border: 1px solid rgba(255,255,255,.10) !important; border-radius: 12px !important; box-shadow: none !important; }
+.maplibregl-ctrl-group button + button { border-top-color: rgba(255,255,255,.10) !important; }
+.maplibregl-ctrl-group button span { filter: invert(1) brightness(1.4); }
