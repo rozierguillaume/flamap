@@ -33,3 +33,53 @@ export function fitBoundsFor([lon, lat], radiusKm) {
   const dLon = marginKm / (111.32 * Math.cos(lat * Math.PI / 180));
   return [[lon - dLon, lat - dLat], [lon + dLon, lat + dLat]];
 }
+
+// Cadrage sur la géométrie réellement connue (foyers FIRMS + périmètres
+// EFFIS), pour les gros feux où le cercle `center`/`radius_km` — indicatif,
+// voir doc §6 — est plus petit que l'étendue réelle (ex. Saumos, 42 100 ha).
+function walkCoords(coords, onPoint) {
+  if (typeof coords[0] === 'number') { onPoint(coords); return; }
+  for (const c of coords) walkCoords(c, onPoint);
+}
+
+export function bboxOfFeatures(...collections) {
+  let minLon = Infinity, minLat = Infinity, maxLon = -Infinity, maxLat = -Infinity;
+  for (const fc of collections) {
+    for (const f of fc?.features || []) {
+      if (!f.geometry) continue;
+      walkCoords(f.geometry.coordinates, ([lon, lat]) => {
+        if (lon < minLon) minLon = lon;
+        if (lon > maxLon) maxLon = lon;
+        if (lat < minLat) minLat = lat;
+        if (lat > maxLat) maxLat = lat;
+      });
+    }
+  }
+  if (!Number.isFinite(minLon)) return null;
+  return [[minLon, minLat], [maxLon, maxLat]];
+}
+
+function padBounds([[minLon, minLat], [maxLon, maxLat]], marginRatio = .15) {
+  const dLon = (maxLon - minLon) * marginRatio || .01;
+  const dLat = (maxLat - minLat) * marginRatio || .01;
+  return [[minLon - dLon, minLat - dLat], [maxLon + dLon, maxLat + dLat]];
+}
+
+function unionBounds(a, b) {
+  if (!a) return b;
+  if (!b) return a;
+  return [
+    [Math.min(a[0][0], b[0][0]), Math.min(a[0][1], b[0][1])],
+    [Math.max(a[1][0], b[1][0]), Math.max(a[1][1], b[1][1])],
+  ];
+}
+
+// Union du cercle indicatif et de la géométrie connue : ne rétrécit jamais le
+// cadrage existant pour les petits feux, mais l'étend quand le périmètre
+// EFFIS réel dépasse le cercle (le cas courant pour les grands feux).
+export function fitBoundsForFire(summary, hotspots, burnt) {
+  const circle = Array.isArray(summary.center)
+    ? fitBoundsFor(summary.center, summary.radius_km || 15) : null;
+  const geometry = bboxOfFeatures(burnt, hotspots);
+  return unionBounds(circle, geometry ? padBounds(geometry) : null);
+}

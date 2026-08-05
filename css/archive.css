@@ -61,25 +61,36 @@ button { font: inherit; }
   color: #0d0f12; background: var(--incident-color, var(--ink-dim));
 }
 
-/* 100vh seul ignore la hauteur du bandeau au-dessus : la frise finissait sous
+/* Page de détail : carte plein cadre, façon accueil (js/main.js), avec le
+   bouton retour, la fiche du feu et la frise posés par-dessus en flottant
+   plutôt que dans un bandeau qui grignote la hauteur de la carte.
+   100vh seul ignore la hauteur du bandeau au-dessus : la frise finissait sous
    le pli sur petit écran. Le bandeau a une hauteur fixe (min-height: 72px +
    1px de bordure), d'où le calc ; dvh corrige en plus la barre d'adresse
    mobile quand le navigateur le permet. */
 .archive-detail {
-  display: flex; flex-direction: column;
+  position: relative;
   height: calc(100vh - 73px); height: calc(100dvh - 73px);
 }
 .archive-detail[hidden] { display: none; }
-.archive-detail-head {
-  display: flex; align-items: flex-start; gap: 16px; padding: 14px 20px;
-  border-bottom: 1px solid rgba(255,255,255,.10); flex-wrap: wrap;
+
+.glass {
+  background: rgba(13,15,18,.84); backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(255,255,255,.10); border-radius: 12px;
 }
+
 .archive-back {
-  color: var(--ink); background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.14);
-  border-radius: 8px; padding: 8px 12px; cursor: pointer; flex: none;
+  position: absolute; z-index: 500; top: 14px; left: 14px;
+  color: var(--ink); padding: 9px 13px; cursor: pointer;
 }
 .archive-back:hover { border-color: var(--hot); }
-.archive-summary { flex: 1; min-width: 220px; }
+
+.archive-panel {
+  position: absolute; z-index: 498; top: 60px; left: 14px; right: 14px;
+  max-height: calc(100% - 130px); overflow-y: auto;
+  padding: 14px 16px;
+}
 .archive-summary h2 { margin: 0; font-size: 19px; letter-spacing: -.02em; }
 .archive-sub { margin: 2px 0 0; color: var(--ink-dim); font-size: 13px; }
 .archive-dates { margin: 6px 0 0; font-size: 13px; color: var(--ink-dim); }
@@ -87,22 +98,47 @@ button { font: inherit; }
 .archive-surface .unit { font-size: 12.5px; font-weight: 600; }
 .archive-statuses { margin: 6px 0 0; font-size: 12.5px; color: var(--ink-dim); }
 #archive-detail-status:empty { display: none; }
+#archive-detail-status:not(:empty) { margin: 10px 0 0; }
 
-.archive-map-wrap { position: relative; flex: 1; min-height: 260px; }
+.archive-map-wrap { position: absolute; inset: 0; }
 #archive-map { position: absolute; inset: 0; background: var(--bg); }
 
+/* Frise flottante et centrée, comme #timebar en page d'accueil : pas de
+   bandeau pleine largeur, une réglette resserrée qu'on ne parcourt pas des
+   yeux d'un bord à l'autre de l'écran. */
 .archive-timebar {
-  display: flex; align-items: center; gap: 12px; padding: 10px 20px;
-  border-top: 1px solid rgba(255,255,255,.10); background: rgba(13,15,18,.9);
+  position: absolute; z-index: 499; left: 50%; bottom: 14px;
+  transform: translateX(-50%);
+  width: min(360px, calc(100% - 28px));
+  padding: 10px 16px 12px;
 }
+.archive-clock {
+  display: block; margin-bottom: 8px; text-align: center;
+  color: #fff; font-size: clamp(15px, 4vw, 17px); font-weight: 700;
+  letter-spacing: -.01em; font-variant-numeric: tabular-nums;
+}
+.archive-timerow { display: flex; align-items: center; gap: 10px; }
 #archive-play {
   flex: none; width: 34px; height: 34px; border-radius: 50%;
   color: var(--ink); background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.16);
   cursor: pointer; font-size: 13px;
 }
 #archive-play:hover { border-color: var(--hot); }
-#archive-slider { flex: 1; accent-color: var(--hot); }
-#archive-clock { flex: none; font-size: 12.5px; color: var(--ink-dim); min-width: 11ch; text-align: right; }
+#archive-slider { flex: 1; min-width: 0; accent-color: var(--hot); }
+
+@media (min-width: 641px) {
+  .archive-panel {
+    top: 20px; left: auto; right: 20px;
+    width: min(340px, calc(100vw - 380px));
+    max-height: calc(100% - 40px);
+  }
+  .archive-back { top: 20px; left: 20px; }
+  .archive-timebar {
+    bottom: 22px; width: min(420px, calc(100vw - 480px));
+    padding: 12px 18px 14px;
+  }
+  .archive-clock { font-size: clamp(16px, 1.6vw, 19px); }
+}
 
 @media (max-width: 640px) {
   .archive-head { padding: 0 14px; }

@@ -63,18 +63,20 @@
 </main>
 
 <div id="archive-detail" class="archive-detail" hidden>
-  <div class="archive-detail-head">
-    <button id="archive-back" type="button" class="archive-back">&larr; Liste des feux</button>
+  <button id="archive-back" type="button" class="archive-back glass">&larr; Liste des feux</button>
+  <aside id="archive-panel" class="archive-panel glass">
     <div id="archive-summary" class="archive-summary"></div>
-  </div>
-  <p id="archive-detail-status" class="archive-status" aria-live="polite"></p>
+    <p id="archive-detail-status" class="archive-status" aria-live="polite"></p>
+  </aside>
   <div class="archive-map-wrap">
     <div id="archive-map"></div>
   </div>
-  <div id="archive-timebar" class="archive-timebar">
-    <button id="archive-play" type="button" aria-label="Lancer l'animation">▶</button>
-    <input id="archive-slider" type="range" aria-label="Curseur temporel">
-    <span id="archive-clock"></span>
+  <div id="archive-timebar" class="archive-timebar glass">
+    <span id="archive-clock" class="archive-clock"></span>
+    <div class="archive-timerow">
+      <button id="archive-play" type="button" aria-label="Lancer l'animation">▶</button>
+      <input id="archive-slider" type="range" aria-label="Curseur temporel">
+    </div>
   </div>
 </div>
 

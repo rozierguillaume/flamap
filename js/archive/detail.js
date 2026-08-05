@@ -1,6 +1,6 @@
 import { EMPTY } from '../data/client.js';
 import { fetchFireDetail } from './api.js';
-import { fitBoundsFor, toBurnt, toHotspots } from './adapt.js';
+import { fitBoundsForFire, toBurnt, toHotspots } from './adapt.js';
 import { createFireState } from './state.js';
 import { createMap } from '../map/create-map.js';
 import {
@@ -145,9 +145,9 @@ export async function openFire(id, elements) {
   let poll = null;
 
   function fitToFire() {
-    if (!Array.isArray(summary.center)) return;
-    map.fitBounds(fitBoundsFor(summary.center, summary.radius_km || 15),
-      { padding: 24, duration: 0 });
+    const bounds = fitBoundsForFire(summary, hotspots, burnt);
+    if (!bounds) return;
+    map.fitBounds(bounds, { padding: 24, duration: 0 });
   }
 
   function setup() {
