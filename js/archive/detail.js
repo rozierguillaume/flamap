@@ -82,12 +82,21 @@ function statusBadge(status) {
   return badge;
 }
 
-function renderSummary(el, summary) {
+// `summary.first_ts`/`last_ts` datent la première et la dernière fiche PSFDF
+// archivée (voir docs/refactor/FRONT_ARCHIVE_INCENDIES.md §4) — pas l'étendue
+// réelle du feu, qui peut n'avoir qu'un seul statut connu alors que les
+// détections satellite et périmètres EFFIS couvrent plusieurs jours. On
+// affiche donc plutôt le [min, max] des crans de la frise, seule donnée qui
+// reflète ce que la page rejoue réellement.
+function renderSummary(el, summary, steps) {
   el.innerHTML = '';
   el.append(popEl('h2', '', summary.commune || 'Commune inconnue'));
   if (summary.departement) el.append(popEl('p', 'archive-sub', summary.departement));
   el.append(statusBadge(summary.status));
-  el.append(popEl('p', 'archive-dates', `${fmt(summary.first_ts)} → ${fmt(summary.last_ts)}`));
+  const [start, end] = steps && steps.length
+    ? [steps[0].ts, steps[steps.length - 1].ts]
+    : [summary.first_ts, summary.last_ts];
+  el.append(popEl('p', 'archive-dates', `${fmt(start)} → ${fmt(end)}`));
   if (Number.isFinite(summary.surface_max)) {
     const big = popEl('div', 'archive-surface', `${nf(summary.surface_max)} `);
     big.append(popEl('span', 'unit', 'ha (surface maximale connue)'));
@@ -121,11 +130,11 @@ export async function openFire(id, elements) {
   if (!detail) return { notFound: true, destroy: () => {} };
 
   const { summary, firms, effis } = detail;
-  renderSummary(elements.summaryEl, summary);
 
   const hotspots = toHotspots(firms);
   const burnt = toBurnt(effis);
   const steps = buildSteps(hotspots, burnt);
+  renderSummary(elements.summaryEl, summary, steps);
   elements.statusEl.textContent = '';
   if (!steps.length) {
     elements.statusEl.textContent = 'Pas assez de données conservées pour rejouer ce feu.';
