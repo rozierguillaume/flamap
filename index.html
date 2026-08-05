@@ -236,7 +236,7 @@
 </button>
 <div id="layers" class="glass">
   <label><input type="checkbox" id="ck-psfdf"
-                data-analytics-layer="psfdf" checked> incendies signalés (PSFDF)</label>
+                data-analytics-layer="psfdf" checked> incendies signalés (PSFDF, détection auto)</label>
   <label><input type="checkbox" id="ck-hotspots" data-analytics-layer="hotspots" checked> foyers détectés</label>
   <fieldset>
     <legend>Sources FIRMS</legend>
@@ -371,13 +371,14 @@
         <b data-age="864000">10 j</b><b data-age="86400">24 h</b><b data-age="0">à l'instant</b>
       </span>
     </span>
-    <span id="psfdf-key" title="Statut courant des incendies suivis par l’association PSFDF">
+    <span id="psfdf-key" title="Statut courant des incendies suivis par l’association PSFDF, en France ; détection automatique par densité de foyers satellite hors de France">
       <b>PSFDF</b>
       <em title="Hors de contrôle"><i style="background:#2f2933"></i>hors contrôle</em>
       <em><i style="background:#e33b32"></i>en cours</em>
       <em><i style="background:#f28c28"></i>fixé</em>
       <em title="Maîtrisé"><i style="background:#e6c229"></i>maîtr.</em>
       <em><i style="background:#4a9f62"></i>éteint</em>
+      <em title="Amas de foyers FIRMS hors de France, sans suivi associatif"><i style="background:#e33b32;border:1px dashed #fff8"></i>détection auto</em>
     </span>
     <span id="tempkey" hidden>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"

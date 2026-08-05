@@ -52,7 +52,10 @@ def validate_fire_data(root: pathlib.Path) -> None:
           f"polygones datés, {len(zone_paths)} zones")
     if not manifest["hotspot_count"] or not timeline:
         sys.exit("export national incomplet, déploiement annulé")
-    allowed = {"Hors de contrôle", "En cours", "Fixé", "Maîtrisé", "Éteint"}
+    # "Détection auto" vient de `detect_heuristic_fires`, pas de l'association :
+    # aucun suivi PSFDF hors de France, voir REGIONS dans fetch_fires.py.
+    allowed = {"Hors de contrôle", "En cours", "Fixé", "Maîtrisé", "Éteint",
+               "Détection auto"}
     if (psfdf.get("type") != "FeatureCollection"
             or any(feature.get("properties", {}).get("status") not in allowed
                    for feature in psfdf.get("features", []))):

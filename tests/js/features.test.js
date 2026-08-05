@@ -215,7 +215,7 @@ test('le contrôleur PSFDF conserve ordre, priorité et bascule des couches', ()
   controller.destroy();
 
   assert.deepEqual(layers.map(layer => layer.id), [
-    'psfdf-extinguished', 'psfdf-controlled', 'psfdf-fixed',
+    'psfdf-heuristic', 'psfdf-extinguished', 'psfdf-controlled', 'psfdf-fixed',
     'psfdf-active', 'psfdf-uncontrolled',
   ]);
   assert.deepEqual(PSFDF_HIT_LAYERS, layers.map(layer => layer.id).reverse());
@@ -223,7 +223,7 @@ test('le contrôleur PSFDF conserve ordre, priorité et bascule des couches', ()
   assert.equal(isPsfdfLayer('hotspots'), false);
   assert.deepEqual(layouts.map(([, property, value]) => [property, value]), [
     ['visibility', 'none'], ['visibility', 'none'], ['visibility', 'none'],
-    ['visibility', 'none'], ['visibility', 'none'],
+    ['visibility', 'none'], ['visibility', 'none'], ['visibility', 'none'],
   ]);
 });
 
