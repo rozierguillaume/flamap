@@ -19,8 +19,10 @@ d'affichage a dix jours, sans cle d'API.
 Usage :
     python3 fetch_fires.py
     python3 fetch_fires.py west south east north
+    python3 fetch_fires.py --regions fr --out data-dev
 """
 
+import argparse
 import math
 import os
 import sys
@@ -221,14 +223,28 @@ def cli_regions(bbox):
     return (region,)
 
 
+def select_regions(names):
+    """Sous-ensemble de `REGIONS`, dans l'ordre de la table."""
+    wanted = [name.strip() for name in names.split(",") if name.strip()]
+    known = {region["id"] for region in REGIONS}
+    unknown = [name for name in wanted if name not in known]
+    if unknown:
+        raise SystemExit(
+            f"region inconnue : {', '.join(unknown)} "
+            f"(connues : {', '.join(sorted(known))})"
+        )
+    return tuple(region for region in REGIONS if region["id"] in wanted)
+
+
 def collection_plan(regions):
     """Ce que chaque region ecrit pour ce run.
 
     Le nom du fichier de vent n'appartient pas a la region mais a son rang :
     le premier champ garde le nom historique et porte toujours la temperature
     de repli, parce que c'est celui que le front charge avec l'apercu et que
-    `validate_export` exige les deux : un export dont le premier champ porte un
-    autre nom serait un export que le front ne sait pas ouvrir.
+    `validate_export` exige les deux. Sans ca, collecter l'Iberie seule — ce
+    que permet `--regions es` en developpement — produirait un export que le
+    front ne saurait pas ouvrir.
     """
     return tuple(
         {
@@ -239,6 +255,17 @@ def collection_plan(regions):
         }
         for index, region in enumerate(regions)
     )
+
+
+def use_output(directory):
+    """Redirige les ecritures vers un autre repertoire que `data/`.
+
+    Les facades lisent `OUT` et `ZONES_OUT` a l'appel : les rebinder ici suffit
+    a ce que la collecte, la reprise d'historique et la publication suivent.
+    """
+    global OUT, ZONES_OUT
+    OUT = os.path.abspath(directory)
+    ZONES_OUT = os.path.join(OUT, "zones")
 
 
 def fc(features):
@@ -555,21 +582,53 @@ def main_thermal(bbox):
     print(f"-> ecrit dans {OUT}/thermal.json")
 
 
+def parse_args(argv):
+    parser = argparse.ArgumentParser(
+        prog="fetch_fires.py",
+        description="Collecte les donnees statiques de Flamap.",
+    )
+    parser.add_argument(
+        "bbox", nargs="*", type=float,
+        metavar="west south east north",
+        help="bbox unique a collecter, en degres ; sinon toutes les regions",
+    )
+    parser.add_argument("--thermal", action="store_true",
+                        help="grille de temperature seule")
+    parser.add_argument(
+        "--regions",
+        help="sous-ensemble de REGIONS, par identifiants separes par des "
+             "virgules (ex. --regions es). Le premier collecte fournit le "
+             "champ de vent de reference.",
+    )
+    parser.add_argument(
+        "--out",
+        help="repertoire de sortie, a la place de data/ (mode developpement)",
+    )
+    options = parser.parse_args(argv)
+    if options.bbox and len(options.bbox) != 4:
+        parser.error("la bbox demande quatre nombres : west south east north")
+    if options.bbox and options.regions:
+        parser.error("--regions et une bbox explicite s'excluent")
+    return options
+
+
 def main():
     bbox = DEFAULT_BBOX
-    args = sys.argv[1:]
-    thermal_only = "--thermal" in args
-    args = [value for value in args if value != "--thermal"]
-    if len(args) == 4:
-        bbox = tuple(float(value) for value in args)
-    elif args:
-        raise SystemExit(
-            "usage: fetch_fires.py [--thermal] [west south east north]"
-        )
-    if thermal_only:
+    options = parse_args(sys.argv[1:])
+    if options.out:
+        use_output(options.out)
+        print(f"ecriture dans {OUT}")
+    bbox = tuple(options.bbox) if options.bbox else bbox
+    if options.thermal:
         return main_thermal(bbox)
 
-    regions = collection_plan(cli_regions(bbox) if len(args) == 4 else REGIONS)
+    if options.bbox:
+        regions = cli_regions(bbox)
+    elif options.regions:
+        regions = select_regions(options.regions)
+    else:
+        regions = REGIONS
+    regions = collection_plan(regions)
     boxes = domain_boxes(regions)
     domain = union_bbox(boxes)
     print("domaine " + ", ".join(

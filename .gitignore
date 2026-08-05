@@ -24,6 +24,13 @@ data/zones/
 
 # jeu publie repris comme reference du diff Telegram
 prev/
+prev-dev/
+
+# artefacts assembles : celui des workflows, ceux de scripts/dev_site.py
+_site/
+_dev/
+data-dev/
+outbox/
 
 # macOS
 .DS_Store

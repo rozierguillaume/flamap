@@ -52,12 +52,39 @@ Puis ouvrir <http://localhost:8777>. Un jeu de données figé est versionné dan
 Pour régénérer les données depuis les sources réelles :
 
 ```bash
-python3 fetch_fires.py                      # toutes les régions collectées
-python3 fetch_fires.py -1.6 44.2 -0.2 45.4  # une bbox : west south east north
+python3 fetch_fires.py                       # toutes les régions collectées
+python3 fetch_fires.py --regions es          # une seule région
+python3 fetch_fires.py -1.6 44.2 -0.2 45.4   # une bbox : west south east north
+python3 fetch_fires.py --out data-dev        # sans toucher au jeu local
 ```
 
 Compter quelques minutes : le service WFS d'EFFIS répond parfois en plusieurs
 dizaines de secondes, et les requêtes météo sont délibérément espacées.
+
+### Rejouer un déploiement sans déployer
+
+`scripts/dev_site.py` enchaîne exactement les appels des workflows de
+publication, dans le même ordre, en affichant chaque commande. On obtient donc
+en local l'artefact que GitHub Pages recevrait.
+
+```bash
+python3 scripts/dev_site.py front            # données publiées + front local
+python3 scripts/dev_site.py collect --regions es
+python3 scripts/dev_site.py serve            # resservir l'artefact déjà bâti
+```
+
+`front` est la boucle courte du travail d'interface : quelques secondes, aucune
+source interrogée, et la carte tourne sur les données réellement en ligne.
+`collect` est la boucle longue : elle interroge les sources, écrit dans
+`data-dev/` plutôt que dans `data/`, valide l'export puis l'assemble dans
+`_dev/`. Les deux servent ensuite le résultat sur <http://localhost:8777>.
+
+Reste ce qu'aucune répétition locale ne couvre : le remplacement de l'artefact
+Pages lui-même. Pour ça, les trois workflows acceptent un déclenchement manuel
+avec une case **« Publier vraiment »**, décochée par défaut : le job tourne en
+entier sur le runner, construit et vérifie l'artefact, le téléverse pour
+inspection — mais ne publie rien, n'expédie aucun lot d'archive et n'envoie
+aucun message.
 
 ## Choix techniques
 

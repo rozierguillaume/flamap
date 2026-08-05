@@ -23,6 +23,11 @@ on:
       - sitemap.xml
       - .github/workflows/update-front-deploy.yml
   workflow_dispatch:
+    inputs:
+      deploy:
+        description: "Publier vraiment (décoché = essai à blanc, sans publication)"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -30,7 +35,9 @@ permissions:
   id-token: write
 
 concurrency:
-  group: pages
+  # Un essai a blanc ne publie rien : il prend un verrou a lui, sinon il
+  # bloquerait une vraie publication pendant qu'il tourne pour rien.
+  group: ${{ github.event.inputs.deploy == 'false' && format('pages-essai-{0}', github.run_id) || 'pages' }}
   cancel-in-progress: false
 
 jobs:
@@ -38,6 +45,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       deploy: ${{ steps.scope.outputs.deploy }}
+      dry: ${{ github.event.inputs.deploy == 'false' }}
     env:
       LIVE_SITE: https://flamap.fr
     steps:
@@ -80,9 +88,16 @@ jobs:
         if: steps.scope.outputs.deploy == 'true'
         with:
           path: _site
+      - name: Rappeler qu'aucune publication n'a eu lieu
+        if: github.event.inputs.deploy == 'false'
+        run: |
+          echo "### Essai à blanc" >> "$GITHUB_STEP_SUMMARY"
+          echo "Artefact construit et vérifié, mais **non publié**." >> "$GITHUB_STEP_SUMMARY"
+          echo "Le site en ligne est intact." >> "$GITHUB_STEP_SUMMARY"
+
   deploy:
     needs: build
-    if: needs.build.outputs.deploy == 'true'
+    if: needs.build.outputs.deploy == 'true' && needs.build.outputs.dry != 'true'
     runs-on: ubuntu-latest
     environment:
       name: github-pages

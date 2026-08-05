@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import json
+import os
 import pathlib
 import sys
 import unittest
@@ -235,18 +236,51 @@ class FirmsAndTimelineTests(unittest.TestCase):
         self.assertTrue(regions[0]["psfdf"])
         self.assertEqual(fires.REGIONS[0]["boxes"], fires.FRANCE_BOXES)
 
-    def test_the_first_collected_region_writes_the_reference_field(self):
-        """Le nom et la temperature suivent le rang, pas la region."""
-        plan = fires.collection_plan(fires.REGIONS)
-        self.assertEqual([region["wind_file"] for region in plan],
-                         ["wind_coarse.json", "wind_coarse_es.json"])
-        self.assertEqual([region["temperature"] for region in plan], [True, False])
+    def test_command_line_selects_regions_and_output(self):
+        options = fires.parse_args(["--regions", "es", "--out", "data-dev"])
+        self.assertEqual(options.regions, "es")
+        self.assertEqual(options.out, "data-dev")
+        self.assertEqual(options.bbox, [])
+        self.assertFalse(options.thermal)
 
-        alone = fires.collection_plan(fires.REGIONS[1:])
+        with self.assertRaises(SystemExit):
+            fires.parse_args(["1", "2", "3"])
+        with self.assertRaises(SystemExit):
+            fires.parse_args(["1", "2", "3", "4", "--regions", "fr"])
+        with self.assertRaises(SystemExit):
+            fires.select_regions("atlantide")
+        self.assertEqual(
+            [region["id"] for region in fires.select_regions("es")], ["es"]
+        )
+        self.assertEqual(
+            [region["id"] for region in fires.select_regions("es,fr")],
+            ["fr", "es"],
+            "l'ordre vient de la table, pas de la ligne de commande",
+        )
+
+    def test_the_first_collected_region_always_writes_the_reference_field(self):
+        """Sans ça, `--regions es` produirait un export que le front n'ouvre pas."""
+        full = fires.collection_plan(fires.REGIONS)
+        self.assertEqual([region["wind_file"] for region in full],
+                         ["wind_coarse.json", "wind_coarse_es.json"])
+        self.assertEqual([region["temperature"] for region in full], [True, False])
+
+        alone = fires.collection_plan(fires.select_regions("es"))
         self.assertEqual(alone[0]["wind_file"], "wind_coarse.json")
         self.assertTrue(alone[0]["temperature"],
                         "le champ de reference porte la temperature de repli")
         self.assertFalse(alone[0]["fine_wind"])
+        self.assertFalse(alone[0]["notify"])
+
+    def test_output_switch_moves_the_zone_directory_too(self):
+        previous = (fires.OUT, fires.ZONES_OUT)
+        try:
+            fires.use_output("data-dev")
+            self.assertTrue(fires.OUT.endswith("data-dev"))
+            self.assertEqual(fires.ZONES_OUT,
+                             os.path.join(fires.OUT, "zones"))
+        finally:
+            fires.OUT, fires.ZONES_OUT = previous
 
     def test_exact_north_and_east_edges_do_not_create_extra_tiles(self):
         self.assertEqual(fires.tile_range((1, 43, 2, 44)), [(1, 43)])
