@@ -1,3 +1,5 @@
+import { t } from '../i18n.js';
+
 const H = 3600;
 
 
@@ -66,7 +68,8 @@ export function addForecast(steps, wind, forecastHours = FORECAST_H) {
     // arrondi au-dessus : le premier cran tombe souvent une demi-heure après le
     // dernier passage, et « +0 h » ne veut rien dire
     if (ts > end && ts <= end + forecastHours * H)
-      steps.push({ ts, kind: 'wind', label: 'prévision', n: 0, h: Math.ceil((ts - end) / H) });
+      steps.push({ ts, kind: 'wind', label: t('timeline.forecast'), n: 0,
+                   h: Math.ceil((ts - end) / H) });
   }
   return lastObs;
 }

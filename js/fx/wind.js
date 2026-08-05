@@ -1,3 +1,4 @@
+import { t } from '../i18n.js';
 import { gridAt, gridBilinear, windAtGrid } from '../util/grid.js';
 
 
@@ -23,10 +24,9 @@ import { gridAt, gridBilinear, windAtGrid } from '../util/grid.js';
 const WIND_K    = 5;                    // px/s pour 1 m/s de vent
 const WIND_LIFE = 3.2;                  // s avant de renaître ailleurs
 const WIND_FADE = .90;                  // alpha retiré à la traînée par frame
-export const CARD = ['nord', 'nord-nord-est', 'nord-est', 'est-nord-est', 'est',
-              'est-sud-est', 'sud-est', 'sud-sud-est', 'sud', 'sud-sud-ouest',
-              'sud-ouest', 'ouest-sud-ouest', 'ouest', 'ouest-nord-ouest',
-              'nord-ouest', 'nord-nord-ouest'];
+/* Les seize aires de vent, dans l'ordre des azimuts : le tableau est indexé par
+ * le calcul, ses libellés viennent du dictionnaire. */
+export const CARD = Array.from({ length: 16 }, (_, i) => t(`wind.card.${i}`));
 
 /* Les fiches nomment le modèle qui a produit la valeur affichée : il change
  * d'une région à l'autre, et « AROME » partout serait faux dès qu'on sort de
@@ -169,9 +169,10 @@ export function createWindController({
     key.style.setProperty('--dir', to.toFixed(0) + 'deg');
     // les rafales sont déjà en km/h dans les exports (`fetch_fires.py` les
     // convertit), contrairement à u/v qui sont en m/s
-    value.textContent = `${Math.round(kmh)} km/h (raf. ${Math.round(o.g)} km/h)`;
-    key.title = `Vent de ${from}, ${Math.round(kmh)} km/h au centre de la carte,`
-              + ` rafales à ${Math.round(o.g)} km/h`;
+    value.textContent = t('wind.value',
+      { kmh: Math.round(kmh), gust: Math.round(o.g) });
+    key.title = t('wind.badge.title',
+      { dir: from, kmh: Math.round(kmh), gust: Math.round(o.g) });
   }
 
   function spawn(p) {
@@ -324,9 +325,10 @@ export function createWindController({
     const to = (Math.atan2(out.u, out.v) * 180 / Math.PI + 360) % 360;
     const from = CARD[Math.round(((to + 180) % 360) / 22.5) % 16];
     // Même formulation que la légende, pour qu'on retrouve la lecture du centre.
-    // « de » s'élide devant est et ouest : « vent d'ouest », pas « de ouest ».
-    const de = /^[aeiou]/.test(from) ? `d'${from}` : `de ${from}`;
-    return `Vent ${de}, ${Math.round(kmh)} km/h (raf. ${Math.round(out.g)} km/h)`;
+    // En français « de » s'élide devant est et ouest : « vent d'ouest », pas
+    // « de ouest ». Les deux clés sont identiques dans les langues sans élision.
+    return t(/^[aeiou]/.test(from) ? 'wind.phrase.vowel' : 'wind.phrase',
+      { dir: from, kmh: Math.round(kmh), gust: Math.round(out.g) });
   }
 
   return {
@@ -361,7 +363,7 @@ export function createWindController({
     modelAt: (lon, lat) => {
       const field = fieldAt(lon, lat);
       if (!field) return '';
-      return MODEL_LABEL[field.model] || 'modèle météo';
+      return MODEL_LABEL[field.model] || t('wind.model.unknown');
     },
     pauseForExport,
     phrase,

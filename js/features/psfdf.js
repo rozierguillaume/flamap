@@ -1,3 +1,4 @@
+import { getLocale, t } from '../i18n.js';
 import { nf } from '../util/format.js';
 import { distanceKm } from '../util/geo.js';
 
@@ -114,11 +115,11 @@ export function createPsfdfController({
 
   function psfdfRelativeLabel(timestamp) {
     const minutes = Math.max(0, Math.floor((Date.now() - timestamp) / 60000));
-    if (minutes < 1) return 'à l’instant';
-    if (minutes < 60) return `il y a ${minutes} min`;
+    if (minutes < 1) return t('psfdf.now');
+    if (minutes < 60) return t('psfdf.ago.minutes', { n: minutes });
     const hours = Math.floor(minutes / 60);
-    if (hours < 24) return `il y a ${hours} h`;
-    return `il y a ${Math.floor(hours / 24)} j`;
+    if (hours < 24) return t('psfdf.ago.hours', { n: hours });
+    return t('psfdf.ago.days', { n: Math.floor(hours / 24) });
   }
 
   function refreshPsfdfRelative() {
@@ -132,7 +133,7 @@ export function createPsfdfController({
     psfdfPanel.classList.toggle('open', open);
     psfdfPanelToggle.setAttribute('aria-expanded', open);
     psfdfPanelToggle.setAttribute('aria-label',
-      open ? 'Masquer les détails du feu' : 'Afficher les détails du feu');
+      t(open ? 'psfdf.panel.hide' : 'psfdf.panel.show'));
   }
 
   function setPsfdfPanelVisible(visible) {
@@ -183,13 +184,16 @@ export function createPsfdfController({
       button.type = 'button';
       const area = Number(surface);
       const hasArea = surface !== null && surface !== '' && Number.isFinite(area);
-      const metric = hasArea ? `${nf(area, 1)} ha` : status;
-      const place = departement || commune || 'Incendie';
+      const metric = hasArea ? `${nf(area, 1)} ha` : t(`status.${status}`);
+      const place = departement || commune || t('psfdf.incident');
       button.textContent = `${place} — ${metric}`;
       button.style.setProperty('--incident-color', PSFDF_COLORS[status]);
-      button.title = `${commune ? `${commune} — ` : ''}${status}`
-        + `${hasArea ? ` — ${nf(area, 1)} ha` : ''} — zoomer sur cet incendie`;
-      button.setAttribute('aria-label', `Zoomer sur l’incendie de ${place}, ${metric}`);
+      button.title = t('psfdf.incident.title', {
+        place: commune ? `${commune} — ` : '',
+        detail: `${t(`status.${status}`)}${hasArea ? ` — ${nf(area, 1)} ha` : ''}`,
+      });
+      button.setAttribute('aria-label',
+        t('psfdf.incident.aria', { place, metric }));
       button.addEventListener('click', () => {
         trackUsage('incident-shortcut', { place, rank: index + 1, status });
         focusIncident(feature);
@@ -208,9 +212,10 @@ export function createPsfdfController({
     const helicopters = psfdfHasNumber(p.helicopteres)
       ? Number(p.helicopteres) : explicitHelicopters;
     const parts = [];
-    if (planes) parts.push(`${nf(planes)} avion${planes > 1 ? 's' : ''}`);
-    if (helicopters) parts.push(`${nf(helicopters)} hélico${helicopters > 1 ? 's' : ''}`);
-    return parts.join(', ') || 'non renseigné';
+    if (planes) parts.push(t('psfdf.planes', { n: planes, count: nf(planes) }));
+    if (helicopters)
+      parts.push(t('psfdf.helicopters', { n: helicopters, count: nf(helicopters) }));
+    return parts.join(', ') || t('psfdf.unknown.m');
   }
 
   function psfdfStat(label, value) {
@@ -235,19 +240,22 @@ export function createPsfdfController({
     let radius = areaHa
       ? 1.5 + 1.8 * equivalentRadius
       : PSFDF_ACTIVITY_MIN_RADIUS_KM + 2;
-    const basis = areaHa ? ['surface PSFDF'] : [];
+    const basis = areaHa ? [t('psfdf.basis.surface')] : [];
 
     if (psfdfHasNumber(p.effis_radius_km)) {
       // `effis_radius_km` couvre déjà tous les morceaux EFFIS rapprochés ; la
       // marge supplémentaire absorbe l'incertitude du contour et de l'arrondi.
       radius = Math.max(radius, 1.5 + 1.15 * Number(p.effis_radius_km));
-      basis.push(`${Number(p.effis_matches) > 1 ? `${nf(Number(p.effis_matches))} périmètres` : 'périmètre'} EFFIS`);
+      basis.push(t('psfdf.basis.effis', {
+        n: Number(p.effis_matches) || 1, count: nf(Number(p.effis_matches) || 1),
+      }));
     }
     if (psfdfHasNumber(p.heuristic_radius_km)) {
       // Cercle hors PSFDF : le rayon vient déjà de l'amas FIRMS côté
       // collecteur (`detect_heuristic_fires`), la marge n'a plus à deviner.
       radius = Math.max(radius, Number(p.heuristic_radius_km));
-      basis.push(`${nf(Number(p.hotspot_count) || 0)} foyers FIRMS groupés`);
+      basis.push(t('psfdf.basis.heuristic',
+        { count: nf(Number(p.hotspot_count) || 0) }));
     }
     if (Array.isArray(p.original_center)) {
       // Quand EFFIS a recentré le point, conserver aussi une marge autour de la
@@ -270,12 +278,12 @@ export function createPsfdfController({
     const hotspotRadius = furthest + PSFDF_ACTIVITY_HOTSPOT_MARGIN_KM;
     if (furthest && hotspotRadius > radius) {
       radius = hotspotRadius;
-      basis.push('foyers FIRMS');
+      basis.push(t('psfdf.basis.hotspots'));
     }
 
     radius = Math.min(PSFDF_ACTIVITY_MAX_RADIUS_KM,
       Math.max(PSFDF_ACTIVITY_MIN_RADIUS_KM, Math.ceil(radius * 2) / 2));
-    if (!basis.length) basis.push('marge minimale');
+    if (!basis.length) basis.push(t('psfdf.basis.minimum'));
     return { radius, basis: basis.join(' + ') };
   }
 
@@ -314,7 +322,7 @@ export function createPsfdfController({
   }
 
   function psfdfActivityAxisDate(timestamp) {
-    return new Date(timestamp * 1000).toLocaleDateString('fr-FR', {
+    return new Date(timestamp * 1000).toLocaleDateString(getLocale(), {
       day: '2-digit', month: '2-digit',
     });
   }
@@ -327,11 +335,12 @@ export function createPsfdfController({
     const head = document.createElement('div');
     head.className = 'psfdf-activity-head';
     const title = document.createElement('strong');
-    title.textContent = 'Détections satellite';
+    title.textContent = t('psfdf.activity.title');
     const tabs = document.createElement('div');
     tabs.className = 'psfdf-activity-tabs';
-    tabs.setAttribute('aria-label', 'Métrique du graphique local');
-    for (const [metric, label] of [['count', 'Foyers'], ['frp', 'Puissance']]) {
+    tabs.setAttribute('aria-label', t('psfdf.activity.tabs.aria'));
+    for (const metric of ['count', 'frp']) {
+      const label = t(`psfdf.activity.tab.${metric}`);
       const button = document.createElement('button');
       button.type = 'button';
       button.textContent = label;
@@ -349,10 +358,11 @@ export function createPsfdfController({
     if (!passes.length) {
       const empty = document.createElement('div');
       empty.className = 'psfdf-activity-empty';
-      empty.textContent = 'Aucune détection récente à proximité.';
+      empty.textContent = t('psfdf.activity.empty');
       const caption = document.createElement('p');
       caption.className = 'psfdf-activity-caption';
-      caption.textContent = `Zone estimée : rayon ${nf(area.radius, 1)} km (${area.basis}).`;
+      caption.textContent = t('psfdf.activity.caption',
+        { radius: nf(area.radius, 1), basis: area.basis });
       container.replaceChildren(head, empty, caption);
       return;
     }
@@ -383,14 +393,20 @@ export function createPsfdfController({
     const endDate = psfdfActivityAxisDate(t0 + span);
     const peakLabel = activityMetric === 'frp'
       ? activityController.powerLabel(peak) : activityController.countLabel(peak);
-    chart.setAttribute('aria-label', `${passes.length} passages satellite du ${startDate} au ${endDate}, maximum ${peakLabel}, dans une zone estimée de ${nf(area.radius, 1)} kilomètres de rayon`);
-    chart.innerHTML = `<span class="psfdf-activity-y" title="Maximum : ${peakLabel}">${psfdfActivityAxisValue(peak)}</span>`
+    chart.setAttribute('aria-label', t('psfdf.activity.aria', {
+      count: passes.length, start: startDate, end: endDate,
+      peak: peakLabel, radius: nf(area.radius, 1),
+    }));
+    chart.innerHTML = `<span class="psfdf-activity-y" title="${t('psfdf.activity.max', { peak: peakLabel })}">${psfdfActivityAxisValue(peak)}</span>`
       + `<div class="psfdf-activity-plot">${bars}${line}</div>`
       + `<div class="psfdf-activity-x" aria-hidden="true"><time>${startDate}</time><time>${endDate}</time></div>`;
     const caption = document.createElement('p');
     caption.className = 'psfdf-activity-caption';
-    caption.textContent = `Zone estimée : rayon ${nf(area.radius, 1)} km (${area.basis}) · pic : ${
-      activityMetric === 'frp' ? activityController.powerLabel(peak) : activityController.countLabel(peak)}`;
+    caption.textContent = t('psfdf.activity.caption.peak', {
+      radius: nf(area.radius, 1), basis: area.basis,
+      peak: activityMetric === 'frp'
+        ? activityController.powerLabel(peak) : activityController.countLabel(peak),
+    });
     container.replaceChildren(head, chart, caption);
   }
 
@@ -409,15 +425,16 @@ export function createPsfdfController({
     psfdfPanel.style.setProperty('--psfdf-border', `rgba(${accentRgb}, .58)`);
     psfdfPanel.style.setProperty('--psfdf-shadow', `rgba(${accentRgb}, .14)`);
     const heuristic = p.origin === 'heuristic';
-    const place = p.commune || (heuristic ? 'Zone détectée automatiquement' : 'Incendie signalé');
+    const place = p.commune
+      || t(heuristic ? 'psfdf.place.heuristic' : 'psfdf.place.reported');
     const updatedTimestamp = psfdfHasNumber(p.updated_ts)
       ? Number(p.updated_ts) * 1000 : psfdfUpdatedTimestamp(p.updated);
     psfdfRelative.hidden = !Number.isFinite(updatedTimestamp);
     if (Number.isFinite(updatedTimestamp)) {
       psfdfRelative.dataset.timestamp = updatedTimestamp;
       psfdfRelative.dateTime = new Date(updatedTimestamp).toISOString();
-      psfdfRelative.title = p.updated ? `Mis à jour le ${p.updated}`
-        : heuristic ? 'Dernier foyer détecté du groupe' : '';
+      psfdfRelative.title = p.updated ? t('psfdf.updated.at', { date: p.updated })
+        : heuristic ? t('psfdf.lastHotspot') : '';
       refreshPsfdfRelative();
     } else {
       delete psfdfRelative.dataset.timestamp;
@@ -427,17 +444,18 @@ export function createPsfdfController({
     // Hors de France, aucun suivi associatif : le sous-titre ne doit jamais
     // laisser croire à une source éditoriale absente ici.
     psfdfPanelSub.textContent = heuristic
-      ? 'Détection automatique par densité de foyers satellite'
-      : p.departement ? `${p.departement}, suivi actuel PSFDF` : 'Suivi actuel PSFDF';
+      ? t('psfdf.sub.heuristic')
+      : p.departement ? t('psfdf.sub.tracked.dept', { departement: p.departement })
+      : t('psfdf.sub.tracked');
     psfdfHeadStatus.querySelector('i').style.background = accent;
-    psfdfHeadStatus.querySelector('span').textContent = p.status;
+    psfdfHeadStatus.querySelector('span').textContent = t(`status.${p.status}`);
 
     const content = document.createElement('div');
     const status = document.createElement('div');
     status.className = 'psfdf-detail-status';
     const dot = document.createElement('i');
     dot.style.background = accent;
-    status.append(dot, document.createTextNode(p.status));
+    status.append(dot, document.createTextNode(t(`status.${p.status}`)));
 
     const stats = document.createElement('div');
     stats.className = 'psfdf-stats';
@@ -446,18 +464,21 @@ export function createPsfdfController({
       // aériens, département) n'existe ici : les afficher à « non renseigné »
       // suggérerait à tort qu'une source a été interrogée et n'a pas répondu.
       stats.append(
-        psfdfStat('Foyers FIRMS groupés', nf(Number(p.hotspot_count) || 0)),
-        psfdfStat('Rayon estimé', `${nf(Number(p.heuristic_radius_km) || 0, 1)} km`),
+        psfdfStat(t('psfdf.stat.hotspots'), nf(Number(p.hotspot_count) || 0)),
+        psfdfStat(t('psfdf.stat.radius'),
+          `${nf(Number(p.heuristic_radius_km) || 0, 1)} km`),
       );
     } else {
-      const area = psfdfHasNumber(p.surface) ? `${nf(Number(p.surface), 1)} ha` : 'non renseignée';
+      const area = psfdfHasNumber(p.surface)
+        ? `${nf(Number(p.surface), 1)} ha` : t('psfdf.unknown.f');
       const personnel = psfdfHasNumber(p.personnel)
-        ? nf(Number(p.personnel)) : 'non renseigné';
+        ? nf(Number(p.personnel)) : t('psfdf.unknown.m');
       stats.append(
-        psfdfStat('Surface', area),
-        psfdfStat('Personnel', personnel),
-        psfdfStat('Moyens aériens', psfdfResources(p)),
-        psfdfStat('Département', p.departement || 'Non renseigné'),
+        psfdfStat(t('psfdf.stat.area'), area),
+        psfdfStat(t('psfdf.stat.personnel'), personnel),
+        psfdfStat(t('psfdf.stat.aircraft'), psfdfResources(p)),
+        psfdfStat(t('psfdf.stat.department'),
+          p.departement || t('psfdf.unknown.cap')),
       );
     }
     content.append(status, stats);
@@ -470,9 +491,7 @@ export function createPsfdfController({
     if (heuristic) {
       const note = document.createElement('p');
       note.className = 'psfdf-note';
-      note.textContent = 'Détection automatique à partir des foyers actifs '
-        + 'satellite (NASA FIRMS) : aucune association ne suit les incendies '
-        + 'hors de France sur cette carte. À confirmer sur place.';
+      note.textContent = t('psfdf.note.heuristic');
       content.append(note);
     } else if (p.other_info) {
       const note = document.createElement('p');
@@ -482,8 +501,8 @@ export function createPsfdfController({
     }
     const dates = document.createElement('p');
     dates.className = 'psfdf-dates';
-    dates.textContent = [p.reported ? `Signalé le ${p.reported}` : '',
-                         p.updated ? `Mis à jour le ${p.updated}` : '']
+    dates.textContent = [p.reported ? t('psfdf.reported.at', { date: p.reported }) : '',
+                         p.updated ? t('psfdf.updated.at', { date: p.updated }) : '']
       .filter(Boolean).join('. ');
     if (dates.textContent) content.append(dates);
 
@@ -495,9 +514,9 @@ export function createPsfdfController({
       link.href = `https://association-psfdf.fr/pages/incendie-details.html?id=${encodeURIComponent(p.id)}`;
       link.target = '_blank';
       link.rel = 'noopener';
-      link.append(document.createTextNode('Plus d’information'));
+      link.append(document.createTextNode(t('psfdf.more')));
       const source = document.createElement('small');
-      source.textContent = 'Association PSFDF';
+      source.textContent = t('psfdf.more.source');
       link.append(source);
       const externalIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
       externalIcon.setAttribute('viewBox', '0 0 24 24');
@@ -630,8 +649,8 @@ export function createPsfdfController({
       feature.properties.center = feature.geometry.coordinates;
       feature.properties.name = feature.properties.commune
         || feature.properties.departement
-        || (feature.properties.origin === 'heuristic'
-          ? 'une zone d’activité détectée' : 'un incendie signalé');
+        || t(feature.properties.origin === 'heuristic'
+          ? 'psfdf.name.heuristic' : 'psfdf.name.reported');
       return feature;
     });
     const shortcuts = features

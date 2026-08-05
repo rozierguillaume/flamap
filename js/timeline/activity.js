@@ -1,3 +1,5 @@
+import { getLocale, t } from '../i18n.js';
+
 const H = 3600;
 export const ACTIVITY_AVERAGE_H = 48;
 
@@ -43,7 +45,7 @@ export function activityScale(peak, metric = 'count', intervals = 4) {
 }
 
 export function activityTickLabel(value, metric = 'count') {
-  return value.toLocaleString('fr-FR', {
+  return value.toLocaleString(getLocale(), {
     maximumFractionDigits: metric === 'frp' && value < 10 ? 1 : 0,
   });
 }
@@ -73,7 +75,7 @@ export function createActivityController({
     activityMetricInputs.find(input => input.checked)?.value || 'count';
   let renderedActivity = [], renderedActivityAverages = [];
   let activityPeak = 1, activityT0 = 0, activitySpan = 1;
-  const activityAverageText = `moyenne centrée sur ${ACTIVITY_AVERAGE_H} h`;
+  const activityAverageText = t('activity.average', { hours: ACTIVITY_AVERAGE_H });
 
   function syncActivityMetricControls() {
     for (const input of activityMetricInputs)
@@ -169,8 +171,9 @@ export function createActivityController({
   const value = step => activityValue(step, activityMetric);
   const movingAverage = (passes, windowMs = ACTIVITY_AVERAGE_H * H) =>
     activityMovingAverage(passes, windowMs, value);
-  const countLabel = n => `${n.toLocaleString('fr-FR')} foyer${n > 1 ? 's' : ''}`;
-  const powerLabel = frp => `${frp.toLocaleString('fr-FR', {
+  const countLabel = n =>
+    t('activity.count', { n, count: n.toLocaleString(getLocale()) });
+  const powerLabel = frp => `${frp.toLocaleString(getLocale(), {
     maximumFractionDigits: frp < 100 ? 1 : 0,
   })} MW`;
   const primaryActivityLabel = step =>
@@ -190,23 +193,32 @@ export function createActivityController({
     strong.textContent = primaryActivityLabel(step);
     const meta = document.createElement('span');
     const average = renderedActivityAverages[index]?.value || 0;
-    meta.textContent = `${fmt(step.ts)} — ${step.label} — ${secondaryActivityLabel(step)} — ${activityAverageText} : ${activityMetric === 'frp' ? powerLabel(average) : countLabel(Math.round(average))}`;
+    meta.textContent = t('activity.detail.meta', {
+      date: fmt(step.ts), source: step.label,
+      secondary: secondaryActivityLabel(step), average: activityAverageText,
+      value: activityMetric === 'frp'
+        ? powerLabel(average) : countLabel(Math.round(average)),
+    });
     activityDetail.replaceChildren(strong, meta);
   }
 
   function drawLargeActivity(selected = null) {
     if (!activityPanel.classList.contains('open')) return;
-    document.getElementById('activity-scope').textContent =
+    document.getElementById('activity-scope').textContent = t(
       activityEl.dataset.scope === 'local'
-        ? `Passages dans la zone visible — échelle adaptée au pic local — ligne jaune : ${activityAverageText}.`
-        : `Passages sur l'ensemble du domaine couvert — ligne jaune : ${activityAverageText}.`;
+        ? 'activity.scope.local' : 'activity.scope.national',
+      { average: activityAverageText });
     document.getElementById('activity-title').textContent =
-      activityMetric === 'frp' ? 'Puissance radiative détectée' : 'Nombre de foyers détectés';
-    activityLarge.setAttribute('aria-label',
-      `${renderedActivity.length} passages satellite — ${activityEl.getAttribute('aria-label')} — ligne de ${activityAverageText}`);
+      t(activityMetric === 'frp' ? 'activity.title.frp' : 'activity.title.count');
+    activityLarge.setAttribute('aria-label', t('activity.large.summary', {
+      count: renderedActivity.length,
+      scope: activityEl.getAttribute('aria-label'),
+      average: activityAverageText,
+    }));
 
     if (!renderedActivity.length) {
-      activityLarge.innerHTML = '<span id="activity-empty">Aucun foyer détecté dans cette zone.</span>';
+      activityLarge.innerHTML =
+        `<span id="activity-empty">${t('activity.empty')}</span>`;
       renderedActivityAverages = [];
       activityDetail.replaceChildren();
       return;
@@ -256,15 +268,16 @@ export function createActivityController({
     // petit passage local en pic maximal.
     const peak = Math.max(...steps.filter(s => s.kind === 'sat').map(value), 1);
     const local = !activityIsNational();
-    const scope = local ? 'dans la zone visible' : "sur l'ensemble du domaine couvert";
-    const metric = activityMetric === 'frp' ? 'puissance radiative' : 'nombre de foyers';
+    const scope = t(local ? 'activity.scopeName.local' : 'activity.scopeName.national');
+    const metric = t(activityMetric === 'frp'
+      ? 'activity.metric.frp' : 'activity.metric.count');
     renderedActivity = passages;
     activityPeak = peak;
     activityT0 = t0;
     activitySpan = span;
     activityEl.dataset.scope = local ? 'local' : 'national';
     activityEl.setAttribute('aria-label',
-      `Ouvrir le graphique de ${metric} ${scope}`);
+      t('activity.open.metric', { metric, scope }));
     activityEl.innerHTML = passages.map((step, index) => {
       const left = ((step.ts - t0) / span * 100).toFixed(3);
       const activity = value(step);
@@ -328,8 +341,7 @@ export function createActivityController({
       && satelliteSteps.every(step => Number.isFinite(step.frp));
     powerMetricInput.disabled = !hasNationalFrp;
     if (!hasNationalFrp) {
-      powerMetricInput.closest('label').title =
-        'La puissance sera disponible après la prochaine actualisation des données.';
+      powerMetricInput.closest('label').title = t('activity.frp.unavailable');
       activityMetric = 'count';
       activityMetricInputs.find(input => input.value === 'count').checked = true;
     }

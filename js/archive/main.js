@@ -1,3 +1,4 @@
+import { t } from '../i18n.js';
 import { fetchFireList } from './api.js';
 import { renderList } from './list.js';
 import { openFire } from './detail.js';
@@ -32,13 +33,13 @@ function loadFireList() {
   if (fireListPromise) return fireListPromise;
   listStatusEl.textContent = '';
   listStatusEl.append(Object.assign(document.createElement('span'), { className: 'archive-loader' }),
-    document.createTextNode('Chargement des feux…'));
+    document.createTextNode(t('archive.loading')));
   fireListPromise = fetchFireList().then(fires => {
     listStatusEl.textContent = '';
     renderList(cardsEl, fires, fireId => showDetail(fireId));
   }).catch(error => {
-    console.error('Liste des feux archivés indisponible', error);
-    listStatusEl.textContent = 'Liste indisponible pour le moment — réessayez plus tard.';
+    console.error(t('archive.list.errorLog'), error);
+    listStatusEl.textContent = t('archive.list.error');
     fireListPromise = null; // un retour ultérieur sur la liste retentera l'appel
   });
   return fireListPromise;
@@ -59,7 +60,7 @@ async function showDetail(id, { push = true } = {}) {
   currentFire = null;
   listEl.hidden = true;
   detailEl.hidden = false;
-  detailElements.statusEl.textContent = 'Chargement du feu…';
+  detailElements.statusEl.textContent = t('archive.detail.loading');
   detailElements.summaryEl.innerHTML = '';
 
   if (push) history.pushState({ id }, '', `?id=${encodeURIComponent(id)}`);
@@ -68,8 +69,8 @@ async function showDetail(id, { push = true } = {}) {
   try {
     result = await openFire(id, detailElements);
   } catch (error) {
-    console.error('Détail du feu indisponible', error);
-    if (token === navToken) detailElements.statusEl.textContent = 'Détail indisponible pour le moment — réessayez plus tard.';
+    console.error(t('archive.detail.errorLog'), error);
+    if (token === navToken) detailElements.statusEl.textContent = t('archive.detail.error');
     return;
   }
   if (token !== navToken) {
@@ -79,7 +80,7 @@ async function showDetail(id, { push = true } = {}) {
     return;
   }
   if (result.notFound) {
-    detailElements.statusEl.textContent = 'Ce feu est introuvable — il a peut-être été renommé depuis.';
+    detailElements.statusEl.textContent = t('archive.notFound');
     return;
   }
   // openFire() a déjà mis à jour le statut lui-même (vidé s'il rejoue le feu,

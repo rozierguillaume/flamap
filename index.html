@@ -4,9 +4,15 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 
-<title>Incendies en France et en Espagne : carte en quasi temps réel | Flamap</title>
-<meta name="description" content="Carte des incendies et feux de forêt en France, en Espagne et au Portugal : foyers actifs par satellite, surfaces brûlées, vent et évolution, mise à jour toutes les 30 minutes.">
+<title data-i18n="app.title">Incendies en France et en Espagne : carte en quasi temps réel | Flamap</title>
+<meta name="description" data-i18n-content="app.description" content="Carte des incendies et feux de forêt en France, en Espagne et au Portugal : foyers actifs par satellite, surfaces brûlées, vent et évolution, mise à jour toutes les 30 minutes.">
 <link rel="canonical" href="https://flamap.fr/">
+<!-- La langue est choisie dans le navigateur (domaine, choix mémorisé, réglage
+     système) : une seule URL sert les deux versions, `?lang=` donne aux moteurs
+     une adresse stable par langue. -->
+<link rel="alternate" hreflang="fr" href="https://flamap.fr/">
+<link rel="alternate" hreflang="es" href="https://flamap.fr/?lang=es">
+<link rel="alternate" hreflang="x-default" href="https://flamap.fr/">
 <meta name="theme-color" content="#0d0f12">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; script-src 'self' 'sha256-DWxYuUWoe8pTdDte9SzXJM+JAgUNdWaV03Y4VMzKrX0=' https://analytics.flamap.fr; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://data.geopf.fr https://tiles.maps.eox.at; font-src 'self'; connect-src 'self' https://analytics.flamap.fr https://api.airplanes.live https://api.flamap.fr https://data.geopf.fr https://tiles.openfreemap.org https://tiles.maps.eox.at; worker-src blob:; manifest-src 'self'; form-action 'self'">
 <!-- Google Search exige une URL de favicon stable et explorabile. -->
@@ -19,20 +25,20 @@
 <!-- apercu des liens : reseaux sociaux, messageries, moteurs de recherche -->
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Flamap">
-<meta property="og:locale" content="fr_FR">
+<meta property="og:locale" data-i18n-content="app.locale" content="fr_FR">
 <meta property="og:url" content="https://flamap.fr/">
-<meta property="og:title" content="Incendies en France et en Espagne : la carte Flamap en quasi temps réel">
-<meta property="og:description" content="Suivez les foyers actifs détectés par satellite, les surfaces brûlées, le vent et l'évolution des feux en France et dans la péninsule Ibérique.">
+<meta property="og:title" data-i18n-content="app.og.title" content="Incendies en France et en Espagne : la carte Flamap en quasi temps réel">
+<meta property="og:description" data-i18n-content="app.og.description" content="Suivez les foyers actifs détectés par satellite, les surfaces brûlées, le vent et l'évolution des feux en France et dans la péninsule Ibérique.">
 <meta property="og:image" content="https://flamap.fr/og.png">
 <meta property="og:image:type" content="image/png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="Flamap, carte satellite des incendies en France et en Espagne.">
+<meta property="og:image:alt" data-i18n-content="app.image.alt" content="Flamap, carte satellite des incendies en France et en Espagne.">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="Incendies en France et en Espagne : la carte Flamap en quasi temps réel">
-<meta name="twitter:description" content="Foyers actifs par satellite, surfaces brûlées, vent et évolution des feux, mis à jour toutes les 30 min.">
+<meta name="twitter:title" data-i18n-content="app.og.title" content="Incendies en France et en Espagne : la carte Flamap en quasi temps réel">
+<meta name="twitter:description" data-i18n-content="app.tw.description" content="Foyers actifs par satellite, surfaces brûlées, vent et évolution des feux, mis à jour toutes les 30 min.">
 <meta name="twitter:image" content="https://flamap.fr/og.png">
-<meta name="twitter:image:alt" content="Flamap, carte satellite des incendies en France et en Espagne.">
+<meta name="twitter:image:alt" data-i18n-content="app.image.alt" content="Flamap, carte satellite des incendies en France et en Espagne.">
 
 <!-- `initReady` attend `isStyleLoaded()`, donc le TileJSON d'OpenFreeMap, et
      `mapReady` attend les tuiles IGN et Sentinel-2. Ouvrir les trois connexions
@@ -63,6 +69,10 @@
 <link rel="stylesheet" href="/css/components.css">
 <link rel="stylesheet" href="/css/responsive.css">
 
+<!-- La traduction du document précède l'application : déclarée ici, elle
+     s'exécute avant `/js/main.js` et remplace les textes fixes de la page. -->
+<script type="module" src="/js/ui/translate.js"></script>
+
 <!-- Le graphe de modules est peu profond mais large : sans ces indications, le
      navigateur ne découvre `util/`, `data/client.js` et `map/base-style.js`
      qu'après avoir analysé leurs importateurs, soit trois vagues successives.
@@ -70,6 +80,8 @@
      reste celui des `import` de `/js/main.js`. -->
 <link rel="modulepreload" href="/js/main.js">
 <link rel="modulepreload" href="/js/state.js">
+<link rel="modulepreload" href="/js/i18n.js">
+<link rel="modulepreload" href="/js/strings.js">
 <link rel="modulepreload" href="/js/util/format.js">
 <link rel="modulepreload" href="/js/util/geo.js">
 <link rel="modulepreload" href="/js/util/grid.js">
@@ -145,12 +157,12 @@
 </script>
 </head>
 <body>
-<div id="map" role="img"
+<div id="map" role="img" data-i18n-label="map.aria"
      aria-label="Carte satellite des surfaces brûlées et des foyers d'incendie détectés"></div>
 <canvas id="smoke" aria-hidden="true"></canvas>
 <canvas id="wind" aria-hidden="true"></canvas>
 <div id="center-probe" hidden aria-hidden="true"></div>
-<p id="init-error" class="glass" role="alert" hidden>
+<p id="init-error" class="glass" role="alert" hidden data-i18n="init.error">
   La carte n’a pas pu être chargée. Rechargez la page pour réessayer.
 </p>
 
@@ -169,36 +181,39 @@
       <circle cx="17" cy="31.5" r="1.5" fill="var(--front)"></circle>
       <circle cx="34" cy="30"   r="1.4" fill="var(--hot)"></circle>
     </svg>
-    <h1><span class="brand-hot">Fla</span>map<span class="sr-only"> — carte des incendies en France et en Espagne en quasi temps réel</span></h1>
+    <h1><span class="brand-hot">Fla</span>map<span class="sr-only" data-i18n="brand.sr"> — carte des incendies en France et en Espagne en quasi temps réel</span></h1>
   </div>
-  <button id="home-btn" type="button" aria-label="Recentrer la carte sur la vue d’ensemble"
-          title="Recentrer sur la vue d’ensemble"></button>
-  <section class="sr-only" aria-label="Présentation de Flamap">
-    <h2>Suivre les incendies et feux de forêt en cours en France et en Espagne</h2>
-    <p>Flamap est une carte des incendies mise à jour toutes les 30
+  <button id="home-btn" type="button"
+          data-i18n-label="home.aria" aria-label="Recentrer la carte sur la vue d’ensemble"
+          data-i18n-title="home.title" title="Recentrer sur la vue d’ensemble"></button>
+  <section class="sr-only" data-i18n-label="intro.aria" aria-label="Présentation de Flamap">
+    <h2 data-i18n="intro.heading">Suivre les incendies et feux de forêt en cours en France et en Espagne</h2>
+    <p data-i18n="intro.p1">Flamap est une carte des incendies mise à jour toutes les 30
     minutes. Elle affiche les foyers actifs détectés par les satellites NASA
     FIRMS, les surfaces brûlées publiées par Copernicus EFFIS et le vent à
     10 mètres, issu du modèle AROME de Météo-France sur la France et d’un
     modèle européen sur la péninsule Ibérique.</p>
-    <p>La frise temporelle permet de suivre l'évolution récente des feux,
+    <p data-i18n="intro.p2">La frise temporelle permet de suivre l'évolution récente des feux,
     d'observer les passages satellite et de repérer les zones touchées. Les
     données sont publiques et la carte couvre la France métropolitaine et la
     Corse, l'Espagne continentale, les Baléares et le Portugal.</p>
   </section>
 </div>
-<div id="incidents" hidden aria-label="Raccourcis vers les incendies importants"></div>
+<div id="incidents" hidden data-i18n-label="incidents.aria"
+     aria-label="Raccourcis vers les incendies importants"></div>
 <aside id="psfdf-panel" class="glass" aria-labelledby="psfdf-panel-title" hidden>
   <header>
     <div class="psfdf-panel-heading">
-      <h2 id="psfdf-panel-title">Feux suivis par PSFDF</h2>
+      <h2 id="psfdf-panel-title" data-i18n="psfdf.panel.title">Feux suivis par PSFDF</h2>
       <time id="psfdf-relative" class="psfdf-relative" hidden></time>
       <span id="psfdf-head-status" class="psfdf-head-status">
         <i></i><span>—</span>
       </span>
     </div>
-    <p id="psfdf-panel-sub" class="panel-sub">État actuel communiqué par l’association.</p>
+    <p id="psfdf-panel-sub" class="panel-sub" data-i18n="psfdf.panel.sub">État actuel communiqué par l’association.</p>
     <button id="psfdf-panel-toggle" type="button" aria-expanded="false"
-            aria-controls="psfdf-panel-body" aria-label="Afficher les détails du feu">
+            aria-controls="psfdf-panel-body" aria-label="Afficher les détails du feu"
+            data-i18n-label="psfdf.panel.show">
       <svg viewBox="0 0 24 24" aria-hidden="true">
         <path d="m6 9 6 6 6-6" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
@@ -208,8 +223,9 @@
 </aside>
 <!-- Placé après le panneau pour que `#psfdf-panel.open ~ #psfdf-back` puisse
      l'effacer : la fiche dépliée reprend toute la largeur. -->
-<button id="psfdf-back" class="glass" type="button" title="Revenir à la vue d’ensemble"
-        aria-label="Retour à la vue d’ensemble">
+<button id="psfdf-back" class="glass" type="button"
+        data-i18n-title="psfdf.back.title" title="Revenir à la vue d’ensemble"
+        data-i18n-label="psfdf.back.aria" aria-label="Retour à la vue d’ensemble">
   <svg viewBox="0 0 24 24" aria-hidden="true">
     <path d="m15 6-6 6 6 6" stroke-linecap="round" stroke-linejoin="round"/>
   </svg>
@@ -225,21 +241,21 @@
   </p>
 </noscript>
 
-<button id="layers-btn" class="glass" aria-label="Calques" aria-expanded="false"
-        aria-controls="layers">
+<button id="layers-btn" class="glass" data-i18n-label="layers.aria" aria-label="Calques"
+        aria-expanded="false" aria-controls="layers">
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
        stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
     <path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z"/>
     <path d="M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12"/>
     <path d="M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17"/>
-  </svg><span class="wide">Calques</span>
+  </svg><span class="wide" data-i18n="layers.aria">Calques</span>
 </button>
 <div id="layers" class="glass">
   <label><input type="checkbox" id="ck-psfdf"
-                data-analytics-layer="psfdf" checked> incendies signalés (PSFDF, détection auto)</label>
-  <label><input type="checkbox" id="ck-hotspots" data-analytics-layer="hotspots" checked> foyers détectés</label>
+                data-analytics-layer="psfdf" checked> <span data-i18n="layers.psfdf">incendies signalés (PSFDF, détection auto)</span></label>
+  <label><input type="checkbox" id="ck-hotspots" data-analytics-layer="hotspots" checked> <span data-i18n="layers.hotspots">foyers détectés</span></label>
   <fieldset>
-    <legend>Sources FIRMS</legend>
+    <legend data-i18n="layers.firms">Sources FIRMS</legend>
     <label><input type="checkbox" class="ck-source" value="VIIRS/NOAA-20"
                   data-analytics-layer="firms-noaa20" checked> VIIRS/NOAA-20</label>
     <label><input type="checkbox" class="ck-source" value="VIIRS/NOAA-21"
@@ -250,60 +266,67 @@
                   data-analytics-layer="firms-modis" checked> MODIS</label>
   </fieldset>
   <fieldset id="activity-metric">
-    <legend>Métrique des graphiques</legend>
+    <legend data-i18n="layers.metric">Métrique des graphiques</legend>
     <label><input type="radio" name="activity-metric" value="count"
-                  data-analytics-layer="metric-count"> nombre de foyers</label>
-    <label title="Somme de la puissance radiative instantanée des pixels détectés">
+                  data-analytics-layer="metric-count"> <span data-i18n="layers.metric.count">nombre de foyers</span></label>
+    <label data-i18n-title="layers.metric.frp.title"
+           title="Somme de la puissance radiative instantanée des pixels détectés">
       <input type="radio" name="activity-metric" value="frp"
-             data-analytics-layer="metric-frp" checked> puissance radiative (MW)
+             data-analytics-layer="metric-frp" checked> <span data-i18n="layers.metric.frp">puissance radiative (MW)</span>
     </label>
   </fieldset>
   <label class="ba"><input type="checkbox" id="ck-dated"
-                           data-analytics-layer="burnt-dated" checked> surfaces brûlées (datées)</label>
+                           data-analytics-layer="burnt-dated" checked> <span data-i18n="layers.burnt.dated">surfaces brûlées (datées)</span></label>
   <label class="ba"><input type="checkbox" id="ck-nrt"
-                           data-analytics-layer="burnt-nrt" checked> surfaces brûlées (NRT)</label>
-  <label title="Dispersion indicative calculée à partir des foyers FIRMS et du vent AROME">
+                           data-analytics-layer="burnt-nrt" checked> <span data-i18n="layers.burnt.nrt">surfaces brûlées (NRT)</span></label>
+  <label data-i18n-title="layers.smoke.title"
+         title="Dispersion indicative calculée à partir des foyers FIRMS et du vent AROME">
     <input type="checkbox" id="ck-smoke"
-           data-analytics-layer="smoke" checked> panaches de fumée (simulés)
+           data-analytics-layer="smoke" checked> <span data-i18n="layers.smoke">panaches de fumée (simulés)</span>
   </label>
   <label><input type="checkbox" id="ck-wind"
-                data-analytics-layer="wind" checked> vent à 10 m</label>
+                data-analytics-layer="wind" checked> <span data-i18n="layers.wind">vent à 10 m</span></label>
   <!-- Le listener Umami délégué sur #layers reprend cette valeur dans
        `layer-toggle`, avec l'état booléen de la case. -->
-  <label title="Positions ADS-B reçues toutes les 4 s, animées avec 6 s de différé ; un historique court amorce les trajets et le suivi peut être incomplet">
+  <label data-i18n-title="layers.aircraft.title"
+         title="Positions ADS-B reçues toutes les 4 s, animées avec 6 s de différé ; un historique court amorce les trajets et le suivi peut être incomplet">
     <input type="checkbox" id="ck-aircraft" checked
-           data-analytics-layer="aircraft"> moyens aériens
+           data-analytics-layer="aircraft"> <span data-i18n="layers.aircraft">moyens aériens</span>
   </label>
   <div class="sub-layer">
-    <label title="Afficher le matricule ou l'indicatif ADS-B à côté de chaque appareil">
+    <label data-i18n-title="layers.aircraft.labels.title"
+           title="Afficher le matricule ou l'indicatif ADS-B à côté de chaque appareil">
       <input type="checkbox" id="ck-aircraft-label"
-             data-analytics-layer="aircraft-labels"> matricules des appareils
+             data-analytics-layer="aircraft-labels"> <span data-i18n="layers.aircraft.labels">matricules des appareils</span>
     </label>
   </div>
   <div id="aircraft-status" hidden aria-live="polite"></div>
-  <div class="hint">Masquées : EFFIS ne publie que le contour le plus récent,
+  <div class="hint" data-i18n="layers.hint">Masquées : EFFIS ne publie que le contour le plus récent,
   pas son évolution. Ramenez le curseur à droite pour les revoir.</div>
 </div>
 
 <button id="weather-btn" class="glass" aria-expanded="false"
-        aria-controls="weather-panel" aria-label="Prévisions météo au centre de la carte"
+        aria-controls="weather-panel"
+        data-i18n-label="weather.btn.aria" aria-label="Prévisions météo au centre de la carte"
+        data-i18n-title="weather.btn.title"
         title="Prévisions au centre de la carte — ou cliquez n'importe où sur la carte pour la météo de ce point">
   <svg class="weather-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
        stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
     <path d="M12 2v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="M20 12h2"/>
     <path d="m19.07 4.93-1.41 1.41"/><path d="M15.947 12.65a4 4 0 0 0-5.925-4.128"/>
     <path d="M13 22H7a5 5 0 1 1 4.9-6H13a3 3 0 0 1 0 6Z"/>
-  </svg><span class="weather-label">Météo</span>
+  </svg><span class="weather-label" data-i18n="weather.btn.label">Météo</span>
 </button>
 <aside id="weather-panel" class="glass" role="dialog" aria-labelledby="weather-title">
   <header>
-    <h2 id="weather-title">Météo au centre de la carte</h2>
-    <button id="weather-close" aria-label="Fermer">×</button>
+    <h2 id="weather-title" data-i18n="weather.title.center">Météo au centre de la carte</h2>
+    <button id="weather-close" data-i18n-label="common.close" aria-label="Fermer">×</button>
   </header>
   <p id="weather-place">—</p>
-  <button id="weather-follow" hidden>↺ revenir au centre de la carte</button>
+  <button id="weather-follow" hidden data-i18n="weather.follow">↺ revenir au centre de la carte</button>
   <div id="weather-chart-wrap">
     <svg id="weather-chart" viewBox="0 0 430 424" role="img"
+         data-i18n-label="weather.chart.aria"
          aria-label="Évolution de la température, du vent et des précipitations"></svg>
     <div id="weather-tip" role="tooltip"></div>
   </div>
@@ -312,7 +335,8 @@
 
 <button id="export-btn" class="glass" type="button" disabled aria-expanded="false"
         aria-controls="export-panel"
-        aria-label="Partager ou exporter la carte"
+        data-i18n-label="export.btn.aria" aria-label="Partager ou exporter la carte"
+        data-i18n-title="export.btn.title"
         title="Partager ou exporter la carte en image ou GIF">
   <svg class="export-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
     <path d="M12 3v12"/><path d="m7.5 7.5 4.5-4.5 4.5 4.5"/>
@@ -321,26 +345,28 @@
   <span class="export-loader" aria-hidden="true"></span>
 </button>
 <aside id="export-panel" class="glass" role="dialog" aria-labelledby="export-title">
-  <h2 id="export-title">Exporter la carte</h2>
-  <div id="export-kind" role="tablist" aria-label="Format d’export">
-    <button type="button" role="tab" data-export-kind="still" aria-selected="true">Image fixe</button>
-    <button type="button" role="tab" data-export-kind="gif" aria-selected="false">GIF animé</button>
+  <h2 id="export-title" data-i18n="export.title">Exporter la carte</h2>
+  <div id="export-kind" role="tablist" data-i18n-label="export.kind.aria" aria-label="Format d’export">
+    <button type="button" role="tab" data-export-kind="still" aria-selected="true"
+            data-i18n="export.kind.still">Image fixe</button>
+    <button type="button" role="tab" data-export-kind="gif" aria-selected="false"
+            data-i18n="export.kind.gif">GIF animé</button>
   </div>
-  <label class="export-check"><input id="export-wind" type="checkbox" checked> Afficher les lignes de vent</label>
+  <label class="export-check"><input id="export-wind" type="checkbox" checked> <span data-i18n="export.wind">Afficher les lignes de vent</span></label>
   <fieldset id="export-gif-options" hidden>
-    <legend>Animation du GIF</legend>
+    <legend data-i18n="export.gif.legend">Animation du GIF</legend>
     <label>
       <input type="radio" name="export-gif-mode" value="instant" checked>
-      <b>À l’instant affiché</b>
-      <small>Le vent et les fumées s’animent quelques secondes.</small>
+      <b data-i18n="export.gif.instant">À l’instant affiché</b>
+      <small data-i18n="export.gif.instant.hint">Le vent et les fumées s’animent quelques secondes.</small>
     </label>
     <label>
       <input type="radio" name="export-gif-mode" value="evolution">
-      <b>Depuis le début</b>
-      <small>Rejoue l’évolution de l’incendie comme le bouton Lecture.</small>
+      <b data-i18n="export.gif.evolution">Depuis le début</b>
+      <small data-i18n="export.gif.evolution.hint">Rejoue l’évolution de l’incendie comme le bouton Lecture.</small>
     </label>
   </fieldset>
-  <button id="export-generate" type="button">Générer l’image</button>
+  <button id="export-generate" type="button" data-i18n="export.generate.still">Générer l’image</button>
 </aside>
 <div id="export-toast" role="status" aria-live="polite"></div>
 
@@ -349,36 +375,37 @@
 <div id="dock">
   <div id="legend" class="glass">
     <div id="legend-head">
-      <b id="legend-title">Légende</b>
+      <b id="legend-title" data-i18n="legend.title">Légende</b>
       <button id="legend-collapse" type="button" aria-expanded="true"
-              aria-label="Replier la légende" title="Replier la légende">
+              data-i18n-label="legend.collapse" aria-label="Replier la légende"
+              data-i18n-title="legend.collapse" title="Replier la légende">
         <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
           <path d="m15 18-6-6 6-6"></path>
         </svg>
       </button>
     </div>
     <div id="legend-content">
-    <span class="burnt-key" title="Périmètre touché par un incendie, recensé par EFFIS et daté au cran affiché. Donnée indicative susceptible d'être révisée"><i class="poly" style="background:var(--burnt);border:1px solid var(--burnt-edge)"></i>touché</span>
+    <span class="burnt-key" data-i18n-title="legend.burnt.dated.title" title="Périmètre touché par un incendie, recensé par EFFIS et daté au cran affiché. Donnée indicative susceptible d'être révisée"><i class="poly" style="background:var(--burnt);border:1px solid var(--burnt-edge)"></i><span data-i18n="legend.burnt.dated">touché</span></span>
     <!-- Même famille de bruns, deux crans plus clair : l'emprise NRT est
          assombrie assez pour se lire, pas assez pour passer pour un périmètre
          déjà recensé. Le voile de la carte reste bien plus discret (30 %) qu'un
          aplat de 12 px ne peut le montrer. -->
-    <span class="burnt-key" title="Périmètre potentiellement touché par un incendie, détecté automatiquement par EFFIS en quasi temps réel. Donnée indicative susceptible d'être révisée"><i class="poly" style="background:var(--nrt);border:1px solid var(--nrt-edge)"></i>potentiel</span>
+    <span class="burnt-key" data-i18n-title="legend.burnt.nrt.title" title="Périmètre potentiellement touché par un incendie, détecté automatiquement par EFFIS en quasi temps réel. Donnée indicative susceptible d'être révisée"><i class="poly" style="background:var(--nrt);border:1px solid var(--nrt-edge)"></i><span data-i18n="legend.burnt.nrt">potentiel</span></span>
     <!-- l'échelle d'ancienneté : le dégradé et la position des repères sont
          posés par le script, à partir de la rampe qui peint la carte -->
-    <span id="agekey" title="Couleur d'un foyer selon son ancienneté, de dix jours à l'instant de la détection">
+    <span id="agekey" data-i18n-title="legend.age.title" title="Couleur d'un foyer selon son ancienneté, de dix jours à l'instant de la détection">
       <span id="ageramp">
-        <b data-age="864000">10 j</b><b data-age="86400">24 h</b><b data-age="0">à l'instant</b>
+        <b data-age="864000" data-i18n="legend.age.10d">10 j</b><b data-age="86400" data-i18n="legend.age.24h">24 h</b><b data-age="0" data-i18n="legend.age.now">à l'instant</b>
       </span>
     </span>
-    <span id="psfdf-key" title="Statut courant des incendies suivis par l’association PSFDF, en France ; détection automatique par densité de foyers satellite hors de France">
+    <span id="psfdf-key" data-i18n-title="legend.psfdf.title" title="Statut courant des incendies suivis par l’association PSFDF, en France ; détection automatique par densité de foyers satellite hors de France">
       <b>PSFDF</b>
-      <em title="Hors de contrôle"><i style="background:#2f2933"></i>hors contrôle</em>
-      <em><i style="background:#e33b32"></i>en cours</em>
-      <em><i style="background:#f28c28"></i>fixé</em>
-      <em title="Maîtrisé"><i style="background:#e6c229"></i>maîtr.</em>
-      <em><i style="background:#4a9f62"></i>éteint</em>
-      <em title="Amas de foyers FIRMS hors de France, sans suivi associatif"><i style="background:#e33b32;border:1px dashed #fff8"></i>détection auto</em>
+      <em data-i18n-title="status.Hors de contrôle" title="Hors de contrôle"><i style="background:#2f2933"></i><span data-i18n="status.short.Hors de contrôle">hors contrôle</span></em>
+      <em><i style="background:#e33b32"></i><span data-i18n="status.short.En cours">en cours</span></em>
+      <em><i style="background:#f28c28"></i><span data-i18n="status.short.Fixé">fixé</span></em>
+      <em data-i18n-title="status.Maîtrisé" title="Maîtrisé"><i style="background:#e6c229"></i><span data-i18n="status.short.Maîtrisé">maîtr.</span></em>
+      <em><i style="background:#4a9f62"></i><span data-i18n="status.short.Éteint">éteint</span></em>
+      <em data-i18n-title="legend.psfdf.heuristic.title" title="Amas de foyers FIRMS hors de France, sans suivi associatif"><i style="background:#e33b32;border:1px dashed #fff8"></i><span data-i18n="status.short.Détection auto">détection auto</span></em>
     </span>
     <span id="tempkey" hidden>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
@@ -395,8 +422,9 @@
     </span>
     </div>
   </div>
-  <button id="legend-btn" class="glass" aria-expanded="false"
-          aria-controls="legend" aria-label="Afficher la légende" title="Afficher la légende">
+  <button id="legend-btn" class="glass" aria-expanded="false" aria-controls="legend"
+          data-i18n-label="legend.show" aria-label="Afficher la légende"
+          data-i18n-title="legend.show" title="Afficher la légende">
     <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
       <circle cx="5" cy="5" r="2" fill="var(--front)"></circle>
       <path d="M10 5h10" fill="none" stroke="currentColor" stroke-width="2"
@@ -412,57 +440,66 @@
 
   <div id="timebar" class="glass">
     <div id="timerow">
-      <button id="play" aria-label="Lancer l'animation">▶</button>
+      <button id="play" data-i18n-label="timeline.play" aria-label="Lancer l'animation">▶</button>
       <div id="track">
         <div id="activity" role="button" tabindex="0" aria-haspopup="dialog"
-             aria-controls="activity-panel"
+             aria-controls="activity-panel" data-i18n-label="activity.open.aria"
              aria-label="Ouvrir le graphique d'intensité des foyers détectés"></div>
         <input id="slider" type="range" min="0" max="0" step="1" value="0"
-               aria-label="Mise à jour affichée">
+               data-i18n-label="timeline.slider.aria" aria-label="Mise à jour affichée">
       </div>
-      <button id="updates-btn" aria-label="Dernières mises à jour des données"
+      <button id="updates-btn" data-i18n-label="updates.aria"
+              aria-label="Dernières mises à jour des données"
               aria-expanded="false" aria-controls="updates-panel">i</button>
     </div>
   </div>
 
-  <aside id="updates-panel" class="glass" aria-label="Dernières mises à jour des données">
-    <header><h2>Mises à jour des données</h2><button id="updates-close" aria-label="Fermer">×</button></header>
+  <aside id="updates-panel" class="glass" data-i18n-label="updates.aria"
+         aria-label="Dernières mises à jour des données">
+    <header><h2 data-i18n="updates.title">Mises à jour des données</h2><button id="updates-close" data-i18n-label="common.close" aria-label="Fermer">×</button></header>
     <ul id="updates-list"></ul>
   </aside>
 
   <!-- `glass` pour le fond sur ordinateur, où le bouton flotte seul au-dessus de
        l'imagerie ; sur téléphone la règle `#dock > .glass` le remet à plat, il
        est alors une ligne parmi d'autres dans la feuille du bas -->
-  <button id="cr-btn" class="glass" aria-expanded="false"
-          aria-controls="credits"><span class="wide">Sources &amp; </span>crédits</button>
+  <!-- La bascule de langue vit dans la même ligne que les crédits : c'est un
+       réglage du site, pas une commande de la carte. -->
+  <div id="dock-foot">
+    <button id="lang-btn" class="glass" type="button" lang="es"
+            data-i18n-label="lang.aria" aria-label="Ver Flamap en español"
+            ><span data-i18n="lang.code">ES</span></button>
+    <button id="cr-btn" class="glass" aria-expanded="false"
+            aria-controls="credits"><span class="wide" data-i18n="credits.btn.wide">Sources &amp; </span><span data-i18n="credits.btn">crédits</span></button>
+  </div>
 
   <div id="credits" class="glass">
     <ul>
-      <li><b>Foyers actifs</b> — <a href="https://firms.modaps.eosdis.nasa.gov/" target="_blank" rel="noopener">NASA FIRMS</a>
+      <li><b data-i18n="credits.fires">Foyers actifs</b> — <a href="https://firms.modaps.eosdis.nasa.gov/" target="_blank" rel="noopener">NASA FIRMS</a>
           (VIIRS 375 m &amp; MODIS, LANCE/EOSDIS)</li>
-      <li><b>Surfaces brûlées</b> — <a href="https://forest-fire.emergency.copernicus.eu/" target="_blank" rel="noopener">Copernicus EFFIS</a></li>
-      <li><b>Incendies signalés et statuts</b> — <a href="https://association-psfdf.fr/pages/carte.html" target="_blank" rel="noopener">Association Prévention et Signalement Feux de Forêt (PSFDF)</a></li>
-      <li><b>Vent à 10 m</b> — modèles <a href="https://meteofrance.com/" target="_blank" rel="noopener">AROME HD</a>
-          sur la France et ARPEGE Europe sur la péninsule Ibérique, de Météo-France,
-          servis par <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a> (CC BY 4.0)</li>
-      <li><b>Fumée</b> — simulation indicative à partir de la puissance radiative FIRMS et du vent modélisé,
-          et non mesure de qualité de l'air</li>
-      <li><b>Fond</b> — ortho-photo <a href="https://geoservices.ign.fr/" target="_blank" rel="noopener">IGN-F/Géoplateforme</a>,
-          hors France <a href="https://s2maps.eu" target="_blank" rel="noopener">Sentinel-2 cloudless</a> par EOX
-          (données Copernicus Sentinel modifiées 2020)</li>
-      <li><b>Toponymes</b> — <a href="https://openfreemap.org/" target="_blank" rel="noopener">OpenFreeMap</a> /
+      <li><b data-i18n="credits.burnt">Surfaces brûlées</b> — <a href="https://forest-fire.emergency.copernicus.eu/" target="_blank" rel="noopener">Copernicus EFFIS</a></li>
+      <li><b data-i18n="credits.psfdf">Incendies signalés et statuts</b> — <a href="https://association-psfdf.fr/pages/carte.html" target="_blank" rel="noopener" data-i18n="credits.psfdf.name">Association Prévention et Signalement Feux de Forêt (PSFDF)</a></li>
+      <li><b data-i18n="credits.wind">Vent à 10 m</b> — <span data-i18n="credits.wind.models">modèles</span> <a href="https://meteofrance.com/" target="_blank" rel="noopener">AROME HD</a>
+          <span data-i18n="credits.wind.note">sur la France et ARPEGE Europe sur la péninsule Ibérique, de Météo-France,
+          servis par</span> <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a> (CC BY 4.0)</li>
+      <li><b data-i18n="credits.smoke">Fumée</b> — <span data-i18n="credits.smoke.note">simulation indicative à partir de la puissance radiative FIRMS et du vent modélisé,
+          et non mesure de qualité de l'air</span></li>
+      <li><b data-i18n="credits.base">Fond</b> — <span data-i18n="credits.base.ign">ortho-photo</span> <a href="https://geoservices.ign.fr/" target="_blank" rel="noopener">IGN-F/Géoplateforme</a>,
+          <span data-i18n="credits.base.outside">hors France</span> <a href="https://s2maps.eu" target="_blank" rel="noopener">Sentinel-2 cloudless</a> <span data-i18n="credits.base.eox">par EOX
+          (données Copernicus Sentinel modifiées 2020)</span></li>
+      <li><b data-i18n="credits.toponyms">Toponymes</b> — <a href="https://openfreemap.org/" target="_blank" rel="noopener">OpenFreeMap</a> /
           <a href="https://openmaptiles.org/" target="_blank" rel="noopener">OpenMapTiles</a> /
           <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a></li>
-      <li><b>Communes</b> — <a href="https://data.geopf.fr/geocodage/" target="_blank" rel="noopener">Géoplateforme / BAN</a></li>
-      <li><b>Moyens aériens</b> — <a href="https://airplanes.live/" target="_blank"
-          rel="noopener">Airplanes.live</a> (ADS-B communautaire, affichage non exhaustif)</li>
-      <li><b>Rendu</b> — <a href="https://maplibre.org/" target="_blank" rel="noopener">MapLibre GL</a>,
-          icônes <a href="https://lucide.dev/" target="_blank" rel="noopener">Lucide</a> (ISC)</li>
+      <li><b data-i18n="credits.communes">Communes</b> — <a href="https://data.geopf.fr/geocodage/" target="_blank" rel="noopener">Géoplateforme / BAN</a></li>
+      <li><b data-i18n="credits.aircraft">Moyens aériens</b> — <a href="https://airplanes.live/" target="_blank"
+          rel="noopener">Airplanes.live</a> <span data-i18n="credits.aircraft.note">(ADS-B communautaire, affichage non exhaustif)</span></li>
+      <li><b data-i18n="credits.render">Rendu</b> — <a href="https://maplibre.org/" target="_blank" rel="noopener">MapLibre GL</a>,
+          <span data-i18n="credits.render.icons">icônes</span> <a href="https://lucide.dev/" target="_blank" rel="noopener">Lucide</a> (ISC)</li>
     </ul>
     <p class="cr-foot">
-      <a href="https://github.com/rozierguillaume/flamap" target="_blank" rel="noopener">Code source</a> —
-      <a href="/archives.html">Feux archivés</a> —
-      <a href="/mentions-legales.html">Mentions légales &amp; confidentialité</a>
+      <a href="https://github.com/rozierguillaume/flamap" target="_blank" rel="noopener" data-i18n="credits.source">Code source</a> —
+      <a href="/archives.html" data-i18n="credits.archives">Feux archivés</a> —
+      <a href="/mentions-legales.html" data-i18n-href="credits.legal.href" data-i18n="credits.legal">Mentions légales &amp; confidentialité</a>
     </p>
     <span id="updated"></span>
   </div>
@@ -471,17 +508,19 @@
 <div id="activity-tip" role="tooltip"></div>
 <aside id="activity-panel" class="glass" role="dialog" aria-labelledby="activity-title">
   <header>
-    <h2 id="activity-title">Intensité des détections</h2>
-    <button id="activity-panel-close" aria-label="Fermer">×</button>
+    <h2 id="activity-title" data-i18n="activity.title">Intensité des détections</h2>
+    <button id="activity-panel-close" data-i18n-label="common.close" aria-label="Fermer">×</button>
   </header>
   <p id="activity-scope"></p>
-  <div id="activity-tabs" role="tablist" aria-label="Métrique du graphique">
+  <div id="activity-tabs" role="tablist" data-i18n-label="activity.tabs.aria" aria-label="Métrique du graphique">
     <button type="button" role="tab" data-activity-metric="frp"
-            aria-controls="activity-large" aria-selected="true">Puissance (MW)</button>
+            aria-controls="activity-large" aria-selected="true"
+            data-i18n="activity.tab.frp">Puissance (MW)</button>
     <button type="button" role="tab" data-activity-metric="count"
-            aria-controls="activity-large" aria-selected="false">Nombre de foyers</button>
+            aria-controls="activity-large" aria-selected="false"
+            data-i18n="activity.tab.count">Nombre de foyers</button>
   </div>
-  <div id="activity-large" role="img"
+  <div id="activity-large" role="img" data-i18n-label="activity.large.aria"
        aria-label="Nombre de foyers détectés à chaque passage satellite"></div>
   <div id="activity-detail" aria-live="polite"></div>
 </aside>

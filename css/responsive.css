@@ -67,7 +67,9 @@
        de lui plutôt qu'à côté : hors du flux, il ne rétrécit pas la réglette en
        s'ouvrant. C'est aussi ce qui rendait la barre du bas inutilisable entre
        721 et 900 px de large, où les 280 px de crédits mangeaient le curseur. */
-    #cr-btn { position: absolute; right: 14px; bottom: 0; padding: 8px 12px; }
+    #dock-foot { position: absolute; right: 14px; bottom: 0;
+                 display: flex; align-items: flex-end; gap: 6px; }
+    #cr-btn { padding: 8px 12px; }
     /* Au-dessus de toute la barre, pas seulement du bouton : la réglette est
        centrée dans la place qui reste et, sous 1300 px de large, il n'y a plus
        les 280 px du panneau entre son bord droit et celui de l'écran — il
@@ -297,14 +299,25 @@
     #timebar { grid-area: timeline; width: 100%; padding: 9px 12px; }
     #clock { font-size: clamp(18px, 5vw, 22px); }
 
-    #cr-btn {
-      grid-area: credits; position: static; justify-self: center;
+    /* La rangée du bas n'est plus une carte flottante mais une ligne de texte :
+       les deux boutons y perdent leur fond de verre au profit d'un simple lien. */
+    #dock-foot {
+      grid-area: credits; display: flex; justify-content: center;
+      align-items: baseline; gap: 12px;
+    }
+    #cr-btn, #lang-btn {
+      position: static; justify-self: center;
       height: auto; padding: 0; border: 0; border-radius: 0;
       background: transparent; box-shadow: none; backdrop-filter: none;
       -webkit-backdrop-filter: none; color: #aaa49e; white-space: nowrap;
       font-size: 10.5px; font-weight: 500; text-decoration: underline;
       text-decoration-color: #625e59; text-underline-offset: 3px;
     }
+    #lang-btn { position: relative; font-weight: 700; letter-spacing: .04em; }
+    /* Deux lettres de 10,5 px ne font pas une cible tactile. La zone est
+       élargie par un pseudo-élément, comme pour `#export-btn`, afin de ne pas
+       relever la hauteur de la ligne du bas. */
+    #lang-btn::before { content: ''; position: absolute; inset: -13px -12px; }
     #cr-btn::after { content: none; }
     #cr-btn .wide { display: none; }
     /* Le panneau s'ouvre sous les deux rangées de commandes de l'en-tête, sans
