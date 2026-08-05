@@ -22,6 +22,16 @@ export function aircraftBearing(from, to) {
   return (Math.atan2(east, north) * 180 / Math.PI + 360) % 360;
 }
 
+/* Enveloppe d'une réunion de rectangles. Sert à *cadrer* la caméra, jamais à
+ * définir un domaine de collecte : côté collecteur l'enveloppe ferait entrer le
+ * Rif et le littoral algérien dans l'Ibérie (voir `IBERIA_BOXES`). */
+export function unionBbox(boxes) {
+  return boxes.reduce((union, box) => [
+    Math.min(union[0], box[0]), Math.min(union[1], box[1]),
+    Math.max(union[2], box[2]), Math.max(union[3], box[3]),
+  ]);
+}
+
 export const signed = value =>
   `${value >= 0 ? '+' : '-'}${String(Math.abs(value)).padStart(2, '0')}`;
 

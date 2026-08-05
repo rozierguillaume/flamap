@@ -1,4 +1,5 @@
-import { getTimeZoneName, t } from './i18n.js';
+import { getLang, getTimeZoneName, t } from './i18n.js';
+import { unionBbox } from './util/geo.js';
 import { ago, confidenceText, fmt, fmtClock, nf } from './util/format.js';
 import { EMPTY, json } from './data/client.js';
 import { loadInitialData, loadRegionalWind } from './data/initial.js';
@@ -636,10 +637,30 @@ aircraftController = createAircraftController({
   },
 });
 
+/* Cadrage d'accueil : le domaine de la langue lue, et non la réunion de tous.
+ * Quelqu'un qui ouvre la carte en espagnol arrive sur l'Ibérie, comme un
+ * lecteur français arrive sur la France — cadrer d'emblée sur les deux
+ * n'apprendrait rien à personne.
+ *
+ * Les rectangles viennent du manifeste : ils suivent les régions réellement
+ * collectées, sans qu'une seconde emprise soit à tenir à jour ici. Les
+ * identifiants de région (`fr`, `es`) coïncident avec les codes de langue ; la
+ * table le dit tout de même, pour qu'une troisième langue n'hérite pas d'un
+ * domaine par hasard. Région absente — export ancien, collecte partielle — on
+ * retombe sur l'emprise complète. */
+const HOME_REGION = { fr: 'fr', es: 'es' };
+
+const homeRegion = () => zonesController.getManifest()?.regions
+  ?.find(region => region.id === HOME_REGION[getLang()]) || null;
+
+function homeBbox() {
+  const boxes = homeRegion()?.boxes;
+  return boxes?.length ? unionBbox(boxes)
+    : (zonesController.getManifest()?.bbox || FRANCE_BBOX);
+}
+
 function fitDomain(duration = 850) {
-  // L'emprise vient du manifeste : elle suit les régions réellement collectées,
-  // sans qu'une seconde bbox soit à tenir à jour ici.
-  const box = zonesController.getManifest()?.bbox || FRANCE_BBOX;
+  const box = homeBbox();
   const bounds = new maplibregl.LngLatBounds([box[0], box[1]], [box[2], box[3]]);
   const dockH = document.getElementById('dock').offsetHeight;
   map.fitBounds(bounds, {
@@ -1020,7 +1041,15 @@ async function init() {
   if (!HAS_MAP_HASH) {
     // Le premier cadrage privilégie la lecture du feu principal, tout en
     // restant sous le zoom 9 où ses disques PSFDF s'effacent.
-    if (shortcuts.length) psfdfController.focusIncident(shortcuts[0], 850, 8.8);
+    //
+    // Ces raccourcis sont éditorialisés par PSFDF, donc français. Les écarter
+    // par leurs coordonnées ne marcherait pas : les rectangles ibériques
+    // mordent volontairement sur les Pyrénées et le Roussillon, et un lecteur
+    // espagnol ouvrirait la carte sur un feu de Cerdagne. C'est le manifeste
+    // qui dit quelle région porte ce suivi ; ailleurs, on cadre le domaine.
+    const region = homeRegion();
+    if (shortcuts.length && (!region || region.psfdf))
+      psfdfController.focusIncident(shortcuts[0], 850, 8.8);
     else fitDomain(0);
   }
 

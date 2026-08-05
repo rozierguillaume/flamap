@@ -6,6 +6,7 @@ import {
   aircraftCurve,
   distanceKm,
   signed,
+  unionBbox,
   zoneId,
 } from '../../js/util/geo.js';
 
@@ -37,4 +38,10 @@ test('signed et zoneId conservent le nommage des cellules', () => {
   assert.equal(signed(-3), '-03');
   assert.equal(signed(0), '+00');
   assert.equal(zoneId(5, -3), 'x+05_y-03');
+});
+
+test('unionBbox enveloppe les rectangles ibériques du manifeste', () => {
+  const iberia = [[-9.8, 36.0, -1.5, 44.0], [-1.5, 37.4, 4.6, 43.0]];
+  assert.deepEqual(unionBbox(iberia), [-9.8, 36.0, 4.6, 44.0]);
+  assert.deepEqual(unionBbox([[-5.5, 41.0, 10.0, 51.5]]), [-5.5, 41.0, 10.0, 51.5]);
 });
