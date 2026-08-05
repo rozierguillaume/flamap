@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 
-<title>Incendies en France : carte en quasi temps réel | Flamap</title>
-<meta name="description" content="Carte des incendies et feux de forêt en France : foyers actifs par satellite, surfaces brûlées, vent et évolution, mise à jour toutes les 30 minutes.">
+<title>Incendies en France et en Espagne : carte en quasi temps réel | Flamap</title>
+<meta name="description" content="Carte des incendies et feux de forêt en France, en Espagne et au Portugal : foyers actifs par satellite, surfaces brûlées, vent et évolution, mise à jour toutes les 30 minutes.">
 <link rel="canonical" href="https://flamap.fr/">
 <meta name="theme-color" content="#0d0f12">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; script-src 'self' 'sha256-DWxYuUWoe8pTdDte9SzXJM+JAgUNdWaV03Y4VMzKrX0=' https://analytics.flamap.fr; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://data.geopf.fr https://tiles.maps.eox.at; font-src 'self'; connect-src 'self' https://analytics.flamap.fr https://api.airplanes.live https://api.flamap.fr https://data.geopf.fr https://tiles.openfreemap.org https://tiles.maps.eox.at; worker-src blob:; manifest-src 'self'; form-action 'self'">
@@ -21,18 +21,18 @@
 <meta property="og:site_name" content="Flamap">
 <meta property="og:locale" content="fr_FR">
 <meta property="og:url" content="https://flamap.fr/">
-<meta property="og:title" content="Incendies en France : la carte Flamap en quasi temps réel">
-<meta property="og:description" content="Suivez les foyers actifs détectés par satellite, les surfaces brûlées, le vent et l'évolution des feux en France.">
+<meta property="og:title" content="Incendies en France et en Espagne : la carte Flamap en quasi temps réel">
+<meta property="og:description" content="Suivez les foyers actifs détectés par satellite, les surfaces brûlées, le vent et l'évolution des feux en France et dans la péninsule Ibérique.">
 <meta property="og:image" content="https://flamap.fr/og.png">
 <meta property="og:image:type" content="image/png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="Flamap, carte satellite des incendies en France.">
+<meta property="og:image:alt" content="Flamap, carte satellite des incendies en France et en Espagne.">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="Incendies en France : la carte Flamap en quasi temps réel">
+<meta name="twitter:title" content="Incendies en France et en Espagne : la carte Flamap en quasi temps réel">
 <meta name="twitter:description" content="Foyers actifs par satellite, surfaces brûlées, vent et évolution des feux, mis à jour toutes les 30 min.">
 <meta name="twitter:image" content="https://flamap.fr/og.png">
-<meta name="twitter:image:alt" content="Flamap, carte satellite des incendies en France.">
+<meta name="twitter:image:alt" content="Flamap, carte satellite des incendies en France et en Espagne.">
 
 <!-- `initReady` attend `isStyleLoaded()`, donc le TileJSON d'OpenFreeMap, et
      `mapReady` attend les tuiles IGN et Sentinel-2. Ouvrir les trois connexions
@@ -102,21 +102,21 @@
       "@id": "https://flamap.fr/#website",
       "url": "https://flamap.fr/",
       "name": "Flamap",
-      "alternateName": "Carte des incendies en France",
+      "alternateName": "Carte des incendies en France et en Espagne",
       "inLanguage": "fr-FR",
-      "description": "Carte des incendies et feux de forêt en France en quasi temps réel."
+      "description": "Carte des incendies et feux de forêt en France, en Espagne et au Portugal en quasi temps réel."
     },
     {
       "@type": "WebApplication",
       "@id": "https://flamap.fr/#application",
-      "name": "Flamap — carte des incendies en France",
+      "name": "Flamap — carte des incendies en France et en Espagne",
       "url": "https://flamap.fr/",
       "isPartOf": { "@id": "https://flamap.fr/#website" },
       "applicationCategory": "UtilitiesApplication",
       "operatingSystem": "Tout système avec un navigateur web",
       "inLanguage": "fr-FR",
       "isAccessibleForFree": true,
-      "description": "Carte interactive des incendies en France : foyers actifs détectés par les satellites NASA FIRMS, surfaces brûlées Copernicus EFFIS, vent et évolution temporelle, avec une mise à jour toutes les 30 minutes.",
+      "description": "Carte interactive des incendies en France, en Espagne et au Portugal : foyers actifs détectés par les satellites NASA FIRMS, surfaces brûlées Copernicus EFFIS, vent et évolution temporelle, avec une mise à jour toutes les 30 minutes.",
       "featureList": [
         "Foyers d'incendie actifs détectés par satellite",
         "Surfaces brûlées récentes",
@@ -169,20 +169,21 @@
       <circle cx="17" cy="31.5" r="1.5" fill="var(--front)"></circle>
       <circle cx="34" cy="30"   r="1.4" fill="var(--hot)"></circle>
     </svg>
-    <h1><span class="brand-hot">Fla</span>map<span class="sr-only"> — carte des incendies en France en quasi temps réel</span></h1>
+    <h1><span class="brand-hot">Fla</span>map<span class="sr-only"> — carte des incendies en France et en Espagne en quasi temps réel</span></h1>
   </div>
-  <button id="home-btn" type="button" aria-label="Recentrer la carte sur la France"
-          title="Recentrer sur la France"></button>
+  <button id="home-btn" type="button" aria-label="Recentrer la carte sur la vue d’ensemble"
+          title="Recentrer sur la vue d’ensemble"></button>
   <section class="sr-only" aria-label="Présentation de Flamap">
-    <h2>Suivre les incendies et feux de forêt en cours en France</h2>
-    <p>Flamap est une carte des incendies en France mise à jour toutes les 30
+    <h2>Suivre les incendies et feux de forêt en cours en France et en Espagne</h2>
+    <p>Flamap est une carte des incendies mise à jour toutes les 30
     minutes. Elle affiche les foyers actifs détectés par les satellites NASA
     FIRMS, les surfaces brûlées publiées par Copernicus EFFIS et le vent à
-    10 mètres du modèle AROME de Météo-France.</p>
+    10 mètres, issu du modèle AROME de Météo-France sur la France et d’un
+    modèle européen sur la péninsule Ibérique.</p>
     <p>La frise temporelle permet de suivre l'évolution récente des feux,
     d'observer les passages satellite et de repérer les zones touchées. Les
-    données sont publiques et la carte couvre la France métropolitaine ainsi
-    que la Corse.</p>
+    données sont publiques et la carte couvre la France métropolitaine et la
+    Corse, l'Espagne continentale, les Baléares et le Portugal.</p>
   </section>
 </div>
 <div id="incidents" hidden aria-label="Raccourcis vers les incendies importants"></div>
@@ -207,8 +208,8 @@
 </aside>
 <!-- Placé après le panneau pour que `#psfdf-panel.open ~ #psfdf-back` puisse
      l'effacer : la fiche dépliée reprend toute la largeur. -->
-<button id="psfdf-back" class="glass" type="button" title="Revenir à la vue France"
-        aria-label="Retour à la vue France">
+<button id="psfdf-back" class="glass" type="button" title="Revenir à la vue d’ensemble"
+        aria-label="Retour à la vue d’ensemble">
   <svg viewBox="0 0 24 24" aria-hidden="true">
     <path d="m15 6-6 6 6 6" stroke-linecap="round" stroke-linejoin="round"/>
   </svg>
@@ -440,9 +441,10 @@
           (VIIRS 375 m &amp; MODIS, LANCE/EOSDIS)</li>
       <li><b>Surfaces brûlées</b> — <a href="https://forest-fire.emergency.copernicus.eu/" target="_blank" rel="noopener">Copernicus EFFIS</a></li>
       <li><b>Incendies signalés et statuts</b> — <a href="https://association-psfdf.fr/pages/carte.html" target="_blank" rel="noopener">Association Prévention et Signalement Feux de Forêt (PSFDF)</a></li>
-      <li><b>Vent à 10 m</b> — modèle <a href="https://meteofrance.com/" target="_blank" rel="noopener">AROME HD</a>
-          de Météo-France, servi par <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a> (CC BY 4.0)</li>
-      <li><b>Fumée</b> — simulation indicative à partir de la puissance radiative FIRMS et du vent AROME,
+      <li><b>Vent à 10 m</b> — modèles <a href="https://meteofrance.com/" target="_blank" rel="noopener">AROME HD</a>
+          sur la France et ARPEGE Europe sur la péninsule Ibérique, de Météo-France,
+          servis par <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a> (CC BY 4.0)</li>
+      <li><b>Fumée</b> — simulation indicative à partir de la puissance radiative FIRMS et du vent modélisé,
           et non mesure de qualité de l'air</li>
       <li><b>Fond</b> — ortho-photo <a href="https://geoservices.ign.fr/" target="_blank" rel="noopener">IGN-F/Géoplateforme</a>,
           hors France <a href="https://s2maps.eu" target="_blank" rel="noopener">Sentinel-2 cloudless</a> par EOX

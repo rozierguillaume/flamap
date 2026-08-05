@@ -90,7 +90,7 @@ class FirmsTests(unittest.TestCase):
             ),
         ):
             with self.assertRaises(SystemExit) as raised:
-                firms.fetch_hotspots((-5.5, 41.0, 10.0, 51.5))
+                firms.fetch_hotspots([(-5.5, 41.0, 10.0, 51.5)])
 
         self.assertEqual(raised.exception.code, 75)
 
@@ -116,7 +116,7 @@ class FirmsTests(unittest.TestCase):
             )
             with mock.patch.object(firms, "ZONES_OUT", directory):
                 result = firms.extend_hotspot_history(
-                    firms.fc([current]), (-5.5, 41.0, 10.0, 51.5)
+                    firms.fc([current]), [(-5.5, 41.0, 10.0, 51.5)]
                 )
 
         self.assertEqual(result["features"], [kept, current])

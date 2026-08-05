@@ -93,11 +93,11 @@ export function createActivityController({
     if (changed) drawActivity();
   }
 
-  /* La frise n'est nationale que lorsque l'emprise de la carte contient
-   * réellement toute la bbox France. Un seuil de zoom ne suffit pas : à zoom
-   * égal, un téléphone montre beaucoup moins de territoire qu'un ordinateur.
-   * Dès qu'une partie du pays sort de l'écran, la frise suit donc l'emprise
-   * visible et les sources cochées.
+  /* La frise n'est d'ensemble que lorsque l'emprise de la carte contient
+   * réellement toute la bbox du manifeste. Un seuil de zoom ne suffit pas : à
+   * zoom égal, un téléphone montre beaucoup moins de territoire qu'un
+   * ordinateur. Dès qu'une partie du domaine sort de l'écran, la frise suit
+   * donc l'emprise visible et les sources cochées.
    *
    * Les passages locaux sont reconstruits séparément pour chaque satellite :
    * deux détections distantes de moins de 25 minutes appartiennent à la même
@@ -123,7 +123,7 @@ export function createActivityController({
 
     // Sous le seuil de chargement des cellules détaillées, l'aperçu national
     // contient déjà une somme par cellule de 0,25°, heure et satellite. On peut
-    // donc le découper spatialement sans télécharger toute la France.
+    // donc le découper spatialement sans télécharger tout le domaine.
     if (map.getZoom() < manifest.detail_zoom) {
       const grouped = new Map();
       for (const feature of overview) {
@@ -199,7 +199,7 @@ export function createActivityController({
     document.getElementById('activity-scope').textContent =
       activityEl.dataset.scope === 'local'
         ? `Passages dans la zone visible — échelle adaptée au pic local — ligne jaune : ${activityAverageText}.`
-        : `Passages sur l'ensemble de la France — ligne jaune : ${activityAverageText}.`;
+        : `Passages sur l'ensemble du domaine couvert — ligne jaune : ${activityAverageText}.`;
     document.getElementById('activity-title').textContent =
       activityMetric === 'frp' ? 'Puissance radiative détectée' : 'Nombre de foyers détectés';
     activityLarge.setAttribute('aria-label',
@@ -256,7 +256,7 @@ export function createActivityController({
     // petit passage local en pic maximal.
     const peak = Math.max(...steps.filter(s => s.kind === 'sat').map(value), 1);
     const local = !activityIsNational();
-    const scope = local ? 'dans la zone visible' : "sur l'ensemble de la France";
+    const scope = local ? 'dans la zone visible' : "sur l'ensemble du domaine couvert";
     const metric = activityMetric === 'frp' ? 'puissance radiative' : 'nombre de foyers';
     renderedActivity = passages;
     activityPeak = peak;

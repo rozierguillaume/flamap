@@ -29,12 +29,19 @@ def export_payload():
         "social_timeline.json": [],
         "wind_coarse.json": {
             "nt": 2, "temperature": [[1], [2]], "precipitation": [[0], [0]],
+            "u": [[0], [0]], "v": [[0], [0]], "gust": [[0], [0]],
+        },
+        "wind_coarse_es.json": {
+            "nt": 2, "u": [[0], [0]], "v": [[0], [0]], "gust": [[0], [0]],
         },
         "weather_forecast.json": {
             "nt": 2, "u": [[0], [0]], "v": [[0], [0]], "gust": [[0], [0]],
         },
         "manifest.json": {
             "hotspot_count": 1, "zones": ["x+01_y+43"], "fine_wind_zones": [],
+            "wind_fields": [
+                {"file": "wind_coarse.json"}, {"file": "wind_coarse_es.json"},
+            ],
         },
     }, {"x+01_y+43": zone}
 
@@ -80,6 +87,28 @@ class WriterTests(unittest.TestCase):
                 publish_export(str(root), files, zones)
 
             self.assertEqual((root / "manifest.json").read_text(), '{"old":true}')
+
+    def test_regional_wind_field_announced_but_missing_blocks_publication(self):
+        files, zones = export_payload()
+        del files["wind_coarse_es.json"]
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory, "data")
+            root.mkdir()
+            (root / "manifest.json").write_text('{"old":true}', encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "wind_coarse_es.json"):
+                publish_export(str(root), files, zones)
+
+            self.assertEqual((root / "manifest.json").read_text(), '{"old":true}')
+
+    def test_publication_carries_every_regional_wind_field(self):
+        files, zones = export_payload()
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory, "data")
+            root.mkdir()
+            publish_export(str(root), files, zones)
+
+            self.assertTrue((root / "wind_coarse_es.json").is_file())
 
     def test_thermal_is_validated_before_its_atomic_replacement(self):
         with tempfile.TemporaryDirectory() as directory:

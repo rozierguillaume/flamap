@@ -113,6 +113,19 @@ class RecordKeyTest(unittest.TestCase):
         self.assertNotEqual(base["_k"], refined["_k"])
         self.assertEqual(base["lu"], refined["lu"])
 
+    def test_region_de_collecte_ne_change_pas_l_empreinte(self):
+        """`_r` est une métadonnée de collecte, pas un attribut EFFIS.
+
+        La laisser entrer dans l'empreinte referait une ligne neuve pour chaque
+        périmètre déjà archivé.
+        """
+        tagged = polygon()
+        tagged["properties"]["_r"] = "fr"
+        base = list(effis_records({"features": [polygon()]}, seen=JULY))[0]
+        with_region = list(effis_records({"features": [tagged]}, seen=JULY))[0]
+        self.assertEqual(base["_k"], with_region["_k"])
+        self.assertNotIn("_r", with_region["props"])
+
     def test_partition_mensuelle_suit_l_observation(self):
         record = list(firms_records({"features": [hotspot()]}, seen=JULY))[0]
         self.assertEqual(record["_p"], period(JULY))

@@ -17,6 +17,31 @@ def swap_axes(geometry):
     return geometry
 
 
+def bbox_contains(bbox, lon, lat):
+    west, south, east, north = bbox
+    return west <= lon <= east and south <= lat <= north
+
+
+def in_any_bbox(boxes, lon, lat):
+    """Le domaine collecte est une reunion de rectangles, pas un seul.
+
+    Un rectangle unique autour de la peninsule iberique attraperait le Rif et
+    tout le littoral algerien, qui brulent beaucoup l'ete : les foyers FIRMS y
+    apparaitraient sans le moindre perimetre EFFIS en face.
+    """
+    return any(bbox_contains(bbox, lon, lat) for bbox in boxes)
+
+
+def union_bbox(boxes):
+    boxes = list(boxes)
+    return (
+        min(box[0] for box in boxes),
+        min(box[1] for box in boxes),
+        max(box[2] for box in boxes),
+        max(box[3] for box in boxes),
+    )
+
+
 def geometry_points(geometry):
     def walk(coords):
         if (

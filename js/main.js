@@ -1,6 +1,6 @@
 import { ago, confidenceText, fmt, fmtClock, nf } from './util/format.js';
 import { EMPTY, json } from './data/client.js';
-import { loadInitialData } from './data/initial.js';
+import { loadInitialData, loadRegionalWind } from './data/initial.js';
 import { createZonesController } from './data/zones.js';
 import { createBurntController } from './features/burnt.js';
 import { createAircraftController } from './features/aircraft.js';
@@ -101,11 +101,13 @@ new ResizeObserver(() => positionAgeLabels(document.getElementById('ageramp')))
   .observe(document.getElementById('ageramp'));
 
 const ZOOM_SCALE = zoomScaleFor(MOBILE);
+// Emprise de repli, le temps que le manifeste arrive et pour les anciens
+// exports locaux qui n'annoncent que la France.
 const FRANCE_BBOX = [-5.5, 41.0, 10.0, 51.5];
 
 // MapLibre lit et maintient automatiquement #map=zoom/latitude/longitude.
-// Le test sert plus bas à ne pas recadrer sur la France par-dessus un lien
-// partagé qui porte déjà une caméra.
+// Le test sert plus bas à ne pas recadrer sur la vue d'ensemble par-dessus un
+// lien partagé qui porte déjà une caméra.
 const HAS_MAP_HASH = /^#map=/.test(location.hash);
 const map = createMap({ maplibregl, mobile: MOBILE });
 const panelManager = createPanelManager();
@@ -598,7 +600,7 @@ psfdfController = createPsfdfController({
   trackUsage,
   stopTimeline: () => timelineController.stop(),
   setTime,
-  backToFrance: () => backToFrance(),
+  backToDomain: () => backToDomain(),
   elements: {
     incidents: document.getElementById('incidents'),
     panel: document.getElementById('psfdf-panel'),
@@ -627,9 +629,11 @@ aircraftController = createAircraftController({
   },
 });
 
-function fitFrance(duration = 850) {
-  const bounds = new maplibregl.LngLatBounds(
-    [FRANCE_BBOX[0], FRANCE_BBOX[1]], [FRANCE_BBOX[2], FRANCE_BBOX[3]]);
+function fitDomain(duration = 850) {
+  // L'emprise vient du manifeste : elle suit les régions réellement collectées,
+  // sans qu'une seconde bbox soit à tenir à jour ici.
+  const box = zonesController.getManifest()?.bbox || FRANCE_BBOX;
+  const bounds = new maplibregl.LngLatBounds([box[0], box[1]], [box[2], box[3]]);
   const dockH = document.getElementById('dock').offsetHeight;
   map.fitBounds(bounds, {
     padding: {
@@ -641,14 +645,14 @@ function fitFrance(duration = 850) {
   });
 }
 
-function backToFrance() {
+function backToDomain() {
   timelineController.stop();
-  fitFrance();
+  fitDomain();
 }
 
 document.getElementById('home-btn').addEventListener('click', () => {
   trackUsage('home-france');
-  backToFrance();
+  backToDomain();
 });
 
 /* Le niveau national emploie les cellules agrégées ; dès que les paquets
@@ -741,7 +745,10 @@ function weatherBlock(root, lngLat, { divider = true, stamp = false } = {}) {
   const wind = windPhrase(lngLat.lng, lngLat.lat);
   block.append(popEl('div', 'wind',
     wind || 'Modèle de vent non couvert à cet endroit.'));
-  if (stamp) block.append(popEl('div', 'row dim', `AROME, au ${fmt(timelineController.getTime())}`));
+  const model = windController.modelAt(lngLat.lng, lngLat.lat);
+  if (stamp && model)
+    block.append(popEl('div', 'row dim',
+      `${model}, au ${fmt(timelineController.getTime())}`));
 
   const button = popEl('button', '', 'Prévisions météo');
   button.addEventListener('click', () => {
@@ -953,6 +960,15 @@ async function init() {
 
   if (windData && windData.nt > 1) {
     windController.configure(windData);
+    loadRegionalWind(manifest).then(fields => {
+      if (destroyed) return;
+      const added = fields.filter(field => field && field.nt > 1);
+      if (!added.length) return;
+      added.forEach(field => windController.addField(field));
+      // Le cran courant a été posé sans ces champs : il faut le rejouer pour
+      // que la nappe et la fumée les prennent en compte.
+      windTime(windController.getTime(), true);
+    });
     centerProbe.hidden = false;
     temperatureBadge();
     windResize();
@@ -1007,7 +1023,7 @@ async function init() {
     // Le premier cadrage privilégie la lecture du feu principal, tout en
     // restant sous le zoom 9 où ses disques PSFDF s'effacent.
     if (shortcuts.length) psfdfController.focusIncident(shortcuts[0], 850, 8.8);
-    else fitFrance(0);
+    else fitDomain(0);
   }
 
   // Un seul aiguillage pour tous les clics : voir la section « FICHES AU CLIC ».

@@ -5,7 +5,7 @@ import os
 import shutil
 import tempfile
 
-from flamap.validation import ROOT_FILES, validate_export
+from flamap.validation import validate_export
 
 
 def write_json(path, data, compact=True):
@@ -47,7 +47,15 @@ def replace_export(staged, out):
     root = os.path.dirname(staged)
     backup = os.path.join(root, "previous")
     os.makedirs(out, exist_ok=True)
-    names = ["zones", *ROOT_FILES, "manifest.json"]
+    # La liste vient du repertoire prepare, pas d'une constante : les champs de
+    # vent regionaux s'ajoutent avec les regions, et un fichier oublie ici
+    # resterait invisible du site publie. Le manifeste passe toujours en
+    # dernier.
+    extras = sorted(
+        name for name in os.listdir(staged)
+        if name not in ("zones", "manifest.json")
+    )
+    names = ["zones", *extras, "manifest.json"]
     replaced = []
     try:
         for name in names:

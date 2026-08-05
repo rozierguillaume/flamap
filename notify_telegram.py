@@ -23,6 +23,8 @@ import sys
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
+from flamap.geo import in_any_bbox
+
 SITE = "https://flamap.fr"
 PARIS = ZoneInfo("Europe/Paris")
 MONTHS = ["janv.", "févr.", "mars", "avril", "mai", "juin", "juil.",
@@ -32,7 +34,67 @@ MONTHS = ["janv.", "févr.", "mars", "avril", "mai", "juin", "juil.",
 MAX_LISTED = 5
 
 
-def load_zones(root, zone_ids):
+def zone_center(zone_id, tile_deg):
+    """Centre d'une cellule, depuis son identifiant `x+00_y+41`."""
+    x, _, y = zone_id.partition("_")
+    return int(x[1:]) + tile_deg / 2, int(y[1:]) + tile_deg / 2
+
+
+def notified_regions(manifest):
+    """Identifiants des régions que le canal annonce, `None` s'il n'y en a pas.
+
+    `None` vaut « ne filtre rien » : un manifeste antérieur aux régions décrit
+    un jeu entièrement français.
+    """
+    regions = manifest.get("regions")
+    if not isinstance(regions, list):
+        return None
+    return {region.get("id") for region in regions if region.get("notify")}
+
+
+def notified_zones(manifest, zone_ids):
+    """Restreint le diff aux régions que le canal annonce.
+
+    Le canal est francophone et nomme des communes françaises : les régions
+    collectées mais non annoncées — l'Ibérie — sont cartographiées sans être
+    commentées. Un manifeste antérieur à `regions` n'est pas filtré : il n'y
+    avait alors qu'une région, la France.
+    """
+    regions = manifest.get("regions")
+    if not isinstance(regions, list):
+        return zone_ids
+    boxes = [
+        box for region in regions if region.get("notify")
+        for box in region.get("boxes", [])
+    ]
+    if not boxes:
+        return []
+    tile_deg = manifest.get("tile_deg", 1)
+    return [
+        zone_id for zone_id in zone_ids
+        if in_any_bbox(boxes, *zone_center(zone_id, tile_deg))
+    ]
+
+
+def announced(prop, regions):
+    """Un objet EFFIS relève-t-il d'une région annoncée ?
+
+    Les cellules de bordure sont partagées : borner le diff aux cellules du
+    domaine français y laisse entrer les périmètres espagnols, qui seraient
+    annoncés avec leur commune espagnole. La région d'origine, posée à la
+    collecte, est le seul discriminant — la couche NRT n'a même pas de pays.
+
+    Un objet sans région est un objet collecté avant cette distinction : il est
+    conservé, sans quoi la première comparaison avec le site publié verrait
+    chaque périmètre français comme une nouveauté.
+    """
+    if regions is None:
+        return True
+    origin = prop.get("_r")
+    return origin is None or origin in regions
+
+
+def load_zones(root, zone_ids, regions=None):
     """Renvoie les ensembles d'identifiants d'un jeu de paquets de zones.
 
     `missing` remonte les zones absentes : c'est le seul moyen de distinguer un
@@ -57,11 +119,12 @@ def load_zones(root, zone_ids):
             hotspots[(prop.get("source"), prop.get("ts"), lon, lat)] = prop
         for feature in zone.get("burnt_dated", {}).get("features", []):
             prop = feature["properties"]
-            if prop.get("_id"):
+            if prop.get("_id") and announced(prop, regions):
                 dated[prop["_id"]] = prop
         for feature in zone.get("burnt_nrt", {}).get("features", []):
-            if feature.get("properties", {}).get("_id"):
-                nrt.add(feature["properties"]["_id"])
+            prop = feature.get("properties", {})
+            if prop.get("_id") and announced(prop, regions):
+                nrt.add(prop["_id"])
     return {"hotspots": hotspots, "dated": dated, "nrt": nrt,
             "missing": missing}
 
@@ -180,8 +243,16 @@ def main():
     if skipped > 0:
         print(f"{skipped} {plural(skipped, 'zone')} hors référence, "
               f"{plural(skipped, 'écartée')} du diff")
+    # Le filtre vient du manifeste frais : c'est lui qui décrit les régions du
+    # jeu qu'on est en train de comparer.
+    zones, collected = notified_zones(manifest, zones), len(zones)
+    silent = collected - len(zones)
+    if silent > 0:
+        print(f"{silent} {plural(silent, 'zone')} hors périmètre d'annonce, "
+              f"{plural(silent, 'cartographiée')} sans être {plural(silent, 'commentée')}")
+    regions = notified_regions(manifest)
 
-    before = load_zones(prev_root / "zones", zones)
+    before = load_zones(prev_root / "zones", zones, regions)
     if before["missing"]:
         count = len(before["missing"])
         print(f"::warning::{count} {plural(count, 'zone')} "
@@ -190,7 +261,7 @@ def main():
         emit({"fresh": "false"})
         return 0
 
-    after = load_zones(data_root / "zones", zones)
+    after = load_zones(data_root / "zones", zones, regions)
     if after["missing"]:
         # Le garde-fou du workflow a déjà vérifié la complétude ; si ça arrive
         # quand même, mieux vaut ne rien annoncer que d'annoncer à moitié.

@@ -37,6 +37,7 @@ class EffisTests(unittest.TestCase):
                 self.assertEqual(cli.fetch_burnt("bbox"), "burnt")
         fetch.assert_called_once_with(
             "bbox",
+            countries=("FR",),
             wfs=wfs,
             swap=cli.swap_axes,
             epoch=cli.to_epoch,
@@ -70,6 +71,56 @@ class EffisTests(unittest.TestCase):
 
         self.assertEqual(len(result["burnt_dated"]["features"]), 2)
         self.assertEqual(result["burnt_nrt"]["features"], [])
+
+    def test_country_filter_selects_the_perimeters_of_the_region(self):
+        dated = load_json("effis.geojson")
+        with mock.patch.object(
+            effis, "effis_wfs",
+            side_effect=[copy.deepcopy(dated), {"type": "FeatureCollection",
+                                                "features": []}],
+        ):
+            result = effis.fetch_burnt((1, 2, 3, 4), countries=("ES", "PT"))
+
+        self.assertEqual(len(result["burnt_dated"]["features"]), 1)
+
+    def test_merge_drops_the_nrt_scars_seen_by_two_overlapping_regions(self):
+        shared = {"type": "Feature", "geometry": {"type": "Point",
+                                                  "coordinates": [1, 42]},
+                  "properties": {"_id": "n-partage"}}
+        french = {"type": "Feature", "geometry": {"type": "Point",
+                                                  "coordinates": [2, 48]},
+                  "properties": {"_id": "d-fr", "FIREDATE": "2026-07-01"}}
+        spanish = {"type": "Feature", "geometry": {"type": "Point",
+                                                   "coordinates": [-4, 40]},
+                   "properties": {"_id": "d-es", "FIREDATE": "2026-06-01"}}
+        merged = effis.merge_burnt([
+            {"burnt_dated": effis.fc([french]),
+             "burnt_nrt": effis.fc([copy.deepcopy(shared)])},
+            {"burnt_dated": effis.fc([spanish]),
+             "burnt_nrt": effis.fc([copy.deepcopy(shared)])},
+        ])
+
+        self.assertEqual(len(merged["burnt_nrt"]["features"]), 1)
+        self.assertEqual(
+            [feature["properties"]["_id"]
+             for feature in merged["burnt_dated"]["features"]],
+            ["d-es", "d-fr"],
+        )
+
+    def test_each_region_is_queried_with_its_own_envelope_and_countries(self):
+        regions = (
+            {"label": "A", "boxes": ((0, 0, 1, 1), (1, 0.5, 2, 1.5)),
+             "countries": ("FR",)},
+            {"label": "B", "boxes": ((-3, -2, -1, 0),), "countries": ("ES", "PT")},
+        )
+        empty = {"burnt_dated": effis.fc([]), "burnt_nrt": effis.fc([])}
+        with mock.patch.object(cli, "fetch_burnt", return_value=empty) as fetch:
+            cli.fetch_burnt_regions(regions)
+
+        self.assertEqual(
+            sorted(call.args for call in fetch.call_args_list),
+            [((-3, -2, -1, 0), ("ES", "PT")), ((0, 0, 2, 1.5), ("FR",))],
+        )
 
 
 class PsfdfTests(unittest.TestCase):

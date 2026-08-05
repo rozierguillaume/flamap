@@ -4,7 +4,9 @@
 from __future__ import annotations
 
 import argparse
+import functools
 import http.server
+import pathlib
 
 
 class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
@@ -26,9 +28,17 @@ class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, default=8777)
+    parser.add_argument(
+        "--root", type=pathlib.Path, default=pathlib.Path("."),
+        help="racine servie : le depot, ou un artefact assemble comme _dev",
+    )
     args = parser.parse_args()
-    server = http.server.ThreadingHTTPServer(("", args.port), NoCacheHandler)
-    print(f"Flamap sans cache sur http://127.0.0.1:{args.port}/")
+    if not args.root.is_dir():
+        raise SystemExit(f"racine introuvable : {args.root}")
+    handler = functools.partial(NoCacheHandler, directory=str(args.root))
+    server = http.server.ThreadingHTTPServer(("", args.port), handler)
+    print(f"Flamap sans cache sur http://127.0.0.1:{args.port}/ "
+          f"(racine {args.root})")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
