@@ -100,6 +100,11 @@ def effis_records(dated, seen):
         identifier = prop.pop("_id", None)
         ts = prop.pop("ts", None)
         lu = prop.pop("lu", None) or ts
+        # Les clés préfixées sont nos métadonnées de collecte, pas des attributs
+        # EFFIS. Les laisser entrer dans l'empreinte referait une ligne neuve
+        # pour chaque périmètre déjà archivé le jour où l'une d'elles change.
+        prop = {key: value for key, value in prop.items()
+                if not key.startswith("_")}
         yield stamp({
             "id": identifier,
             "ts": ts,

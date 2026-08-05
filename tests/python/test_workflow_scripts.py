@@ -221,6 +221,37 @@ class TelegramScopeTest(unittest.TestCase):
         self.assertEqual(TELEGRAM.zone_center("x-04_y+39", 1), (-3.5, 39.5))
         self.assertEqual(TELEGRAM.zone_center("x+02_y+47", 1), (2.5, 47.5))
 
+    def test_border_cells_do_not_smuggle_foreign_perimeters(self):
+        """Une cellule de bordure porte les objets des deux régions."""
+        regions = TELEGRAM.notified_regions(self.MANIFEST)
+        self.assertEqual(regions, {"fr"})
+        self.assertTrue(TELEGRAM.announced({"_r": "fr"}, regions))
+        self.assertFalse(TELEGRAM.announced({"_r": "es"}, regions))
+        # Jeu collecté avant la distinction : entièrement français, conservé.
+        self.assertTrue(TELEGRAM.announced({}, regions))
+        self.assertTrue(TELEGRAM.announced({"_r": "es"}, None))
+
+    def test_only_the_notified_region_reaches_the_diff(self):
+        zone = {
+            "hotspots": {"features": []},
+            "burnt_dated": {"features": [
+                {"properties": {"_id": "d-fr", "_r": "fr"}},
+                {"properties": {"_id": "d-es", "_r": "es"}},
+                {"properties": {"_id": "d-vieux"}},
+            ]},
+            "burnt_nrt": {"features": [
+                {"properties": {"_id": "n-fr", "_r": "fr"}},
+                {"properties": {"_id": "n-es", "_r": "es"}},
+            ]},
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            (root / "x-01_y+42.json").write_text(json.dumps(zone))
+            loaded = TELEGRAM.load_zones(root, ["x-01_y+42"], {"fr"})
+
+        self.assertEqual(set(loaded["dated"]), {"d-fr", "d-vieux"})
+        self.assertEqual(loaded["nrt"], {"n-fr"})
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -376,6 +376,15 @@ def fetch_burnt_regions(regions):
             ),
             regions,
         ))
+    # La region d'origine voyage avec l'objet : les cellules de bordure sont
+    # partagees, un perimetre espagnol atterrit donc dans une cellule du domaine
+    # francais et rien dans sa geometrie ne dit d'ou il vient. La couche NRT n'a
+    # meme pas de pays. `merge_burnt` gardant la premiere version d'un doublon,
+    # un objet vu par deux regions porte celle qui vient en tete.
+    for region, part in zip(regions, parts):
+        for key in ("burnt_dated", "burnt_nrt"):
+            for feature in part[key]["features"]:
+                feature["properties"]["_r"] = region["id"]
     return merge_burnt(parts) if len(parts) > 1 else parts[0]
 
 
@@ -752,6 +761,7 @@ def main():
                 "id": region["id"],
                 "label": region["label"],
                 "boxes": [list(box) for box in region["boxes"]],
+                "countries": list(region["countries"]),
                 "psfdf": region["psfdf"],
                 "notify": region["notify"],
             }
