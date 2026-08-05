@@ -23,6 +23,8 @@ import sys
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
+from flamap.geo import in_any_bbox
+
 SITE = "https://flamap.fr"
 PARIS = ZoneInfo("Europe/Paris")
 MONTHS = ["janv.", "févr.", "mars", "avril", "mai", "juin", "juil.",
@@ -30,6 +32,36 @@ MONTHS = ["janv.", "févr.", "mars", "avril", "mai", "juin", "juil.",
 # Un gros incendie fait éclore des dizaines de périmètres EFFIS le même jour :
 # les lister tous produirait un pavé illisible sur téléphone.
 MAX_LISTED = 5
+
+
+def zone_center(zone_id, tile_deg):
+    """Centre d'une cellule, depuis son identifiant `x+00_y+41`."""
+    x, _, y = zone_id.partition("_")
+    return int(x[1:]) + tile_deg / 2, int(y[1:]) + tile_deg / 2
+
+
+def notified_zones(manifest, zone_ids):
+    """Restreint le diff aux régions que le canal annonce.
+
+    Le canal est francophone et nomme des communes françaises : les régions
+    collectées mais non annoncées — l'Ibérie — sont cartographiées sans être
+    commentées. Un manifeste antérieur à `regions` n'est pas filtré : il n'y
+    avait alors qu'une région, la France.
+    """
+    regions = manifest.get("regions")
+    if not isinstance(regions, list):
+        return zone_ids
+    boxes = [
+        box for region in regions if region.get("notify")
+        for box in region.get("boxes", [])
+    ]
+    if not boxes:
+        return []
+    tile_deg = manifest.get("tile_deg", 1)
+    return [
+        zone_id for zone_id in zone_ids
+        if in_any_bbox(boxes, *zone_center(zone_id, tile_deg))
+    ]
 
 
 def load_zones(root, zone_ids):
@@ -180,6 +212,13 @@ def main():
     if skipped > 0:
         print(f"{skipped} {plural(skipped, 'zone')} hors référence, "
               f"{plural(skipped, 'écartée')} du diff")
+    # Le filtre vient du manifeste frais : c'est lui qui décrit les régions du
+    # jeu qu'on est en train de comparer.
+    zones, collected = notified_zones(manifest, zones), len(zones)
+    silent = collected - len(zones)
+    if silent > 0:
+        print(f"{silent} {plural(silent, 'zone')} hors périmètre d'annonce, "
+              f"{plural(silent, 'cartographiée')} sans être {plural(silent, 'commentée')}")
 
     before = load_zones(prev_root / "zones", zones)
     if before["missing"]:

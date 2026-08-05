@@ -182,6 +182,7 @@ REGIONS = (
         "temperature": True,
         "fine_wind": True,
         "psfdf": True,
+        "notify": True,
     },
     {
         "id": "es",
@@ -192,6 +193,9 @@ REGIONS = (
         "temperature": False,
         "fine_wind": False,
         "psfdf": False,
+        # Le canal Telegram parle d'incendies en France, avec des communes
+        # francaises : l'Iberie est cartographiee, pas annoncee.
+        "notify": False,
     },
 )
 
@@ -690,6 +694,7 @@ def main():
                 "label": region["label"],
                 "boxes": [list(box) for box in region["boxes"]],
                 "psfdf": region["psfdf"],
+                "notify": region["notify"],
             }
             for region in regions
         ],

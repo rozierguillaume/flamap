@@ -27,6 +27,9 @@ DOWNLOAD = load_script("download_live_artifact")
 ASSEMBLE = load_script("assemble_site")
 VALIDATE = load_script("validate_export")
 
+sys.path.insert(0, str(ROOT))
+import notify_telegram as TELEGRAM  # noqa: E402
+
 
 class Response:
     def __init__(self, payload: bytes):
@@ -186,6 +189,37 @@ class WorkflowScriptsTest(unittest.TestCase):
             "vendor/gifenc/gifenc.esm.js", "fonts/instrument-sans-latin.woff2",
         }.issubset(resources))
         self.assertTrue(all((ROOT / name).exists() for name in FRONT.PRESERVED_FRONT_FILES))
+
+
+class TelegramScopeTest(unittest.TestCase):
+    """Le canal annonce la France, pas les régions seulement cartographiées."""
+
+    MANIFEST = {
+        "tile_deg": 1,
+        "regions": [
+            {"id": "fr", "boxes": [[-5.5, 41.0, 10.0, 51.5]], "notify": True},
+            {"id": "es", "boxes": [[-9.8, 36.0, -1.5, 44.0],
+                                   [-1.5, 37.4, 4.6, 43.0]], "notify": False},
+        ],
+    }
+
+    def test_only_the_notified_regions_feed_the_diff(self):
+        # `x-06_y+42` a son centre exactement sur le bord ouest de la bbox
+        # France : c'est une cellule du domaine français, elle reste annoncée.
+        zones = ["x+02_y+47", "x-01_y+43", "x-06_y+42",
+                 "x-07_y+42", "x-04_y+39", "x+02_y+39"]
+        self.assertEqual(
+            TELEGRAM.notified_zones(self.MANIFEST, zones),
+            ["x+02_y+47", "x-01_y+43", "x-06_y+42"],
+        )
+
+    def test_a_manifest_without_regions_is_not_filtered(self):
+        zones = ["x-04_y+39"]
+        self.assertEqual(TELEGRAM.notified_zones({}, zones), zones)
+
+    def test_zone_center_reads_signed_identifiers(self):
+        self.assertEqual(TELEGRAM.zone_center("x-04_y+39", 1), (-3.5, 39.5))
+        self.assertEqual(TELEGRAM.zone_center("x+02_y+47", 1), (2.5, 47.5))
 
 
 if __name__ == "__main__":
