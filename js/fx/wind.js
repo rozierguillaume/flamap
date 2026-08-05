@@ -2,10 +2,12 @@ import { gridAt, gridBilinear, windAtGrid } from '../util/grid.js';
 
 
 /* =====================================================================
- * VENT — nappe de particules advectées par le champ AROME HD
+ * VENT — nappe de particules advectées par le champ modélisé
  *
- * Le manifest porte une grille nationale grossière ; les paquets de zone
- * peuvent lui substituer une grille fine. Toutes contiennent les composantes
+ * Le manifest porte une grille grossière par région — AROME HD sur la France,
+ * un modèle européen sur l'Ibérie, jamais une grille commune : voir
+ * `IBERIA_WIND_MODEL` côté collecteur. Les paquets de zone peuvent leur
+ * substituer une grille fine. Toutes contiennent les composantes
  * est/nord du vent à 10 m en m/s. On tire
  * quelques milliers de particules au hasard sur l'écran, on les déplace le long
  * du champ interpolé, et on laisse derrière elles une traînée qui s'estompe.
@@ -25,6 +27,15 @@ export const CARD = ['nord', 'nord-nord-est', 'nord-est', 'est-nord-est', 'est',
               'est-sud-est', 'sud-est', 'sud-sud-est', 'sud', 'sud-sud-ouest',
               'sud-ouest', 'ouest-sud-ouest', 'ouest', 'ouest-nord-ouest',
               'nord-ouest', 'nord-nord-ouest'];
+
+/* Les fiches nomment le modèle qui a produit la valeur affichée : il change
+ * d'une région à l'autre, et « AROME » partout serait faux dès qu'on sort de
+ * France. Un identifiant inconnu — le repli `best_match` d'Open-Meteo, un
+ * modèle ajouté plus tard — reste nommé, mais sans prétendre lequel. */
+const MODEL_LABEL = {
+  meteofrance_arome_france_hd: 'AROME HD',
+  meteofrance_arpege_europe: 'ARPEGE Europe',
+};
 
 // Au zoom de détail, la grille fine se fond dans le champ national sur les
 // 35 derniers kilometres de sa marge. Sans ce raccord, la différence de
@@ -52,8 +63,12 @@ export function createWindController({
     [10,       'rgba(224,241,255,.70)', mobile ? 1.1 : 1.2],
     [Infinity, 'rgba(255,255,255,.88)', mobile ? 1.3 : 1.5],
   ];
+  /* `data` reste le champ de référence — celui qui porte la température de
+   * repli et les prévisions. `fields` le contient en premier, suivi des champs
+   * régionaux : ils ne se recouvrent qu'en marge, et le premier qui couvre le
+   * point l'emporte. */
   const W = {
-    data: null, cur: null, tiles: new Map(), ts: 0, on: true,
+    data: null, fields: [], cur: false, tiles: new Map(), ts: 0, on: true,
     parts: [], raf: null, last: 0, w: 0, h: 0,
   };
 
@@ -75,8 +90,22 @@ export function createWindController({
   const laneCount = new Int32Array(lanes.length);
   const sampled = { u: 0, v: 0, g: 0 };   // lecture du champ, réutilisée par frame
 
+  function fieldAt(lon, lat) {
+    for (const field of W.fields) {
+      const [west, south, east, north] = field.bbox || [];
+      if (lon >= west && lon <= east && lat >= south && lat <= north) return field;
+    }
+    return null;
+  }
+
+  function coarseAt(lon, lat, out) {
+    for (const field of W.fields)
+      if (windAtGrid(field, field._cur, lon, lat, out)) return true;
+    return false;
+  }
+
   function at(lon, lat, out) {
-    const hasCoarse = windAtGrid(W.data, W.cur, lon, lat, coarse);
+    const hasCoarse = coarseAt(lon, lat, coarse);
     const manifest = getManifest();
     if (manifest && map.getZoom() >= manifest.detail_zoom) {
       let weight = 0, blend = 0, fineU = 0, fineV = 0, fineG = 0;
@@ -243,7 +272,8 @@ export function createWindController({
     // de modèle brûlerait des allocations pour un résultat identique à l'œil.
     if (!force && W.cur && Math.abs(ts - W.ts) < 120) return;
     W.ts = ts;
-    W.cur = gridTime(W.data, ts);
+    for (const field of W.fields) gridTime(field, ts);
+    W.cur = W.fields.some(field => !!field._cur);
     for (const tile of W.tiles.values()) gridTime(tile, ts);
     badge();
     onBadgeChange();
@@ -261,7 +291,7 @@ export function createWindController({
   }
 
   function pauseForExport() {
-    const grids = [...new Set([W.data, ...W.tiles.values()].filter(Boolean))];
+    const grids = [...new Set([...W.fields, ...W.tiles.values()].filter(Boolean))];
     const snapshot = {
       ts: W.ts, cur: W.cur, running: !!W.raf,
       grids: grids.map(grid => [grid, grid._ts, grid._cur]),
@@ -272,7 +302,8 @@ export function createWindController({
 
   function setExportTime(ts) {
     W.ts = ts;
-    W.cur = gridTime(W.data, ts);
+    for (const field of W.fields) gridTime(field, ts);
+    W.cur = W.fields.some(field => !!field._cur);
     for (const tile of W.tiles.values()) gridTime(tile, ts);
   }
 
@@ -302,7 +333,16 @@ export function createWindController({
     at,
     badge,
     clear,
-    configure: data => { W.data = data; },
+    addField: field => {
+      if (!field || W.fields.includes(field)) return;
+      W.fields.push(field);
+      // Les champs régionaux arrivent après l'aperçu national : quand un cran
+      // est déjà posé, il faut y amener le nouveau venu. Avant, il n'y a rien à
+      // préparer — `setTime` le fera, et pré-calculer ici une grille à `ts = 0`
+      // ferait croire à un champ courant.
+      if (W.cur) gridTime(field, W.ts);
+    },
+    configure: data => { W.data = data; W.fields = data ? [data] : []; },
     getExportLanes: () => lanes.map(lane => [...lane]),
     getProjection: (out = {}) => {
       out.current = !!W.cur; out.lon0 = W.lon0; out.dLon = W.dLon;
@@ -318,6 +358,11 @@ export function createWindController({
       return values ? gridBilinear(W.data, values, lon, lat) : null;
     },
     loop,
+    modelAt: (lon, lat) => {
+      const field = fieldAt(lon, lat);
+      if (!field) return '';
+      return MODEL_LABEL[field.model] || 'modèle météo';
+    },
     pauseForExport,
     phrase,
     resize,

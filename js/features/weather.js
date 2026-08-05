@@ -5,6 +5,8 @@ import { gridAt, gridBilinear } from '../util/grid.js';
 // `thermal.json`, collecté par un workflow de cadence différente.
 const WEATHER_URL = 'data/weather_forecast.json?v=4';
 const THERMAL_URL = 'data/thermal.json';
+// Emprise du géocodage inverse de la Géoplateforme, qui ne couvre que la France.
+const BAN_BBOX = [-5.5, 41.0, 10.0, 51.5];
 
 export function weatherCoordinates(point) {
   return `${Math.abs(point.lat).toFixed(3)}° ${point.lat >= 0 ? 'N' : 'S'}`
@@ -67,6 +69,13 @@ export function createWeatherController({
   async function communeAt(lon, lat) {
     const key = `${lon.toFixed(4)},${lat.toFixed(4)}`;
     if (weatherPlaceCache.has(key)) return weatherPlaceCache.get(key);
+    // La carte déborde le domaine de la BAN : hors de France, le service
+    // répond sans erreur et sans résultat. Autant ne pas l'appeler.
+    if (!(lon >= BAN_BBOX[0] && lon <= BAN_BBOX[2]
+          && lat >= BAN_BBOX[1] && lat <= BAN_BBOX[3])) {
+      weatherPlaceCache.set(key, '');
+      return '';
+    }
     const url = new URL('https://data.geopf.fr/geocodage/reverse/');
     url.searchParams.set('lon', lon.toFixed(6));
     url.searchParams.set('lat', lat.toFixed(6));

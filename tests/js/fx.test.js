@@ -116,3 +116,73 @@ test('les contrôleurs vent et fumée bornent le DPR et ne dupliquent pas leurs 
     globalThis.cancelAnimationFrame = previous.cancelAnimationFrame;
   }
 });
+
+function grid(bbox, u) {
+  return {
+    bbox, nx: 2, ny: 2, nt: 2, t0: 0, dt: 3600,
+    u: [[u, u, u, u], [u, u, u, u]],
+    v: [[0, 0, 0, 0], [0, 0, 0, 0]],
+    gust: [[10, 10, 10, 10], [10, 10, 10, 10]],
+  };
+}
+
+test('les champs de vent régionaux couvrent chacun leur emprise, le premier prime', () => {
+  const previous = {
+    document: globalThis.document,
+    requestAnimationFrame: globalThis.requestAnimationFrame,
+    cancelAnimationFrame: globalThis.cancelAnimationFrame,
+  };
+  globalThis.document = { hidden: true, createElement: () => canvas(96, 96) };
+  globalThis.requestAnimationFrame = () => 1;
+  globalThis.cancelAnimationFrame = () => {};
+
+  try {
+    const map = {
+      getBounds: () => ({
+        getWest: () => 0, getEast: () => 1, getSouth: () => 0, getNorth: () => 1,
+      }),
+      getCenter: () => ({ lng: .5, lat: .5 }),
+      getZoom: () => 5,
+    };
+    const wind = createWindController({
+      mobile: true, map, canvas: canvas(),
+      key: { classList: { toggle() {} }, hidden: false,
+             style: { setProperty() {} }, title: '' },
+      value: { textContent: '' },
+      getManifest: () => null,
+    });
+    // Les deux emprises se recouvrent entre 1 et 2 : c'est la bande où les
+    // domaines des modèles se chevauchent, et le champ de référence l'emporte.
+    wind.configure(grid([0, 0, 2, 2], 5));
+    wind.addField(grid([1, 0, 4, 2], 9));
+    wind.setTime(0);
+
+    const out = {};
+    assert.equal(wind.at(.5, 1, out), true);
+    assert.equal(out.u, 5);
+    assert.equal(wind.at(1.5, 1, out), true);
+    assert.equal(out.u, 5, 'la bande commune revient au champ de référence');
+    assert.equal(wind.at(3, 1, out), true);
+    assert.equal(out.u, 9, 'la région voisine reste couverte');
+    assert.equal(wind.at(9, 1, out), false);
+    assert.equal(wind.hasCurrent(), true);
+
+    // Le champ tardif doit être amené au cran déjà affiché, sans nouveau setTime.
+    const late = createWindController({
+      mobile: true, map, canvas: canvas(),
+      key: { classList: { toggle() {} }, hidden: false,
+             style: { setProperty() {} }, title: '' },
+      value: { textContent: '' },
+      getManifest: () => null,
+    });
+    late.configure(grid([0, 0, 2, 2], 5));
+    late.setTime(1800);
+    late.addField(grid([2, 0, 4, 2], 9));
+    assert.equal(late.at(3, 1, out), true);
+    assert.equal(out.u, 9);
+  } finally {
+    globalThis.document = previous.document;
+    globalThis.requestAnimationFrame = previous.requestAnimationFrame;
+    globalThis.cancelAnimationFrame = previous.cancelAnimationFrame;
+  }
+});

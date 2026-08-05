@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { EMPTY, json } from '../../js/data/client.js';
-import { loadInitialData } from '../../js/data/initial.js';
+import { loadInitialData, loadRegionalWind } from '../../js/data/initial.js';
 import {
   createZonesController,
   mergedZones,
@@ -258,4 +258,26 @@ test('le mode legacy et une source absente ne chargent aucune zone', async () =>
 
   assert.equal(requests, 0);
   assert.deepEqual(harness.calls, []);
+});
+
+test('les champs de vent régionaux suivent le manifeste, sauf celui de référence', async () => {
+  const urls = [];
+  const manifest = {
+    wind_fields: [
+      { file: 'wind_coarse.json' },
+      { file: 'wind_coarse_es.json' },
+      { file: 'wind_coarse_absent.json' },
+    ],
+  };
+  const fields = await loadRegionalWind(manifest, async url => {
+    urls.push(url);
+    if (url === 'data/wind_coarse_absent.json') throw new Error('absent');
+    return { nt: 2 };
+  });
+
+  assert.deepEqual(urls,
+    ['data/wind_coarse_es.json', 'data/wind_coarse_absent.json']);
+  assert.deepEqual(fields, [{ nt: 2 }, null]);
+  assert.deepEqual(await loadRegionalWind({}, () => assert.fail('aucun champ')), []);
+  assert.deepEqual(await loadRegionalWind(null, () => assert.fail('aucun champ')), []);
 });

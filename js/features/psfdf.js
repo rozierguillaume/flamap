@@ -78,7 +78,7 @@ export function createPsfdfController({
   trackUsage,
   stopTimeline,
   setTime,
-  backToFrance,
+  backToDomain,
   elements,
 }) {
   const {
@@ -148,7 +148,7 @@ export function createPsfdfController({
   // bandeau s'efface de lui-même, inutile de le masquer ici.
   psfdfPanelBack.addEventListener('click', () => {
     trackUsage('psfdf-back-france');
-    backToFrance();
+    backToDomain();
   });
 
   function focusIncident(feature, duration = 850, targetZoom = 8.5) {
