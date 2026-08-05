@@ -46,6 +46,14 @@ https://data.geopf.fr/geocodage/reverse/?lon={lon}&lat={lat}&limit=1
 Cet enrichissement reste côté navigateur et à la demande ; son indisponibilité
 n'empêche pas l'affichage des coordonnées ni des données météo.
 
+PSFDF ne suit que la France. Pour l'Ibérie, `flamap/heuristic_fires.py`
+publie dans le même fichier un équivalent purement dérivé de FIRMS : un amas
+d'au moins `HEURISTIC_MIN_HOTSPOTS` foyers distincts, rapprochés à moins de
+`HEURISTIC_RADIUS_KM`, détectés dans les `HEURISTIC_MAX_AGE_HOURS` dernières
+heures, devient un cercle de statut « Détection auto ». Aucune source
+supplémentaire : uniquement une lecture de densité sur les foyers déjà
+collectés, sans surface, personnel ni moyens aériens.
+
 ---
 
 ## 1. Foyers actifs — NASA FIRMS

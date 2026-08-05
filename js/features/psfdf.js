@@ -3,19 +3,29 @@ import { distanceKm } from '../util/geo.js';
 
 
 /* Les incendies éditorialisés par PSFDF remplacent la détection heuristique des
- * « gros feux ». Leur statut est courant et non historique : les cercles sont
- * donc masqués quand la frise quitte son dernier cran. */
+ * « gros feux » en France. Leur statut est courant et non historique : les
+ * cercles sont donc masqués quand la frise quitte son dernier cran.
+ *
+ * Hors de France, `detect_heuristic_fires` (flamap/heuristic_fires.py) publie
+ * dans le même fichier des cercles « Détection auto » : un amas de foyers
+ * FIRMS, sans aucune donnée éditoriale (pas de commune, pas de surface, pas
+ * de moyens aériens). `properties.origin === 'heuristic'` les distingue des
+ * fiches PSFDF pour ne jamais leur prêter la source associative. */
 export const PSFDF_COLORS = {
   'Hors de contrôle': '#2f2933',
   'En cours': '#e33b32',
   'Fixé': '#f28c28',
   'Maîtrisé': '#e6c229',
   'Éteint': '#4a9f62',
+  'Détection auto': '#e33b32',
 };
 // Ordre de peinture, du fond vers le premier plan. Des calques séparés sont
 // plus fiables qu'un `circle-sort-key` composite avec MapLibre 5 et rendent la
-// même priorité explicite pour les clics.
+// même priorité explicite pour les clics. La détection heuristique passe en
+// premier : hors de France les deux familles ne se recouvrent jamais, mais un
+// futur chevauchement laisserait PSFDF au-dessus, plus fiable.
 const PSFDF_LAYERS = [
+  ['psfdf-heuristic', 'Détection auto'],
   ['psfdf-extinguished', 'Éteint'],
   ['psfdf-controlled', 'Maîtrisé'],
   ['psfdf-fixed', 'Fixé'],
@@ -27,6 +37,9 @@ export const PSFDF_HIT_LAYERS = Object.freeze(PSFDF_LAYERS.map(([id]) => id).rev
 export const isPsfdfLayer = id => PSFDF_LAYER_IDS.has(id);
 const PSFDF_MAX_ZOOM = 9;
 const PSFDF_MAX_AGE_MS = 7 * 86400000;
+// La détection heuristique n'est pas éditorialisée : elle n'a pas sa place
+// dans les raccourcis « gros feux » réservés aux statuts communiqués par
+// l'association.
 const PSFDF_SHORTCUT_STATUSES = new Set(['Hors de contrôle', 'En cours']);
 const PSFDF_ACTIVITY_MIN_RADIUS_KM = 3;
 const PSFDF_ACTIVITY_MAX_RADIUS_KM = 60;
@@ -230,6 +243,12 @@ export function createPsfdfController({
       radius = Math.max(radius, 1.5 + 1.15 * Number(p.effis_radius_km));
       basis.push(`${Number(p.effis_matches) > 1 ? `${nf(Number(p.effis_matches))} périmètres` : 'périmètre'} EFFIS`);
     }
+    if (psfdfHasNumber(p.heuristic_radius_km)) {
+      // Cercle hors PSFDF : le rayon vient déjà de l'amas FIRMS côté
+      // collecteur (`detect_heuristic_fires`), la marge n'a plus à deviner.
+      radius = Math.max(radius, Number(p.heuristic_radius_km));
+      basis.push(`${nf(Number(p.hotspot_count) || 0)} foyers FIRMS groupés`);
+    }
     if (Array.isArray(p.original_center)) {
       // Quand EFFIS a recentré le point, conserver aussi une marge autour de la
       // position PSFDF initiale évite de couper une extension encore non levée.
@@ -389,22 +408,27 @@ export function createPsfdfController({
     psfdfPanel.style.setProperty('--psfdf-tint', `rgba(${accentRgb}, .105)`);
     psfdfPanel.style.setProperty('--psfdf-border', `rgba(${accentRgb}, .58)`);
     psfdfPanel.style.setProperty('--psfdf-shadow', `rgba(${accentRgb}, .14)`);
-    const place = p.commune || 'Incendie signalé';
+    const heuristic = p.origin === 'heuristic';
+    const place = p.commune || (heuristic ? 'Zone détectée automatiquement' : 'Incendie signalé');
     const updatedTimestamp = psfdfHasNumber(p.updated_ts)
       ? Number(p.updated_ts) * 1000 : psfdfUpdatedTimestamp(p.updated);
     psfdfRelative.hidden = !Number.isFinite(updatedTimestamp);
     if (Number.isFinite(updatedTimestamp)) {
       psfdfRelative.dataset.timestamp = updatedTimestamp;
       psfdfRelative.dateTime = new Date(updatedTimestamp).toISOString();
-      psfdfRelative.title = p.updated ? `Mis à jour le ${p.updated}` : '';
+      psfdfRelative.title = p.updated ? `Mis à jour le ${p.updated}`
+        : heuristic ? 'Dernier foyer détecté du groupe' : '';
       refreshPsfdfRelative();
     } else {
       delete psfdfRelative.dataset.timestamp;
     }
     psfdfPanelTitle.textContent = mobile && p.departement
       ? `${place} (${p.departement})` : place;
-    psfdfPanelSub.textContent = p.departement
-      ? `${p.departement}, suivi actuel PSFDF` : 'Suivi actuel PSFDF';
+    // Hors de France, aucun suivi associatif : le sous-titre ne doit jamais
+    // laisser croire à une source éditoriale absente ici.
+    psfdfPanelSub.textContent = heuristic
+      ? 'Détection automatique par densité de foyers satellite'
+      : p.departement ? `${p.departement}, suivi actuel PSFDF` : 'Suivi actuel PSFDF';
     psfdfHeadStatus.querySelector('i').style.background = accent;
     psfdfHeadStatus.querySelector('span').textContent = p.status;
 
@@ -417,15 +441,25 @@ export function createPsfdfController({
 
     const stats = document.createElement('div');
     stats.className = 'psfdf-stats';
-    const area = psfdfHasNumber(p.surface) ? `${nf(Number(p.surface), 1)} ha` : 'non renseignée';
-    const personnel = psfdfHasNumber(p.personnel)
-      ? nf(Number(p.personnel)) : 'non renseigné';
-    stats.append(
-      psfdfStat('Surface', area),
-      psfdfStat('Personnel', personnel),
-      psfdfStat('Moyens aériens', psfdfResources(p)),
-      psfdfStat('Département', p.departement || 'Non renseigné'),
-    );
+    if (heuristic) {
+      // Aucune des statistiques PSFDF (surface déclarée, personnel, moyens
+      // aériens, département) n'existe ici : les afficher à « non renseigné »
+      // suggérerait à tort qu'une source a été interrogée et n'a pas répondu.
+      stats.append(
+        psfdfStat('Foyers FIRMS groupés', nf(Number(p.hotspot_count) || 0)),
+        psfdfStat('Rayon estimé', `${nf(Number(p.heuristic_radius_km) || 0, 1)} km`),
+      );
+    } else {
+      const area = psfdfHasNumber(p.surface) ? `${nf(Number(p.surface), 1)} ha` : 'non renseignée';
+      const personnel = psfdfHasNumber(p.personnel)
+        ? nf(Number(p.personnel)) : 'non renseigné';
+      stats.append(
+        psfdfStat('Surface', area),
+        psfdfStat('Personnel', personnel),
+        psfdfStat('Moyens aériens', psfdfResources(p)),
+        psfdfStat('Département', p.departement || 'Non renseigné'),
+      );
+    }
     content.append(status, stats);
 
     const localActivity = document.createElement('section');
@@ -433,7 +467,14 @@ export function createPsfdfController({
     renderPsfdfActivity(localActivity, feature);
     content.append(localActivity);
 
-    if (p.other_info) {
+    if (heuristic) {
+      const note = document.createElement('p');
+      note.className = 'psfdf-note';
+      note.textContent = 'Détection automatique à partir des foyers actifs '
+        + 'satellite (NASA FIRMS) : aucune association ne suit les incendies '
+        + 'hors de France sur cette carte. À confirmer sur place.';
+      content.append(note);
+    } else if (p.other_info) {
       const note = document.createElement('p');
       note.className = 'psfdf-note';
       note.textContent = p.other_info;
@@ -446,26 +487,30 @@ export function createPsfdfController({
       .filter(Boolean).join('. ');
     if (dates.textContent) content.append(dates);
 
-    const link = document.createElement('a');
-    link.className = 'psfdf-more';
-    link.href = `https://association-psfdf.fr/pages/incendie-details.html?id=${encodeURIComponent(p.id)}`;
-    link.target = '_blank';
-    link.rel = 'noopener';
-    link.append(document.createTextNode('Plus d’information'));
-    const source = document.createElement('small');
-    source.textContent = 'Association PSFDF';
-    link.append(source);
-    const externalIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    externalIcon.setAttribute('viewBox', '0 0 24 24');
-    externalIcon.setAttribute('aria-hidden', 'true');
-    const externalPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    externalPath.setAttribute('d', 'M7 17 17 7M7 7h10v10');
-    externalIcon.append(externalPath);
-    link.append(externalIcon);
-    link.addEventListener('click', () => trackUsage('psfdf-more', {
-      place: p.commune || 'unknown', id: p.id || 'unknown',
-    }));
-    content.append(link);
+    if (!heuristic) {
+      // Le lien pointe vers la fiche de l'association : n'existe que pour les
+      // incendies qu'elle suit réellement.
+      const link = document.createElement('a');
+      link.className = 'psfdf-more';
+      link.href = `https://association-psfdf.fr/pages/incendie-details.html?id=${encodeURIComponent(p.id)}`;
+      link.target = '_blank';
+      link.rel = 'noopener';
+      link.append(document.createTextNode('Plus d’information'));
+      const source = document.createElement('small');
+      source.textContent = 'Association PSFDF';
+      link.append(source);
+      const externalIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      externalIcon.setAttribute('viewBox', '0 0 24 24');
+      externalIcon.setAttribute('aria-hidden', 'true');
+      const externalPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      externalPath.setAttribute('d', 'M7 17 17 7M7 7h10v10');
+      externalIcon.append(externalPath);
+      link.append(externalIcon);
+      link.addEventListener('click', () => trackUsage('psfdf-more', {
+        place: p.commune || 'unknown', id: p.id || 'unknown',
+      }));
+      content.append(link);
+    }
     psfdfPanelBody.replaceChildren(content);
   }
 
@@ -533,23 +578,27 @@ export function createPsfdfController({
         0, 8, 10, 11, 31.63, 16, 100, 26,
       ],
     ];
+    // La détection heuristique n'a pas de `surface` : son rayon kilométrique
+    // suit exactement le même chemin que `effis_radius_km`, jamais les deux à
+    // la fois puisqu'une fiche n'a qu'une seule origine.
+    const psfdfKnownRadiusKm = ['max',
+      ['coalesce', ['get', 'effis_radius_km'], 0],
+      ['coalesce', ['get', 'heuristic_radius_km'], 0],
+    ];
     for (const [id, status] of PSFDF_LAYERS) map.addLayer({
       id, type: 'circle', source: 'psfdf', maxzoom: PSFDF_MAX_ZOOM,
       filter: ['==', ['get', 'status'], status],
       paint: {
         // La taille visuelle suit la surface PSFDF. Lorsqu'un rapprochement EFFIS
-        // existe, son rayon kilométrique peut l'agrandir mais jamais le réduire.
-        // Une expression composite MapLibre doit garder `zoom` au niveau
-        // supérieur ; l'enfouir dans `max` rendait tous les disques invisibles.
+        // ou une détection heuristique existe, son rayon kilométrique peut
+        // l'agrandir mais jamais le réduire. Une expression composite MapLibre
+        // doit garder `zoom` au niveau supérieur ; l'enfouir dans `max` rendait
+        // tous les disques invisibles.
         'circle-radius': ['interpolate', ['exponential', 2], ['zoom'],
-          4, ['max', psfdfSizeRadius(1),
-                      ['*', ['coalesce', ['get', 'effis_radius_km'], 0], .30]],
-          7, ['max', psfdfSizeRadius(1.3),
-                      ['*', ['coalesce', ['get', 'effis_radius_km'], 0], 2.4]],
-          10, ['max', psfdfSizeRadius(1.7),
-                       ['*', ['coalesce', ['get', 'effis_radius_km'], 0], 19.2]],
-          13, ['max', psfdfSizeRadius(2.2),
-                       ['*', ['coalesce', ['get', 'effis_radius_km'], 0], 153.6]],
+          4, ['max', psfdfSizeRadius(1), ['*', psfdfKnownRadiusKm, .30]],
+          7, ['max', psfdfSizeRadius(1.3), ['*', psfdfKnownRadiusKm, 2.4]],
+          10, ['max', psfdfSizeRadius(1.7), ['*', psfdfKnownRadiusKm, 19.2]],
+          13, ['max', psfdfSizeRadius(2.2), ['*', psfdfKnownRadiusKm, 153.6]],
         ],
         'circle-color': PSFDF_COLORS[status],
         'circle-opacity': .20,
@@ -580,7 +629,9 @@ export function createPsfdfController({
     features = nextFeatures.map(feature => {
       feature.properties.center = feature.geometry.coordinates;
       feature.properties.name = feature.properties.commune
-        || feature.properties.departement || 'un incendie signalé';
+        || feature.properties.departement
+        || (feature.properties.origin === 'heuristic'
+          ? 'une zone d’activité détectée' : 'un incendie signalé');
       return feature;
     });
     const shortcuts = features

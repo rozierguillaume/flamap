@@ -13,7 +13,10 @@ ROOT_FILES = (
     "wind_coarse.json",
     "weather_forecast.json",
 )
-PSFDF_STATUSES = {"Hors de contrôle", "En cours", "Fixé", "Maîtrisé", "Éteint"}
+# "Détection auto" vient de `detect_heuristic_fires` : aucun suivi associatif
+# hors de France, voir REGIONS dans fetch_fires.py.
+PSFDF_STATUSES = {"Hors de contrôle", "En cours", "Fixé", "Maîtrisé", "Éteint",
+                  "Détection auto"}
 
 
 def load_json(path):

@@ -82,6 +82,12 @@ from flamap.psfdf import (
     psfdf_status as _psfdf_status,
     psfdf_timestamp as _psfdf_timestamp,
 )
+from flamap.heuristic_fires import (
+    HEURISTIC_MAX_AGE_HOURS,
+    HEURISTIC_MIN_HOTSPOTS,
+    HEURISTIC_RADIUS_KM,
+    detect_heuristic_fires as _detect_heuristic_fires,
+)
 from flamap.meteo import (
     build_wind as _build_wind,
     fetch_fine_winds as _fetch_fine_winds,
@@ -184,6 +190,7 @@ REGIONS = (
         "temperature": True,
         "fine_wind": True,
         "psfdf": True,
+        "heuristic_fires": False,
         "notify": True,
     },
     {
@@ -195,6 +202,10 @@ REGIONS = (
         "temperature": False,
         "fine_wind": False,
         "psfdf": False,
+        # Aucun suivi associatif ici : `detect_heuristic_fires` repere les
+        # gros amas de foyers FIRMS pour donner un equivalent au rond rouge
+        # PSFDF, etiquete comme detection automatique dans la fiche.
+        "heuristic_fires": True,
         # Le canal Telegram parle d'incendies en France, avec des communes
         # francaises : l'Iberie est cartographiee, pas annoncee.
         "notify": False,
@@ -339,6 +350,17 @@ def fetch_psfdf(bbox):
         status_parser=psfdf_status,
         number_parser=psfdf_number,
         timestamp_parser=psfdf_timestamp,
+    )
+
+
+def detect_heuristic_fires(hotspots, bbox, now):
+    return _detect_heuristic_fires(
+        hotspots,
+        bbox,
+        now=now,
+        min_hotspots=HEURISTIC_MIN_HOTSPOTS,
+        radius_km=HEURISTIC_RADIUS_KM,
+        max_age_hours=HEURISTIC_MAX_AGE_HOURS,
     )
 
 
@@ -672,6 +694,19 @@ def main():
             # indisponible.
             print(f"  ! PSFDF indisponible ({error})", file=sys.stderr)
             psfdf = fc([])
+
+    heuristic_regions = [region for region in regions if region["heuristic_fires"]]
+    if heuristic_regions:
+        print("\nDétection heuristique - amas de foyers FIRMS")
+        heuristic = detect_heuristic_fires(
+            hotspots, region_envelope(heuristic_regions[0]), latest
+        )
+        print(f"  {len(heuristic['features'])} zones detectees "
+              f"(>= {HEURISTIC_MIN_HOTSPOTS} foyers a {HEURISTIC_RADIUS_KM} km, "
+              f"{HEURISTIC_MAX_AGE_HOURS} h)")
+        # Meme fichier que PSFDF : le front n'ouvre qu'une seule source pour
+        # les deux, distinguees par `properties.origin` cote JS.
+        psfdf["features"].extend(heuristic["features"])
 
     print("\nOpen-Meteo - vent a 10 m")
     # Les champs restent separes, un fichier par region : voir IBERIA_WIND_MODEL.
