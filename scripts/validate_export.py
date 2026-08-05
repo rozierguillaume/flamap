@@ -70,6 +70,7 @@ def validate_fire_data(root: pathlib.Path) -> None:
         sys.exit("température de repli absente de wind_coarse.json")
     if not (root / "thermal.json").exists():
         print("::warning::aucune grille de température reprise, le front affichera le champ large")
+    check_wind_fields(root, manifest)
     check_fine_wind(zone_paths, manifest)
 
 
@@ -78,6 +79,21 @@ def check_wind(weather: dict[str, object]) -> None:
     if (rows < 2
             or any(len(weather.get(name, [])) != rows for name in ("u", "v", "gust"))):
         sys.exit("export météo absent ou incomplet")
+
+
+def check_wind_fields(data: pathlib.Path, manifest: dict[str, object]) -> None:
+    """Chaque champ de vent annoncé doit avoir survécu à l'assemblage.
+
+    Un artefact Pages remplace le précédent en entier : un champ régional qui
+    n'aurait pas été repris laisserait toute une région sans vent, sans que rien
+    d'autre ne le signale.
+    """
+    fields = manifest.get("wind_fields") or [{"file": "wind_coarse.json"}]
+    for field in fields:
+        path = data / field["file"]
+        if not path.is_file():
+            sys.exit(f"champ de vent absent de l'artefact : {field['file']}")
+        check_wind(load(path))
 
 
 def check_fine_wind(paths: list[pathlib.Path], manifest: dict[str, object]) -> None:
@@ -116,6 +132,7 @@ def validate_front_site(root: pathlib.Path) -> None:
     if not manifest["hotspot_count"] or not timeline:
         sys.exit("artefact publie incomplet, déploiement annulé")
     check_wind(weather)
+    check_wind_fields(data, manifest)
     check_fine_wind(zone_paths, manifest)
     check_size(root)
 
@@ -130,6 +147,7 @@ def validate_weather_site(root: pathlib.Path) -> None:
         sys.exit("artefact publie incomplet, déploiement annulé")
     if thermal.get("nx", 0) < 45:
         sys.exit("grille de température perdue dans l’artefact")
+    check_wind_fields(data, manifest)
     try:
         front_closure(lambda name: (root / name).read_bytes())
     except (OSError, ValueError, json.JSONDecodeError) as error:

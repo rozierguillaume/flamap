@@ -61,17 +61,20 @@ def stable_feature_id(feature, prefix):
     return f"{prefix}-{value}"
 
 
-def fetch_burnt(bbox, *, wfs=None, swap=None, epoch=None, feature_id=None):
+def fetch_burnt(bbox, *, countries=("FR",), wfs=None, swap=None, epoch=None,
+                feature_id=None):
     wfs = effis_wfs if wfs is None else wfs
     swap = swap_axes if swap is None else swap
     epoch = to_epoch if epoch is None else epoch
     feature_id = stable_feature_id if feature_id is None else feature_id
+    countries = tuple(countries)
     dated = wfs("modis.ba.poly.season", bbox)
     kept = []
     for feature in dated["features"]:
         # La couche datee fournit le pays : ne pas envoyer au navigateur les
-        # milliers de polygones espagnols et italiens pris dans la grande bbox.
-        if feature["properties"].get("COUNTRY") != "FR":
+        # milliers de polygones italiens ou maghrebins pris dans la grande bbox,
+        # dont aucun n'est couvert par le reste de la carte.
+        if feature["properties"].get("COUNTRY") not in countries:
             continue
         swap(feature["geometry"])
         prop = feature["properties"]
@@ -82,7 +85,7 @@ def fetch_burnt(bbox, *, wfs=None, swap=None, epoch=None, feature_id=None):
     dated["features"] = sorted(
         kept, key=lambda feature: feature["properties"].get("FIREDATE") or ""
     )
-    print(f"  EFFIS dates France : {len(kept)} polygones")
+    print(f"  EFFIS dates {'/'.join(countries)} : {len(kept)} polygones")
 
     try:
         nrt = wfs("effis.nrt.ba.poly", bbox)
@@ -99,6 +102,27 @@ def fetch_burnt(bbox, *, wfs=None, swap=None, epoch=None, feature_id=None):
         feature.setdefault("properties", {})["_id"] = feature_id(feature, "n")
     print(f"  EFFIS NRT bbox     : {len(nrt['features'])} polygones")
     return {"burnt_dated": dated, "burnt_nrt": nrt}
+
+
+def merge_burnt(parts):
+    """Fusionne les collectes regionales en une seule paire de couches.
+
+    Les bboxes regionales se chevauchent : la couche datee est deja disjointe
+    par son filtre pays, mais le NRT n'a aucun attribut, donc les cicatrices du
+    recouvrement reviennent une fois par region. L'identifiant stable, calcule
+    sur la geometrie, les ramene a une.
+    """
+    merged = {}
+    for key in ("burnt_dated", "burnt_nrt"):
+        features = {}
+        for part in parts:
+            for feature in part[key]["features"]:
+                features.setdefault(feature["properties"]["_id"], feature)
+        merged[key] = fc(sorted(
+            features.values(),
+            key=lambda feature: feature["properties"].get("FIREDATE") or "",
+        ))
+    return merged
 
 
 def burnt_since(dated, reference, days):

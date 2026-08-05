@@ -142,7 +142,7 @@ class FirmsAndTimelineTests(unittest.TestCase):
                 fires, "download_firms_feed", return_value=(raw, None)
             ),
         ):
-            result = fires.fetch_hotspots(fires.DEFAULT_BBOX)
+            result = fires.fetch_hotspots(fires.FRANCE_BOXES)
 
         coordinates = [
             feature["geometry"]["coordinates"] for feature in result["features"]
@@ -195,6 +195,58 @@ class FirmsAndTimelineTests(unittest.TestCase):
         self.assertEqual(result[2]["n"], 2)
         self.assertEqual(result[2]["ha"], 3.3)
         self.assertEqual(result[-1]["ha"], 0)
+
+    def test_iberian_boxes_leave_north_africa_out_of_the_domain(self):
+        boxes = fires.domain_boxes(fires.REGIONS)
+        inside = {
+            "Lisbonne": (-9.14, 38.72),
+            "Almeria": (-2.46, 36.84),
+            "Majorque": (2.65, 39.57),
+            "Bordeaux": (-0.58, 44.84),
+        }
+        outside = {
+            "Alger": (3.06, 36.75),
+            "Oran": (-0.64, 35.70),
+            "Tanger": (-5.80, 35.77),
+            "Annaba": (7.75, 36.90),
+        }
+        for label, (lon, lat) in inside.items():
+            self.assertTrue(fires.in_any_bbox(boxes, lon, lat), label)
+        for label, (lon, lat) in outside.items():
+            self.assertFalse(fires.in_any_bbox(boxes, lon, lat), label)
+
+    def test_domain_tiles_skip_the_cells_of_the_bounding_envelope(self):
+        cells = fires.domain_tiles(fires.REGIONS)
+        self.assertEqual(len(cells), len(set(cells)))
+        self.assertIn((-4, 39), cells)          # Espagne centrale
+        self.assertIn((2, 48), cells)           # bassin parisien
+        self.assertNotIn((-9, 50), cells)       # Atlantique nord
+        self.assertNotIn((8, 37), cells)        # Mediterranee au large de Tunis
+        self.assertLess(
+            len(cells),
+            len(fires.tile_range(fires.union_bbox(fires.domain_boxes(fires.REGIONS)))),
+        )
+
+    def test_command_line_bbox_collects_a_single_french_region(self):
+        regions = fires.cli_regions((-1.6, 44.2, -0.2, 45.4))
+        self.assertEqual(len(regions), 1)
+        self.assertEqual(regions[0]["boxes"], ((-1.6, 44.2, -0.2, 45.4),))
+        self.assertTrue(regions[0]["fine_wind"])
+        self.assertTrue(regions[0]["psfdf"])
+        self.assertEqual(fires.REGIONS[0]["boxes"], fires.FRANCE_BOXES)
+
+    def test_the_first_collected_region_writes_the_reference_field(self):
+        """Le nom et la temperature suivent le rang, pas la region."""
+        plan = fires.collection_plan(fires.REGIONS)
+        self.assertEqual([region["wind_file"] for region in plan],
+                         ["wind_coarse.json", "wind_coarse_es.json"])
+        self.assertEqual([region["temperature"] for region in plan], [True, False])
+
+        alone = fires.collection_plan(fires.REGIONS[1:])
+        self.assertEqual(alone[0]["wind_file"], "wind_coarse.json")
+        self.assertTrue(alone[0]["temperature"],
+                        "le champ de reference porte la temperature de repli")
+        self.assertFalse(alone[0]["fine_wind"])
 
     def test_exact_north_and_east_edges_do_not_create_extra_tiles(self):
         self.assertEqual(fires.tile_range((1, 43, 2, 44)), [(1, 43)])

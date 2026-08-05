@@ -85,6 +85,20 @@ def validate_export(root):
     ):
         raise ValueError("température de repli absente de wind_coarse.json")
 
+    # Un champ regional annonce mais absent laisserait un trou de vent muet sur
+    # toute une region : le front n'a aucun moyen de s'en apercevoir.
+    fields = manifest.get("wind_fields", [])
+    if not isinstance(fields, list) or not fields:
+        raise ValueError("liste des champs de vent invalide")
+    if fields[0].get("file") != "wind_coarse.json":
+        raise ValueError("le champ de vent de reference doit venir en premier")
+    for field in fields:
+        name = field.get("file", "")
+        path = os.path.join(root, name)
+        if not name.endswith(".json") or "/" in name or not os.path.isfile(path):
+            raise ValueError(f"champ de vent manquant : {name}")
+        wind_rows(load_json(path), f"champ de vent {name}", ("u", "v", "gust"))
+
     expected = {f"{zone_id}.json" for zone_id in zones}
     zone_root = os.path.join(root, "zones")
     actual = set(os.listdir(zone_root)) if os.path.isdir(zone_root) else set()

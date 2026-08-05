@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """
-Produit les donnees statiques de Flamap pour la France metropolitaine.
+Produit les donnees statiques de Flamap pour les regions de `REGIONS` :
+France metropolitaine, puis peninsule Iberique en couverture reduite.
 
-Le navigateur ne charge d'abord qu'un apercu national leger :
+Le navigateur ne charge d'abord qu'un apercu leger :
   - foyers FIRMS agreges spatialement et par heure ;
   - perimetres EFFIS mis a jour dans les sept derniers jours ;
-  - vent national grossier ;
+  - un vent grossier par region ;
   - frise et manifest.
 
 Les detections detaillees, la saison EFFIS, le NRT et le vent fin sont repartis
@@ -23,6 +24,7 @@ Usage :
 import math
 import os
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 
 from flamap.geo import (
@@ -30,8 +32,10 @@ from flamap.geo import (
     feature_bounds,
     geographic_distance_km,
     geometry_points,
+    in_any_bbox,
     point_bounds_distance_km,
     swap_axes,
+    union_bbox,
 )
 from flamap.http import get
 from flamap.effis import (
@@ -39,6 +43,7 @@ from flamap.effis import (
     burnt_since,
     effis_wfs as _effis_wfs,
     fetch_burnt as _fetch_burnt,
+    merge_burnt,
     stable_feature_id,
     to_epoch,
 )
@@ -103,6 +108,18 @@ ZONES_OUT = os.path.join(OUT, "zones")
 # France metropolitaine et Corse. La bbox assume volontairement une petite
 # couronne etrangere : elle evite les coupures sur les frontieres et en mer.
 DEFAULT_BBOX = (-5.5, 41.0, 10.0, 51.5)
+FRANCE_BOXES = (DEFAULT_BBOX,)
+# Peninsule iberique. Deux rectangles et non un seul : le rectangle englobant
+# descendrait sur le Rif et sur tout le littoral algerien — Alger est a 36,8 N,
+# plus au nord qu'Almeria — qui brulent beaucoup l'ete et n'ont ni perimetre
+# EFFIS ni vent collecte ici. Le decrochement du second rectangle laisse les
+# Baleares et le Levant sans faire entrer l'Afrique du Nord.
+# Les Canaries, a 1 500 km au large, sortiraient du cadrage commun : elles ne
+# sont pas collectees.
+IBERIA_BOXES = (
+    (-9.8, 36.0, -1.5, 44.0),
+    (-1.5, 37.4, 4.6, 43.0),
+)
 TILE_DEG = 1.0
 DETAIL_ZOOM = 7
 # Les contours affiches dans l'apercu national restent bornes a sept jours.
@@ -110,6 +127,10 @@ RECENT_DAYS = 7
 
 OPEN_METEO = "https://api.open-meteo.com/v1/forecast"
 WIND_MODEL = "meteofrance_arome_france_hd"
+# AROME HD s'arrete a son domaine national : interroge sur l'Iberie il renvoie
+# des trous, et `fetch_wind` basculerait alors toute la grille sur `best_match`.
+# Chaque region garde donc son modele, jamais une grille commune.
+IBERIA_WIND_MODEL = "meteofrance_arpege_europe"
 WIND_PAST_DAYS = 10
 WIND_SPACING_KM = 20
 WIND_BATCH = 250
@@ -148,7 +169,72 @@ WIND_REQUEST_PAUSE = 6
 OPEN_METEO_TIMEOUT = 30
 # EX_TEMPFAIL : le workflow reconnaît ce cas externe et conserve le site actif.
 
+# Domaine collecte, region par region. Chacune porte ce qu'elle sait fournir :
+# l'Iberie n'a ni vent fin, ni temperature, ni suivi PSFDF, et le front ne les
+# reclame que la ou le manifeste les annonce.
+REGIONS = (
+    {
+        "id": "fr",
+        "label": "France",
+        "boxes": FRANCE_BOXES,
+        "countries": ("FR",),
+        "wind_model": WIND_MODEL,
+        "temperature": True,
+        "fine_wind": True,
+        "psfdf": True,
+    },
+    {
+        "id": "es",
+        "label": "Espagne et Portugal",
+        "boxes": IBERIA_BOXES,
+        "countries": ("ES", "PT"),
+        "wind_model": IBERIA_WIND_MODEL,
+        "temperature": False,
+        "fine_wind": False,
+        "psfdf": False,
+    },
+)
+
 EMPTY_FC = {"type": "FeatureCollection", "features": []}
+
+
+def region_envelope(region):
+    return union_bbox(region["boxes"])
+
+
+def domain_boxes(regions):
+    return [box for region in regions for box in region["boxes"]]
+
+
+def cli_regions(bbox):
+    """Region unique calquee sur la bbox passee en ligne de commande.
+
+    Le mode local sert a rejouer une zone precise : il garde le comportement
+    France complet — vent fin, temperature, PSFDF — sur la seule bbox demandee.
+    """
+    region = dict(REGIONS[0])
+    region["boxes"] = (tuple(bbox),)
+    return (region,)
+
+
+def collection_plan(regions):
+    """Ce que chaque region ecrit pour ce run.
+
+    Le nom du fichier de vent n'appartient pas a la region mais a son rang :
+    le premier champ garde le nom historique et porte toujours la temperature
+    de repli, parce que c'est celui que le front charge avec l'apercu et que
+    `validate_export` exige les deux : un export dont le premier champ porte un
+    autre nom serait un export que le front ne sait pas ouvrir.
+    """
+    return tuple(
+        {
+            **region,
+            "wind_file": "wind_coarse.json" if index == 0
+                         else f"wind_coarse_{region['id']}.json",
+            "temperature": region["temperature"] or index == 0,
+        }
+        for index, region in enumerate(regions)
+    )
 
 
 def fc(features):
@@ -167,19 +253,19 @@ def download_firms_feed(label, url):
     )
 
 
-def fetch_hotspots(bbox):
+def fetch_hotspots(boxes):
     return _fetch_hotspots(
-        bbox,
+        boxes,
         feeds=FIRMS_FEEDS,
         download=download_firms_feed,
         failure_code=TEMPORARY_SOURCE_FAILURE,
     )
 
 
-def extend_hotspot_history(hotspots, bbox):
+def extend_hotspot_history(hotspots, boxes):
     return _extend_hotspot_history(
         hotspots,
-        bbox,
+        boxes,
         zones_out=ZONES_OUT,
         hotspot_days=HOTSPOT_DAYS,
     )
@@ -235,14 +321,31 @@ def effis_wfs(typename, bbox, timeout=300):
     )
 
 
-def fetch_burnt(bbox):
+def fetch_burnt(bbox, countries=("FR",)):
     return _fetch_burnt(
         bbox,
+        countries=countries,
         wfs=effis_wfs,
         swap=swap_axes,
         epoch=to_epoch,
         feature_id=stable_feature_id,
     )
+
+
+def fetch_burnt_regions(regions):
+    """Une requete WFS par region, menees de front.
+
+    Le WFS EFFIS repond en 40 a 250 s : enchainer les regions ajouterait ce
+    delai a chaque collecte, alors que le service les traite en parallele.
+    """
+    with ThreadPoolExecutor(max_workers=len(regions)) as executor:
+        parts = list(executor.map(
+            lambda region: fetch_burnt(
+                region_envelope(region), region["countries"]
+            ),
+            regions,
+        ))
+    return merge_burnt(parts) if len(parts) > 1 else parts[0]
 
 
 # ---------------------------------------------------------------------------
@@ -274,6 +377,22 @@ def tile_range(bbox):
         for iy in range(math.floor(south), math.floor(math.nextafter(north, -math.inf)) + 1)
         for ix in range(math.floor(west), math.floor(math.nextafter(east, -math.inf)) + 1)
     ]
+
+
+def domain_tiles(regions):
+    """Reunion des cellules des regions, jamais les cellules de leur enveloppe.
+
+    L'enveloppe France + Iberie fabriquerait une centaine de cellules d'ocean,
+    de Mediterranee et d'Allemagne, toutes vides et toutes rechargees a chaque
+    collecte par la reprise de l'historique FIRMS.
+    """
+    cells = {
+        cell
+        for region in regions
+        for box in region["boxes"]
+        for cell in tile_range(box)
+    }
+    return sorted(cells, key=lambda cell: (cell[1], cell[0]))
 
 
 def feature_tiles(feature):
@@ -346,11 +465,24 @@ def build_wind(box, nx, ny, series, model, temperature=False):
     )
 
 
-def fetch_wind(box, spacing_km, label, temperature=False):
+def fetch_wind(box, spacing_km, label, temperature=False, wind_model=None):
     return _fetch_wind(
         box, spacing_km, label, temperature, grid=wind_grid,
         batches=request_wind_batches, holes_fn=wind_holes, build=build_wind,
-        wind_model=WIND_MODEL,
+        wind_model=WIND_MODEL if wind_model is None else wind_model,
+    )
+
+
+def fetch_coarse_wind(region):
+    """Champ grossier d'une region : `WIND_COARSE_N` colonnes sur sa largeur."""
+    box = wind_box(region_envelope(region))
+    span = (
+        (box[2] - box[0]) * 111
+        * math.cos(math.radians((box[1] + box[3]) / 2))
+    )
+    return fetch_wind(
+        box, span / (WIND_COARSE_N - 1), f"grille {region['label']}",
+        temperature=region["temperature"], wind_model=region["wind_model"],
     )
 
 
@@ -433,46 +565,58 @@ def main():
     if thermal_only:
         return main_thermal(bbox)
 
-    print(f"bbox {bbox}\n")
+    regions = collection_plan(cli_regions(bbox) if len(args) == 4 else REGIONS)
+    boxes = domain_boxes(regions)
+    domain = union_bbox(boxes)
+    print("domaine " + ", ".join(
+        f"{region['label']} {region_envelope(region)}" for region in regions
+    ) + "\n")
 
     print("NASA FIRMS - foyers actifs")
-    hotspots = fetch_hotspots(bbox)
+    hotspots = fetch_hotspots(boxes)
     if not hotspots["features"]:
         raise SystemExit("aucun foyer FIRMS : export annule")
     # `latest` vient du flux frais : l'historique repris ne doit jamais reculer
     # l'instant de reference si un ancien paquet est incomplet ou corrompu.
     latest = hotspots["features"][-1]["properties"]["ts"]
-    hotspots = extend_hotspot_history(hotspots, bbox)
+    hotspots = extend_hotspot_history(hotspots, boxes)
 
     print("\nCopernicus EFFIS - surfaces brulees")
-    burnt = fetch_burnt(bbox)
+    burnt = fetch_burnt_regions(regions)
     recent = burnt_since(burnt["burnt_dated"], latest, RECENT_DAYS)
 
-    print("\nAssociation PSFDF - incendies suivis")
-    try:
-        psfdf = fetch_psfdf(bbox)
-        print(f"  {len(psfdf['features'])} incendies mis à jour depuis 7 jours")
-        matched = align_psfdf_to_effis(psfdf, recent)
-        print(f"  {matched} disques ajustés sur un périmètre EFFIS récent")
-    except Exception as error:
-        # Cette couche éditoriale enrichit la carte mais ne doit pas empêcher la
-        # publication des observations satellitaires si son API est indisponible.
-        print(f"  ! PSFDF indisponible ({error})", file=sys.stderr)
-        psfdf = fc([])
+    psfdf_regions = [region for region in regions if region["psfdf"]]
+    psfdf = fc([])
+    if psfdf_regions:
+        print("\nAssociation PSFDF - incendies suivis")
+        try:
+            psfdf = fetch_psfdf(region_envelope(psfdf_regions[0]))
+            print(f"  {len(psfdf['features'])} incendies mis à jour depuis 7 jours")
+            matched = align_psfdf_to_effis(psfdf, recent)
+            print(f"  {matched} disques ajustés sur un périmètre EFFIS récent")
+        except Exception as error:
+            # Cette couche éditoriale enrichit la carte mais ne doit pas empêcher
+            # la publication des observations satellitaires si son API est
+            # indisponible.
+            print(f"  ! PSFDF indisponible ({error})", file=sys.stderr)
+            psfdf = fc([])
 
-    print("\nOpen-Meteo / AROME HD - vent a 10 m")
-    coarse_box = wind_box(bbox)
-    coarse_span = (
-        (coarse_box[2] - coarse_box[0])
-        * 111
-        * math.cos(math.radians((coarse_box[1] + coarse_box[3]) / 2))
-    )
-    coarse_spacing = coarse_span / (WIND_COARSE_N - 1)
-    coarse_wind = fetch_wind(
-        coarse_box, coarse_spacing, "grille nationale", temperature=True
-    )
+    print("\nOpen-Meteo - vent a 10 m")
+    # Les champs restent separes, un fichier par region : voir IBERIA_WIND_MODEL.
+    coarse_winds = [(region, fetch_coarse_wind(region)) for region in regions]
+    # Le premier porte la temperature de repli et les previsions : c'est la
+    # region de reference, celle dont le fichier garde le nom historique.
+    reference_wind = coarse_winds[0][1]
 
+    fine_regions = [region for region in regions if region["fine_wind"]]
     fine_keys = fine_wind_tiles(recent, hotspots, latest)
+    fine_keys = {
+        key for key in fine_keys
+        if any(
+            in_any_bbox(region["boxes"], key[0] + TILE_DEG / 2, key[1] + TILE_DEG / 2)
+            for region in fine_regions
+        )
+    }
     fine_wind = {}
     if fine_keys:
         # La grille dépasse la cellule active de 60 km. Le navigateur fond
@@ -501,7 +645,7 @@ def main():
     hotspot_cells = partition_features(hotspots["features"], point=True)
     dated_cells = partition_features(burnt["burnt_dated"]["features"])
     nrt_cells = partition_features(burnt["burnt_nrt"]["features"])
-    cells = tile_range(bbox)
+    cells = domain_tiles(regions)
 
     zone_payloads = {}
     for ix, iy in cells:
@@ -520,13 +664,15 @@ def main():
     timeline = build_timeline(hotspots, burnt["burnt_dated"])
     social_timeline = build_social_timeline(timeline)
     overview = aggregate_hotspots(hotspots)
-    coarse = whole_wind(coarse_wind)
+    coarse_exports = {
+        region["wind_file"]: whole_wind(wind) for region, wind in coarse_winds
+    }
     now = datetime.now(timezone.utc).timestamp()
-    weather = weather_forecast(coarse_wind, now)
+    weather = weather_forecast(reference_wind, now)
     manifest = {
         "version": 1,
         "generated_at": generated,
-        "bbox": list(bbox),
+        "bbox": list(domain),
         "tile_deg": TILE_DEG,
         "detail_zoom": DETAIL_ZOOM,
         "zone_template": "data/zones/{id}.json",
@@ -537,7 +683,26 @@ def main():
         "nrt_count": len(burnt["burnt_nrt"]["features"]),
         "psfdf_count": len(psfdf["features"]),
         "fine_wind_zones": [tile_id(*key) for key in sorted(fine_wind)],
-        "wind_model": coarse_wind["model"],
+        "wind_model": reference_wind["model"],
+        "regions": [
+            {
+                "id": region["id"],
+                "label": region["label"],
+                "boxes": [list(box) for box in region["boxes"]],
+                "psfdf": region["psfdf"],
+            }
+            for region in regions
+        ],
+        # Le front lit ces champs dans l'ordre : le premier est charge avec le
+        # reste de l'apercu national, les suivants viennent en complement.
+        "wind_fields": [
+            {
+                "file": region["wind_file"],
+                "model": coarse_exports[region["wind_file"]]["model"],
+                "bbox": coarse_exports[region["wind_file"]]["bbox"],
+            }
+            for region, _ in coarse_winds
+        ],
     }
 
     publish_export(OUT, {
@@ -546,8 +711,8 @@ def main():
         "psfdf_fires.geojson": psfdf,
         "timeline.json": timeline,
         "social_timeline.json": social_timeline,
-        "wind_coarse.json": coarse,
         "weather_forecast.json": weather,
+        **coarse_exports,
         "manifest.json": manifest,
     }, zone_payloads)
     # `thermal.json` appartient au workflow meteo : ne jamais l'ecrire ici, sous

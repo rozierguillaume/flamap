@@ -124,14 +124,19 @@ Couches utiles (`GetCapabilities` en donne 40) :
 L'attribut `CLASS` vaut `Today` / `7DAYS` / `30DAYS` / `FireSeason` — c'est
 exactement ta distinction « brûlé récemment » vs « brûlé plus tôt », prête à l'emploi.
 
-### Trois pièges que j'ai rencontrés
+### Les pièges que j'ai rencontrés
 
 1. **L'axe est inversé.** La sortie `outputformat=geojson` renvoie les coordonnées
    en `[lat, lon]`, pas `[lon, lat]` comme le veut la spec GeoJSON. Il faut les
    permuter (`swap_axes()` dans `fetch_fires.py`), sinon tout atterrit en Somalie.
 2. **C'est lent.** 40 s à 250 s par requête, et `GetCapabilities` a mis 4 min 30.
    À mettre en cache, jamais à appeler depuis le front.
-3. **`LASTUPDATE` retarde.** Le polygone du Porge était encore daté du 23/07 alors
+3. **`COUNTRY` est le seul filtre pays.** La bbox d'une région déborde toujours
+   sur ses voisins ; c'est cet attribut de la couche datée qui décide de ce qui
+   part au navigateur (`FR` pour la France, `ES`/`PT` pour l'Ibérie). La couche
+   NRT, elle, n'a aucun attribut : ses cicatrices communes à deux régions sont
+   dédupliquées sur l'identifiant calculé à partir de la géométrie.
+4. **`LASTUPDATE` retarde.** Le polygone du Porge était encore daté du 23/07 alors
    que le feu courait toujours le 27. Le produit MODIS BA a un seuil de ~30 ha et
    lisse beaucoup : il sous-estime pendant la phase active. C'est pour ça que la
    carte superpose les hotspots FIRMS (frais) au polygone (en retard).
@@ -172,7 +177,12 @@ réanalyse ERA5, 25 km, latence 5 jours).
 
 1. **AROME ne couvre que la France et ses abords.** Hors domaine la réponse est
    une grille de `null` — pas une erreur HTTP. D'où la bascule automatique sur
-   le modèle `best_match` quand plus de 20 % des valeurs manquent.
+   le modèle `best_match` quand plus de 20 % des valeurs manquent. C'est aussi
+   pourquoi chaque région porte son propre modèle et son propre fichier : une
+   grille commune France + Ibérie ferait basculer **toute** la grille, France
+   comprise, sur `best_match`. La péninsule Ibérique est donc collectée avec
+   `meteofrance_arpege_europe` (11 km, domaine européen), à la maille large
+   seulement.
 2. **`wind_direction_10m` est l'azimut d'où vient le vent**, convention météo.
    Les composantes sont donc à l'opposé : `u = -v·sin(θ)`, `v = -v·cos(θ)`.
 3. **Ne jamais interpoler la direction en degrés** : entre 350° et 10° la

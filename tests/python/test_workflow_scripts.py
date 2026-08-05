@@ -45,7 +45,9 @@ class Response:
 class WorkflowScriptsTest(unittest.TestCase):
     def fixture_files(self) -> dict[str, bytes]:
         manifest = {"zones": ["x+00_y+41"], "hotspot_count": 1,
-                    "dated_count": 1, "fine_wind_zones": []}
+                    "dated_count": 1, "fine_wind_zones": [],
+                    "wind_fields": [{"file": "wind_coarse.json"},
+                                    {"file": "wind_coarse_es.json"}]}
         files = {
             "data/manifest.json": manifest,
             "data/overview_hotspots.geojson": {"features": [{"properties": {"frp": 1}}]},
@@ -53,7 +55,9 @@ class WorkflowScriptsTest(unittest.TestCase):
             "data/psfdf_fires.geojson": {"type": "FeatureCollection", "features": []},
             "data/timeline.json": [{"kind": "sat", "frp": 1}],
             "data/social_timeline.json": [{"kind": "sat", "frp": 1}],
-            "data/wind_coarse.json": {"nt": 2, "temperature": [1, 2], "precipitation": [0, 0]},
+            "data/wind_coarse.json": {"nt": 2, "temperature": [1, 2], "precipitation": [0, 0],
+                                      "u": [1, 2], "v": [1, 2], "gust": [1, 2]},
+            "data/wind_coarse_es.json": {"nt": 2, "u": [1, 2], "v": [1, 2], "gust": [1, 2]},
             "data/weather_forecast.json": {"nt": 2, "u": [1, 2], "v": [1, 2], "gust": [1, 2]},
             "data/zones/x%2B00_y%2B41.json": {"id": "x+00_y+41"},
             "data/thermal.json": {"nt": 2, "nx": 45, "ny": 1, "model": "test",

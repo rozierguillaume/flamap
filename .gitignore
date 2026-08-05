@@ -18,6 +18,7 @@ data/burnt_recent.geojson
 data/psfdf_fires.geojson
 data/timeline.json
 data/wind_coarse.json
+data/wind_coarse_*.json
 data/weather_forecast.json
 data/zones/
 

@@ -54,6 +54,13 @@ def download_artifact(
 
     manifest = json.loads(download(("data/manifest.json", "data/manifest.json")))
     files = [(f"data/{name}", f"data/{name}") for name in CORE_DATA_FILES]
+    # Champs de vent regionaux. Lus dans le manifeste publie plutot que dans une
+    # liste en dur : le premier deploiement qui en ajoute un ne peut pas echouer
+    # sur un fichier que le site en ligne ne porte pas encore.
+    for field in manifest.get("wind_fields", []):
+        name = field["file"]
+        if name not in CORE_DATA_FILES:
+            files.append((f"data/{name}", f"data/{name}"))
     for zone_id in manifest["zones"]:
         encoded = urllib.parse.quote(str(zone_id), safe="")
         files.append((f"data/zones/{encoded}.json", f"data/zones/{zone_id}.json"))

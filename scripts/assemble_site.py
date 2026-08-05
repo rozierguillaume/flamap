@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import pathlib
 import shutil
 
@@ -34,6 +35,13 @@ def assemble_fire(source: pathlib.Path, data: pathlib.Path, target: pathlib.Path
     target_data.mkdir(parents=True, exist_ok=True)
     for name in FIRE_DATA_FILES:
         shutil.copy2(data / name, target_data / name)
+    # Les champs de vent regionaux suivent les regions collectees : les lire
+    # dans le manifeste evite d'avoir a tenir une seconde liste a jour ici.
+    manifest = json.loads((data / "manifest.json").read_text(encoding="utf-8"))
+    for field in manifest.get("wind_fields", []):
+        name = field["file"]
+        if name not in FIRE_DATA_FILES:
+            shutil.copy2(data / name, target_data / name)
     thermal = data / "thermal.json"
     if thermal.exists():
         shutil.copy2(thermal, target_data / thermal.name)

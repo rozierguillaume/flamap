@@ -10,6 +10,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 
+from flamap.geo import in_any_bbox
 from flamap.http import get
 
 
@@ -53,13 +54,14 @@ def download_firms_feed(label, url, *, http_get=None, timeout=None,
             time.sleep(5)
 
 
-def fetch_hotspots(bbox, *, feeds=None, download=None, failure_code=None):
+def fetch_hotspots(boxes, *, feeds=None, download=None, failure_code=None):
+    """`boxes` est la reunion des rectangles collectes, toutes regions confondues."""
     feeds = FIRMS_FEEDS if feeds is None else feeds
     download = download_firms_feed if download is None else download
     failure_code = (
         TEMPORARY_SOURCE_FAILURE if failure_code is None else failure_code
     )
-    west, south, east, north = bbox
+    boxes = list(boxes)
     features = []
 
     # Les quatre fichiers sont indépendants. Les télécharger ensemble réduit
@@ -86,7 +88,7 @@ def fetch_hotspots(bbox, *, feeds=None, download=None, failure_code=None):
         count = 0
         for row in csv.DictReader(io.StringIO(raw)):
             lon, lat = float(row["longitude"]), float(row["latitude"])
-            if not (west <= lon <= east and south <= lat <= north):
+            if not in_any_bbox(boxes, lon, lat):
                 continue
 
             hhmm = row["acq_time"].zfill(4)
@@ -117,7 +119,7 @@ def fetch_hotspots(bbox, *, feeds=None, download=None, failure_code=None):
     return fc(features)
 
 
-def extend_hotspot_history(hotspots, bbox, *, zones_out=None,
+def extend_hotspot_history(hotspots, boxes, *, zones_out=None,
                            hotspot_days=None):
     """Complete les 7 jours FIRMS avec l'historique du deploiement precedent."""
     zones_out = ZONES_OUT if zones_out is None else zones_out
@@ -125,7 +127,7 @@ def extend_hotspot_history(hotspots, bbox, *, zones_out=None,
     if not os.path.isdir(zones_out) or not hotspots["features"]:
         return hotspots
 
-    west, south, east, north = bbox
+    boxes = list(boxes)
     latest = hotspots["features"][-1]["properties"]["ts"]
     cutoff = latest - hotspot_days * 86400
     keys = {
@@ -155,8 +157,7 @@ def extend_hotspot_history(hotspots, bbox, *, zones_out=None,
             key = (prop.get("source"), ts, lon, lat)
             if (
                 cutoff <= ts <= latest
-                and west <= lon <= east
-                and south <= lat <= north
+                and in_any_bbox(boxes, lon, lat)
                 and key not in keys
             ):
                 hotspots["features"].append(feature)

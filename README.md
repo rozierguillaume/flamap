@@ -1,7 +1,8 @@
 # Flamap
 
 **[flamap.fr](https://flamap.fr) — la carte des incendies en France
-métropolitaine, en quasi temps réel, à partir de données satellite publiques.**
+métropolitaine, en Espagne et au Portugal, en quasi temps réel, à partir de
+données satellite publiques.**
 
 Un script Python fabrique des fichiers statiques ; le navigateur les charge
 progressivement selon le zoom. Pas de serveur, pas de base de données, pas de
@@ -16,7 +17,7 @@ clé d'API, pas de compte à créer.
 | **Foyers** | détections NASA FIRMS des 10 derniers jours | points, du jaune clair au brun sombre selon l'ancienneté |
 | **Terre brûlée** | polygones Copernicus EFFIS | aplat sombre |
 | **Incendies signalés** | suivi de l'association PSFDF | cercle coloré selon le statut |
-| **Vent à 10 m** | modèle AROME HD via Open-Meteo | nappe de particules |
+| **Vent à 10 m** | AROME HD (France) et ARPEGE Europe (Ibérie) via Open-Meteo | nappe de particules |
 | **Fumée simulée** | foyers récents + champ de vent | panaches diffus, indicatifs |
 | **Moyens aériens** | positions ADS-B Airplanes.live | appareils suivis, cap et fiche de vol |
 
@@ -51,7 +52,7 @@ Puis ouvrir <http://localhost:8777>. Un jeu de données figé est versionné dan
 Pour régénérer les données depuis les sources réelles :
 
 ```bash
-python3 fetch_fires.py                      # France entière
+python3 fetch_fires.py                      # toutes les régions collectées
 python3 fetch_fires.py -1.6 44.2 -0.2 45.4  # une bbox : west south east north
 ```
 
@@ -110,7 +111,7 @@ n'est jamais renvoyé au moteur de rendu.
 | **NASA FIRMS** | foyers actifs, VIIRS 375 m et MODIS | ~6 passages/jour, latence ~3 h |
 | **Copernicus EFFIS** | polygones de surfaces brûlées | 1 à 2 publications/jour |
 | **PSFDF** | incendies signalés et leur statut | au fil de l'eau |
-| **Open-Meteo** | modèle AROME HD de Météo-France | pas horaire |
+| **Open-Meteo** | AROME HD sur la France, ARPEGE Europe sur l'Ibérie | pas horaire |
 | **Airplanes.live** | positions ADS-B des moyens aériens | interrogé par le navigateur |
 | **IGN, EOX, BAN** | fond satellite et nom de la commune | — |
 
@@ -227,6 +228,10 @@ cherchez le commentaire avant de le corriger.
   l'affichage n'est pas exhaustif et la proximité d'un feu ne confirme pas une
   mission.
 - Tout est en UTC côté satellite ; l'affichage est converti en heure de Paris.
+- **La péninsule Ibérique est couverte plus légèrement que la France** : foyers
+  FIRMS et périmètres EFFIS, mais ni vent à la maille fine, ni grille de
+  température, ni incendies signalés PSFDF, ni moyens aériens. Les Canaries ne
+  sont pas collectées.
 
 ## Crédits
 
@@ -236,8 +241,9 @@ affichés dans l'interface et doivent y rester.
 - Foyers actifs : **NASA FIRMS** (VIIRS 375 m et MODIS, LANCE/EOSDIS)
 - Surfaces brûlées : **Copernicus EFFIS**
 - Incendies signalés : **association PSFDF**
-- Vent, température et précipitations : modèle **AROME HD** de Météo-France,
-  servi par **Open-Meteo** (CC BY 4.0)
+- Vent, température et précipitations : modèles **AROME HD** (France) et
+  **ARPEGE Europe** (péninsule Ibérique) de Météo-France, servis par
+  **Open-Meteo** (CC BY 4.0)
 - Fond de carte : ortho-photo **IGN-F / Géoplateforme** (France) et
   **Sentinel-2 cloudless** par EOX ailleurs (données Copernicus Sentinel
   modifiées 2020) ; toponymes **CARTO** / **OpenStreetMap**
