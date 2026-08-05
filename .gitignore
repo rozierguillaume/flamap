@@ -7,6 +7,10 @@ CLAUDE.md
 __pycache__/
 *.pyc
 
+# secrets locaux (clés API, identifiants d'archive) : jamais committés
+.env
+outbox-backfill/
+
 # donnees nationales generees par fetch_fires.py
 data/manifest.json
 data/overview_hotspots.geojson
