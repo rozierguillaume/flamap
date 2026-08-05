@@ -65,6 +65,14 @@ Origines autorisées en CORS : `https://flamap.fr` en production,
 `aircraft-history`). Toute autre origine ne reçoit pas l'en-tête
 `Access-Control-Allow-Origin` et le navigateur bloque la réponse.
 
+⚠️ **Constaté en pratique (05/08/2026) : `localhost` ne reçoit pas non plus cet
+en-tête**, quel que soit le port — `curl` avec `Origin: http://localhost:8777`
+obtient une réponse `200` mais sans `Access-Control-Allow-Origin`, et le
+navigateur bloque donc l'appel. En attendant un correctif côté
+`flamap-archive-fires`, `js/archive/api.js` bascule vers des fixtures locales
+(`js/archive/mock/`, même origine que la page) dès que `location.hostname` vaut
+`localhost` ou `127.0.0.1` — voir le commentaire en tête de ce fichier.
+
 ### Cache et fraîcheur
 
 Le journal n'avance qu'au rythme du timer de fusion serveur (dix minutes). Les

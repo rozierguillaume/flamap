@@ -1,0 +1,40 @@
+[
+  {
+    "id": "2018Var",
+    "commune": "Correns",
+    "departement": "Var-83",
+    "status": "En cours",
+    "statuses": [
+      "En cours"
+    ],
+    "first_ts": 1785741812,
+    "last_ts": 1785873279,
+    "surface_max": 1850.0,
+    "center": [
+      6.080147,
+      43.487022
+    ],
+    "radius_km": 5.81,
+    "effis_matches": 6,
+    "states": 2
+  },
+  {
+    "id": "2019Ariege",
+    "commune": "Seix",
+    "departement": "Ariège-09",
+    "status": "En cours",
+    "statuses": [
+      "En cours"
+    ],
+    "first_ts": 1785742047,
+    "last_ts": 1785873275,
+    "surface_max": 14.0,
+    "center": [
+      1.180651,
+      42.83915
+    ],
+    "radius_km": 0.36,
+    "effis_matches": 1,
+    "states": 2
+  }
+]
