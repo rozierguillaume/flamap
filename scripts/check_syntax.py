@@ -23,6 +23,7 @@ HTML_FILES = (
     ROOT / "archives.html",
     ROOT / "social.html",
     ROOT / "mentions-legales.html",
+    ROOT / "aviso-legal.html",
     ROOT / "scripts" / "benchmark_lot0.html",
 )
 

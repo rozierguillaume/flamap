@@ -7,6 +7,8 @@
 <title>Mentions légales et confidentialité | Flamap</title>
 <meta name="description" content="Mentions légales, hébergement et politique de confidentialité du site Flamap.">
 <link rel="canonical" href="https://flamap.fr/mentions-legales.html">
+<link rel="alternate" hreflang="fr" href="https://flamap.fr/mentions-legales.html">
+<link rel="alternate" hreflang="es" href="https://flamap.fr/aviso-legal.html">
 <meta name="theme-color" content="#0d0f12">
 <link rel="icon" href="/favicon.ico" sizes="48x48">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml" sizes="any">
@@ -53,7 +55,8 @@
     font-feature-settings: "ss02" 1;
   }
   .brand strong span { color: var(--ink); }
-  header > a { color: var(--dim); font-size: 14px; }
+  header > a, .head-links a { color: var(--dim); font-size: 14px; }
+  .head-links { display: flex; align-items: center; gap: 16px; }
   main { padding: 56px 0 70px; }
   h1 { margin: 0 0 12px; font-size: clamp(32px, 7vw, 48px); letter-spacing: -.045em; }
   .intro { margin: 0 0 44px; color: var(--dim); font-size: 17px; line-height: 1.6; }
@@ -103,7 +106,10 @@
     </svg>
     <strong>Fla<span>map</span></strong>
   </a>
-  <a href="/">Retour à la carte</a>
+  <span class="head-links">
+    <a href="/aviso-legal.html" lang="es" hreflang="es">Español</a>
+    <a href="/">Retour à la carte</a>
+  </span>
 </header>
 
 <main>

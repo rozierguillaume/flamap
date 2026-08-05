@@ -23,6 +23,15 @@ button { font: inherit; }
 .archive-head .brand strong { font-size: 20px; line-height: 1; letter-spacing: -.04em; color: var(--hot); }
 .archive-head .brand strong span { color: var(--ink); }
 .archive-head > a { color: var(--ink-dim); font-size: 14px; }
+.archive-head-links { display: flex; align-items: center; gap: 16px; }
+.archive-head-links a { color: var(--ink-dim); font-size: 14px; }
+/* Même bascule que sur la carte, réduite au code de l'autre langue. */
+.archive-head-links #lang-btn {
+  padding: 0; border: 0; background: transparent; color: var(--ink-dim);
+  font: inherit; font-size: 13px; font-weight: 700; letter-spacing: .04em;
+  cursor: pointer;
+}
+.archive-head-links #lang-btn:hover { color: var(--ink); }
 
 .archive-list { width: min(880px, calc(100% - 36px)); margin: 0 auto; padding: 40px 0 70px; }
 .archive-list h1 { margin: 0 0 10px; font-size: clamp(28px, 6vw, 40px); letter-spacing: -.04em; }

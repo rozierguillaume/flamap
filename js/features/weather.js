@@ -1,3 +1,5 @@
+import { getLocale, t } from '../i18n.js';
+import { fmtHour, fmtHourMinute, fmtWeekdayTime } from '../util/format.js';
 import { gridAt, gridBilinear } from '../util/grid.js';
 
 
@@ -9,8 +11,10 @@ const THERMAL_URL = 'data/thermal.json';
 const BAN_BBOX = [-5.5, 41.0, 10.0, 51.5];
 
 export function weatherCoordinates(point) {
-  return `${Math.abs(point.lat).toFixed(3)}° ${point.lat >= 0 ? 'N' : 'S'}`
-       + `, ${Math.abs(point.lng).toFixed(3)}° ${point.lng >= 0 ? 'E' : 'O'}`;
+  const meridian = t(point.lat >= 0 ? 'format.compass.north' : 'format.compass.south');
+  const parallel = t(point.lng >= 0 ? 'format.compass.east' : 'format.compass.west');
+  return `${Math.abs(point.lat).toFixed(3)}° ${meridian}`
+       + `, ${Math.abs(point.lng).toFixed(3)}° ${parallel}`;
 }
 
 export function createWeatherController({
@@ -81,7 +85,8 @@ export function createWeatherController({
     url.searchParams.set('lat', lat.toFixed(6));
     url.searchParams.set('limit', '1');
     const response = await fetchImpl(url);
-    if (!response.ok) throw new Error(`Géocodage HTTP ${response.status}`);
+    if (!response.ok)
+      throw new Error(t('weather.geocode.error', { status: response.status }));
     const result = await response.json();
     const properties = result.features?.[0]?.properties || {};
     const name = properties.city || properties.municipality || '';
@@ -93,8 +98,8 @@ export function createWeatherController({
   function renderWeatherPlace(point = weatherTarget()) {
     weatherPlace.textContent = (weatherCommune ? `${weatherCommune} — ` : '')
                              + weatherCoordinates(point);
-    weatherTitle.textContent = weatherPin ? 'Météo au point choisi'
-                                          : 'Météo au centre de la carte';
+    weatherTitle.textContent =
+      t(weatherPin ? 'weather.title.pin' : 'weather.title.center');
     weatherFollow.hidden = !weatherPin;
   }
 
@@ -173,7 +178,7 @@ export function createWeatherController({
     renderWeatherPlace(point);
     if (rows.length < 2) {
       weatherChart.innerHTML = '';
-      weatherStatus.textContent = "Prévisions indisponibles à cette localisation.";
+      weatherStatus.textContent = t('weather.nodata');
       weatherStatus.className = 'error';
       return;
     }
@@ -224,13 +229,13 @@ export function createWeatherController({
       ? Date.parse(manifest.generated_at) / 1000 : NaN;
     if (updated >= rows[0].ts && updated <= rows[rows.length - 1].ts) {
       const markerX = timeX(updated);
-      const hour = new Date(updated * 1000).toLocaleTimeString('fr-FR',
-        { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Paris' }).replace(':', 'h');
+      const hour = fmtHourMinute(updated);
       const anchor = markerX < (left + right) / 2 ? 'start' : 'end';
       const offset = anchor === 'start' ? 5 : -5;
       svg += `<line x1="${markerX.toFixed(1)}" y1="${tempTop}" x2="${markerX.toFixed(1)}"`
            + ` y2="${precipBottom}" class="update-line"/>`;
-      svg += svgText((markerX + offset).toFixed(1), 134, `carte ${hour}`, 'update-label', anchor);
+      svg += svgText((markerX + offset).toFixed(1), 134,
+        t('weather.mapAt', { hour }), 'update-label', anchor);
     }
     if (now >= rows[0].ts && now <= rows[rows.length - 1].ts) {
       const markerX = timeX(now);
@@ -238,9 +243,9 @@ export function createWeatherController({
       const offset = anchor === 'start' ? 5 : -5;
       svg += `<line x1="${markerX.toFixed(1)}" y1="${tempTop}" x2="${markerX.toFixed(1)}"`
            + ` y2="${precipBottom}" class="now-line"/>`;
-      svg += svgText((markerX + offset).toFixed(1), 25, 'maintenant', 'now-label', anchor);
+      svg += svgText((markerX + offset).toFixed(1), 25, t('weather.now'), 'now-label', anchor);
     }
-    svg += svgText(left, 25, 'Température', 'axis', 'start');
+    svg += svgText(left, 25, t('weather.axis.temperature'), 'axis', 'start');
     svg += svgText(4, tempTop + 4, `${tempMax}°`, 'axis', 'start');
     svg += svgText(4, tempBottom + 4, `${tempMin}°`, 'axis', 'start');
     const temperaturePath = smoothPath(temperatures, tempY);
@@ -252,7 +257,7 @@ export function createWeatherController({
          + ` r="4.5" class="temp-dot"/>`;
     svg += svgText(x(peak).toFixed(1), Math.max(12, tempY(temperatures[peak]) - 10).toFixed(1),
       `${Math.round(temperatures[peak])}°`, 'temp-value');
-    svg += svgText(left, 161, 'Vent moyen et rafales', 'axis', 'start');
+    svg += svgText(left, 161, t('weather.axis.wind'), 'axis', 'start');
     svg += svgText(4, windTop + 4, `${windMax}`, 'axis', 'start');
     svg += svgText(4, windBottom + 4, '0', 'axis', 'start');
     svg += `<path d="${path(rows.map(row => row.gust), windY)}" class="gust-line"/>`;
@@ -264,9 +269,9 @@ export function createWeatherController({
         svg += `<path d="M0,-8 L4.5,3 L0,1 L-4.5,3 Z" class="wind-arrow"`
              + ` transform="translate(${x(index).toFixed(1)} 176) rotate(${to.toFixed(0)})"/>`;
     });
-    svg += svgText(left, 297, 'Précipitations horaires', 'axis', 'start');
+    svg += svgText(left, 297, t('weather.axis.precipitation'), 'axis', 'start');
     svg += svgText(4, precipTop + 4,
-      precipitationMax.toLocaleString('fr-FR', { maximumFractionDigits: 1 }), 'axis', 'start');
+      precipitationMax.toLocaleString(getLocale(), { maximumFractionDigits: 1 }), 'axis', 'start');
     svg += svgText(4, precipBottom + 4, '0', 'axis', 'start');
     const barWidth = Math.max(2, (right - left) / (rows.length - 1) - 2);
     rows.forEach((row, index) => {
@@ -278,8 +283,7 @@ export function createWeatherController({
            + ` width="${barWidth.toFixed(1)}" height="${barHeight.toFixed(1)}"`
            + ` rx="1" class="precip-bar${empty ? ' zero' : ''}"/>`;
       if (index % tickEvery === 0 || index === rows.length - 1) {
-        const hour = new Date(row.ts * 1000).toLocaleTimeString('fr-FR',
-          { hour: '2-digit', timeZone: 'Europe/Paris' }).replace(' h', 'h');
+        const hour = fmtHour(row.ts);
         svg += svgText(x(index).toFixed(1), 405, hour);
       }
     });
@@ -290,13 +294,11 @@ export function createWeatherController({
     svg += '<line class="hover-line" x1="0" y1="40" x2="0" y2="368" visibility="hidden"/>';
     weatherChart.innerHTML = svg;
     const first = rows[0], last = rows[rows.length - 1];
-    weatherChart.setAttribute('aria-label',
-      `Historique et prévisions météo sur 24 heures. Température de `
-      + `${first.temperature.toFixed(1)} à ${last.temperature.toFixed(1)} degrés. `
-      + `Vent initial ${Math.round(first.speed)} kilomètres heure, `
-      + `rafales ${Math.round(first.gust)} kilomètres heure. `
-      + `Précipitations horaires maximales `
-      + `${Math.max(...rows.map(row => row.precipitation)).toFixed(2)} millimètres.`);
+    weatherChart.setAttribute('aria-label', t('weather.chart.summary', {
+      first: first.temperature.toFixed(1), last: last.temperature.toFixed(1),
+      speed: Math.round(first.speed), gust: Math.round(first.gust),
+      precipitation: Math.max(...rows.map(row => row.precipitation)).toFixed(2),
+    }));
     weatherStatus.textContent = '';
     weatherStatus.className = '';
   }
@@ -316,17 +318,17 @@ export function createWeatherController({
 
     const to = (Math.atan2(row.u, row.v) * 180 / Math.PI + 360) % 360;
     const from = cardinals[Math.round(((to + 180) % 360) / 22.5) % 16];
-    const hour = new Date(row.ts * 1000).toLocaleString('fr-FR', {
-      weekday: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Paris',
-    }).replace(':', 'h');
-    const kind = row.ts <= Date.now() / 1000 ? 'historique' : 'prévision';
+    const hour = fmtWeekdayTime(row.ts);
+    const kind = t(row.ts <= Date.now() / 1000
+      ? 'weather.kind.past' : 'weather.kind.forecast');
     weatherTip.innerHTML = `<strong>${hour} — ${kind}</strong>`
-      + `<span class="temperature">${row.temperature.toLocaleString('fr-FR',
+      + `<span class="temperature">${row.temperature.toLocaleString(getLocale(),
         { minimumFractionDigits: 1, maximumFractionDigits: 1 })} °C</span>`
-      + `<span>Vent de ${from}, ${Math.round(row.speed)} km/h</span>`
-      + `<span>Rafales : ${Math.round(row.gust)} km/h</span>`
-      + `<span>Précipitations : ${row.precipitation.toLocaleString('fr-FR',
-        { minimumFractionDigits: 1, maximumFractionDigits: 2 })} mm</span>`;
+      + `<span>${t('weather.tip.wind', { dir: from, kmh: Math.round(row.speed) })}</span>`
+      + `<span>${t('weather.tip.gust', { kmh: Math.round(row.gust) })}</span>`
+      + `<span>${t('weather.tip.precipitation', {
+        mm: row.precipitation.toLocaleString(getLocale(),
+          { minimumFractionDigits: 1, maximumFractionDigits: 2 }) })}</span>`;
     weatherTip.style.left = `${x / 430 * rect.width}px`;
     weatherTip.style.top = (event.clientY - rect.top) < rect.height / 2
       ? `${rect.height * .44}px` : '28px';
@@ -339,7 +341,7 @@ export function createWeatherController({
   weatherChart.addEventListener('pointerleave', hideWeatherTip);
 
   async function loadWeather() {
-    weatherStatus.textContent = 'Chargement des prévisions…';
+    weatherStatus.textContent = t('weather.loading');
     weatherStatus.className = '';
     try {
       if (!weatherPromise) weatherPromise = loadJson(WEATHER_URL);
@@ -347,7 +349,7 @@ export function createWeatherController({
       if (weatherPanel.classList.contains('open')) drawWeather();
     } catch (error) {
       weatherPromise = null;
-      weatherStatus.textContent = 'Prévisions momentanément indisponibles.';
+      weatherStatus.textContent = t('weather.unavailable');
       weatherStatus.className = 'error';
     }
   }
@@ -428,8 +430,9 @@ export function createWeatherController({
     const metadata = temperatureMetadata();
     const stamp = thermalData || metadata.dated
       ? getWindTime() : metadata.ts;
-    tempKey.title = 'Température à 2 m au centre de la carte'
-                  + (stamp ? `, au ${fmt(stamp)}` : '');
+    tempKey.title = stamp
+      ? t('weather.badge.title.at', { date: fmt(stamp) })
+      : t('weather.badge.title');
   }
 
   /* Le badge de température lit le champ fin : il ne peut donc plus attendre

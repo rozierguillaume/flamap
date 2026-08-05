@@ -1,3 +1,4 @@
+import { getLocale, getTimeZone, getTimeZoneName, t } from '../i18n.js';
 import { fmtClock } from '../util/format.js';
 import { SMOKE_H, SMOKE_LIVE_K, SMOKE_WINDOW } from '../fx/smoke.js';
 
@@ -64,16 +65,19 @@ function exportMessage(message) {
 
 function exportDate(value) {
   const date = value instanceof Date ? value : new Date(value);
-  if (!Number.isFinite(date.getTime())) return 'indisponible';
-  return date.toLocaleString('fr-FR', {
-    timeZone: 'Europe/Paris', day: 'numeric', month: 'long', year: 'numeric',
+  if (!Number.isFinite(date.getTime())) return t('export.date.unavailable');
+  return date.toLocaleString(getLocale(), {
+    timeZone: getTimeZone(), day: 'numeric', month: 'long', year: 'numeric',
     hour: '2-digit', minute: '2-digit',
+  // « 28 juillet 2026 à 16:10 » tient mal sur une ligne de pied de page ;
+  // l'espagnol place déjà sa virgule, le remplacement y est sans effet.
   }).replace(' à ', ', ');
 }
 
 function exportFilename(now, extension = 'png') {
+  // Format ISO figé : le nom de fichier se trie, il ne se lit pas dans une langue.
   const parts = new Intl.DateTimeFormat('fr-CA', {
-    timeZone: 'Europe/Paris', year: 'numeric', month: '2-digit', day: '2-digit',
+    timeZone: getTimeZone(), year: 'numeric', month: '2-digit', day: '2-digit',
     hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
   }).formatToParts(now).reduce((out, part) => (out[part.type] = part.value, out), {});
   return `flamap-${parts.year}-${parts.month}-${parts.day}-${parts.hour}${parts.minute}.${extension}`;
@@ -222,7 +226,7 @@ function drawExportBrand(ctx) {
   ctx.fillStyle = '#aaa49e'; ctx.fillText('.fr', x + 63 + flamap + 2, y + height / 2 + 3);
 }
 
-function drawExportFooter(ctx, generatedAt, shownTime = getTimelineController().getTime(), media = 'Image') {
+function drawExportFooter(ctx, generatedAt, shownTime = getTimelineController().getTime(), media = 'still') {
   const gradient = ctx.createLinearGradient(0, 444, 0, EXPORT_H);
   gradient.addColorStop(0, 'rgba(8,10,12,0)');
   gradient.addColorStop(.5, 'rgba(8,10,12,.70)');
@@ -232,16 +236,17 @@ function drawExportFooter(ctx, generatedAt, shownTime = getTimelineController().
   ctx.textBaseline = 'alphabetic';
   ctx.font = '500 9.5px "Instrument Sans", sans-serif';
   ctx.fillStyle = 'rgba(232,230,227,.88)';
-  ctx.fillText('Foyers : NASA FIRMS — Périmètres : Copernicus EFFIS — Vent : Météo-France / Open-Meteo', 20, 509);
-  ctx.fillText('Fond : IGN et Sentinel-2 / EOX — Toponymes : OpenStreetMap / OpenFreeMap', 20, 525);
+  ctx.fillText(t('export.footer.sources'), 20, 509);
+  ctx.fillText(t('export.footer.base'), 20, 525);
 
   const manifestGeneratedAt = getZonesController().getManifest()?.generated_at;
   const extracted = manifestGeneratedAt
     ? Date.parse(manifestGeneratedAt) : getState().lastObservedTime * 1000;
   const lines = [
-    `État affiché — ${exportDate(shownTime * 1000)}`,
-    `Données actualisées — ${exportDate(extracted)}`,
-    `${media} généré${media === 'Image' ? 'e' : ''} — ${exportDate(generatedAt)} (Paris)`,
+    t('export.footer.shown', { date: exportDate(shownTime * 1000) }),
+    t('export.footer.extracted', { date: exportDate(extracted) }),
+    t(`export.footer.generated.${media}`,
+      { date: exportDate(generatedAt), zone: getTimeZoneName() }),
   ];
   ctx.textAlign = 'right';
   ctx.fillStyle = 'rgba(232,230,227,.92)';
@@ -327,7 +332,7 @@ function drawExportFrame(canvas, exportMap, {
   includeWind = true, windPhase = 0, smokeParts = null,
   liveSmoke = getState().atLatest && !getTimelineController().isPlaying(),
   shownTime = getTimelineController().getTime(),
-  generatedAt = new Date(), media = 'Image', showLargeTime = false,
+  generatedAt = new Date(), media = 'still', showLargeTime = false,
 } = {}) {
   const ctx = canvas.getContext('2d');
   ctx.globalAlpha = 1;
@@ -353,7 +358,7 @@ async function exportImageBlob({ includeWind = true } = {}) {
     drawExportFrame(canvas, session.exportMap, { includeWind, generatedAt });
 
     const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
-    if (!blob) throw new Error('Le navigateur n’a pas pu encoder l’image.');
+    if (!blob) throw new Error(t('export.encode.png'));
     return { blob, filename: exportFilename(generatedAt) };
   } finally {
     destroyExportMap(session);
@@ -523,7 +528,7 @@ async function exportGifBlob({ includeWind = true, mode = 'instant' } = {}) {
 
       drawExportFrame(master, session.exportMap, {
         includeWind, windPhase: progress, smokeParts,
-        liveSmoke: mode === 'instant', shownTime, generatedAt, media: 'GIF',
+        liveSmoke: mode === 'instant', shownTime, generatedAt, media: 'gif',
         showLargeTime: mode === 'evolution',
       });
       smallCtx.clearRect(0, 0, GIF_W, GIF_H);
@@ -540,12 +545,13 @@ async function exportGifBlob({ includeWind = true, mode = 'instant' } = {}) {
       gif.writeFrame(index, GIF_W, GIF_H, {
         palette, delay: baseDelay + endPause, repeat: frame ? undefined : 0,
       });
-      exportMessage(`Création du GIF — ${frame + 1}/${frameCount}`);
+      exportMessage(t('export.progress.gif',
+        { frame: frame + 1, total: frameCount }));
       if (frame % 2) await new Promise(requestAnimationFrame);
     }
     gif.finish();
     const blob = new Blob([gif.bytes()], { type: 'image/gif' });
-    if (!blob.size) throw new Error('Le navigateur n’a pas pu encoder le GIF.');
+    if (!blob.size) throw new Error(t('export.encode.gif'));
     return { blob, filename: exportFilename(generatedAt, 'gif') };
   } finally {
     try {
@@ -561,8 +567,8 @@ async function deliverExport(blob, filename) {
   if (MOBILE && navigator.share && navigator.canShare?.({ files: [file] })) {
     try {
       await navigator.share({
-        files: [file], title: 'Flamap.fr — carte des incendies',
-        text: 'Carte des incendies en France — flamap.fr',
+        files: [file], title: t('export.share.title'),
+        text: t('export.share.text'),
       });
       return 'share';
     } catch (error) {
@@ -583,7 +589,7 @@ function setExportKind(kind) {
   for (const button of exportKindButtons)
     button.setAttribute('aria-selected', button.dataset.exportKind === exportKind);
   exportGifOptions.hidden = exportKind !== 'gif';
-  exportGenerate.textContent = exportKind === 'gif' ? 'Générer le GIF' : 'Générer l’image';
+  exportGenerate.textContent = t(`export.generate.${exportKind}`);
 }
 
 for (const button of exportKindButtons) {
@@ -647,21 +653,20 @@ exportGenerate.addEventListener('click', async () => {
   exportBtn.disabled = true;
   exportBtn.classList.add('busy');
   exportBtn.setAttribute('aria-busy', 'true');
-  exportMessage(kind === 'gif' ? 'Préparation du GIF animé…' : 'Préparation de l’image 16:9…');
+  exportMessage(t(`export.preparing.${kind}`));
   try {
     const { blob, filename } = kind === 'gif'
       ? await exportGifBlob({ includeWind, mode: gifMode })
       : await exportImageBlob({ includeWind });
     const action = await deliverExport(blob, filename);
-    const label = kind === 'gif' ? 'GIF' : 'Image';
-    if (action === 'share') exportMessage(`${label} prêt${kind === 'gif' ? '' : 'e'} à partager.`);
-    else if (action === 'download') exportMessage(`${label} enregistré${kind === 'gif' ? '' : 'e'}.`);
-    else exportMessage('Partage annulé.');
+    if (action === 'share') exportMessage(t(`export.shared.${kind}`));
+    else if (action === 'download') exportMessage(t(`export.saved.${kind}`));
+    else exportMessage(t('export.cancelled'));
     if (action !== 'cancel') trackUsage(kind === 'gif' ? 'gif-export' : 'image-export',
       { action, wind: includeWind, ...(kind === 'gif' ? { mode: gifMode } : {}) });
   } catch (error) {
     console.error(error);
-    exportMessage('L’export a échoué. Réessayez dans un instant.');
+    exportMessage(t('export.failed'));
   } finally {
     exportBtn.disabled = false;
     exportBtn.classList.remove('busy');

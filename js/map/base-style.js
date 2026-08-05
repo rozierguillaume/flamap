@@ -1,6 +1,9 @@
-// OpenMapTiles expose les traductions sous la forme `name_fr`. Le nom local
-// reste le meilleur repli lorsqu'une traduction française n'existe pas.
-const LABEL_FR = ['coalesce', ['get', 'name_fr'], ['get', 'name'], ['get', 'name_en']];
+import { getLang } from '../i18n.js';
+
+// OpenMapTiles expose les traductions sous la forme `name_xx`. Le nom local
+// reste le meilleur repli lorsque la traduction demandée n'existe pas.
+const LABEL = ['coalesce', ['get', `name_${getLang()}`], ['get', 'name'],
+               ['get', 'name_en']];
 const LABEL_PAINT = {
   'text-color': '#dce1e5',
   'text-halo-color': 'rgba(10,12,15,.88)',
@@ -37,7 +40,7 @@ export function createBaseStyle() {
       { id: 'label-water-point', type: 'symbol', source: 'toponyms', 'source-layer': 'water_name',
         filter: ['match', ['geometry-type'], ['Point', 'MultiPoint'], true, false],
         layout: {
-          'text-field': LABEL_FR, 'text-font': ['Noto Sans Italic'],
+          'text-field': LABEL, 'text-font': ['Noto Sans Italic'],
           'text-size': ['interpolate', ['linear'], ['zoom'], 4, 10, 10, 14],
           'text-letter-spacing': .12, 'text-max-width': 7,
         },
@@ -46,14 +49,14 @@ export function createBaseStyle() {
         filter: ['match', ['geometry-type'], ['LineString', 'MultiLineString'], true, false],
         layout: {
           'symbol-placement': 'line', 'symbol-spacing': 350,
-          'text-field': LABEL_FR, 'text-font': ['Noto Sans Italic'],
+          'text-field': LABEL, 'text-font': ['Noto Sans Italic'],
           'text-size': 13, 'text-letter-spacing': .12,
         },
         paint: { ...LABEL_PAINT, 'text-color': '#b9d8ef' } },
       { id: 'label-country', type: 'symbol', source: 'toponyms', 'source-layer': 'place',
         minzoom: 2, maxzoom: 8, filter: ['==', ['get', 'class'], 'country'],
         layout: {
-          'text-field': LABEL_FR, 'text-font': ['Noto Sans Bold'],
+          'text-field': LABEL, 'text-font': ['Noto Sans Bold'],
           'text-size': ['interpolate', ['linear'], ['zoom'], 2, 10, 6, 17],
           'text-letter-spacing': .12, 'text-transform': 'uppercase', 'text-max-width': 7,
         },
@@ -61,7 +64,7 @@ export function createBaseStyle() {
       { id: 'label-state', type: 'symbol', source: 'toponyms', 'source-layer': 'place',
         minzoom: 4, maxzoom: 9, filter: ['==', ['get', 'class'], 'state'],
         layout: {
-          'text-field': LABEL_FR, 'text-font': ['Noto Sans Italic'],
+          'text-field': LABEL, 'text-font': ['Noto Sans Italic'],
           'text-size': ['interpolate', ['linear'], ['zoom'], 4, 9, 8, 14],
           'text-letter-spacing': .16, 'text-transform': 'uppercase', 'text-max-width': 9,
         },
@@ -69,7 +72,7 @@ export function createBaseStyle() {
       { id: 'label-city', type: 'symbol', source: 'toponyms', 'source-layer': 'place',
         minzoom: 3, filter: ['==', ['get', 'class'], 'city'],
         layout: {
-          'text-field': LABEL_FR, 'text-font': ['Noto Sans Bold'],
+          'text-field': LABEL, 'text-font': ['Noto Sans Bold'],
           'text-size': ['interpolate', ['exponential', 1.2], ['zoom'], 4, 11, 8, 16, 12, 20],
           'text-max-width': 8,
         },
@@ -77,7 +80,7 @@ export function createBaseStyle() {
       { id: 'label-town', type: 'symbol', source: 'toponyms', 'source-layer': 'place',
         minzoom: 6, filter: ['==', ['get', 'class'], 'town'],
         layout: {
-          'text-field': LABEL_FR, 'text-font': ['Noto Sans Regular'],
+          'text-field': LABEL, 'text-font': ['Noto Sans Regular'],
           'text-size': ['interpolate', ['linear'], ['zoom'], 6, 10, 11, 14],
           'text-max-width': 8,
         },
@@ -85,7 +88,7 @@ export function createBaseStyle() {
       { id: 'label-village', type: 'symbol', source: 'toponyms', 'source-layer': 'place',
         minzoom: 9, filter: ['==', ['get', 'class'], 'village'],
         layout: {
-          'text-field': LABEL_FR, 'text-font': ['Noto Sans Regular'],
+          'text-field': LABEL, 'text-font': ['Noto Sans Regular'],
           'text-size': ['interpolate', ['linear'], ['zoom'], 9, 10, 13, 13],
           'text-max-width': 8,
         },
@@ -95,7 +98,7 @@ export function createBaseStyle() {
         filter: ['match', ['get', 'class'],
           ['suburb', 'quarter', 'neighbourhood', 'hamlet', 'isolated_dwelling'], true, false],
         layout: {
-          'text-field': LABEL_FR, 'text-font': ['Noto Sans Regular'],
+          'text-field': LABEL, 'text-font': ['Noto Sans Regular'],
           'text-size': ['interpolate', ['linear'], ['zoom'], 10, 9, 15, 12],
           'text-max-width': 8,
         },
@@ -105,7 +108,7 @@ export function createBaseStyle() {
         filter: ['match', ['geometry-type'], ['LineString', 'MultiLineString'], true, false],
         layout: {
           'symbol-placement': 'line', 'symbol-spacing': 300,
-          'text-field': LABEL_FR, 'text-font': ['Noto Sans Regular'],
+          'text-field': LABEL, 'text-font': ['Noto Sans Regular'],
           'text-size': ['interpolate', ['linear'], ['zoom'], 12, 10, 16, 13],
           'text-rotation-alignment': 'map',
         },

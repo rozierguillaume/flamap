@@ -1,3 +1,5 @@
+import { getLang, getTimeZoneName, t } from './i18n.js';
+import { unionBbox } from './util/geo.js';
 import { ago, confidenceText, fmt, fmtClock, nf } from './util/format.js';
 import { EMPTY, json } from './data/client.js';
 import { loadInitialData, loadRegionalWind } from './data/initial.js';
@@ -140,14 +142,16 @@ const legendBtn = document.getElementById('legend-btn');
 legendBtn.addEventListener('click', e => {
   const open = legendEl.classList.toggle('open');
   e.currentTarget.setAttribute('aria-expanded', open);
-  e.currentTarget.setAttribute('aria-label', open ? 'Masquer la légende' : 'Afficher la légende');
-  e.currentTarget.title = open ? 'Masquer la légende' : 'Afficher la légende';
+  const label = t(open ? 'legend.hide' : 'legend.show');
+  e.currentTarget.setAttribute('aria-label', label);
+  e.currentTarget.title = label;
 });
 document.getElementById('legend-collapse').addEventListener('click', e => {
   const open = !legendEl.classList.toggle('collapsed');
   e.currentTarget.setAttribute('aria-expanded', open);
-  e.currentTarget.setAttribute('aria-label', open ? 'Replier la légende' : 'Déplier la légende');
-  e.currentTarget.title = open ? 'Replier la légende' : 'Déplier la légende';
+  const label = t(open ? 'legend.collapse' : 'legend.expand');
+  e.currentTarget.setAttribute('aria-label', label);
+  e.currentTarget.title = label;
 });
 
 document.getElementById('layers-btn').addEventListener('click', e => {
@@ -476,12 +480,15 @@ const drawActivity = () => activityController.draw();
 activityController.installChartListeners();
 
 function formatUpdate(step) {
-  if (step.kind === 'sat') return `${step.n.toLocaleString('fr-FR')} foyers détectés`;
+  if (step.kind === 'sat')
+    return t('updates.sat', { n: step.n, count: nf(step.n) });
   if (step.kind === 'effis') {
-    const area = step.ha ? ` — ${step.ha.toLocaleString('fr-FR', { maximumFractionDigits: 1 })} ha` : '';
-    return step.n ? `${step.n.toLocaleString('fr-FR')} périmètres récupérés${area}` : 'Périmètres de zones brûlées actualisés';
+    const area = step.ha ? ` — ${nf(step.ha, 1)} ha` : '';
+    return step.n
+      ? t('updates.effis', { n: step.n, count: nf(step.n), area })
+      : t('updates.effis.empty');
   }
-  return 'Prévision de vent actualisée';
+  return t('updates.wind');
 }
 
 function drawUpdates() {
@@ -490,7 +497,7 @@ function drawUpdates() {
   document.getElementById('updates-list').innerHTML = recent.length ? recent.map(step => {
     const source = step.kind === 'sat' ? step.label : 'Copernicus EFFIS';
     return `<li><time datetime="${new Date(step.ts * 1000).toISOString()}">${fmt(step.ts)}</time><strong>${source}</strong><span>${formatUpdate(step)}</span></li>`;
-  }).join('') : '<li id="updates-empty">Aucune mise à jour disponible.</li>';
+  }).join('') : `<li id="updates-empty">${t('updates.empty')}</li>`;
 }
 
 const exportController = createMapExportController({
@@ -583,7 +590,8 @@ function lockWidths() {
   // les chiffres sont tabulaires : trois zéros mesurent comme n'importe quel
   // nombre à trois chiffres. Sans fichier de vent la ligne a été retirée du
   // document, et mesurer un élément détaché ne donnerait rien de bon.
-  const wind = windVal.isConnected ? widest('000 km/h (raf. 000 km/h)', windVal) : 0;
+  const wind = windVal.isConnected
+    ? widest(t('wind.value', { kmh: '000', gust: '000' }), windVal) : 0;
 
   probe.remove();
   const px = document.documentElement.style;
@@ -629,10 +637,30 @@ aircraftController = createAircraftController({
   },
 });
 
+/* Cadrage d'accueil : le domaine de la langue lue, et non la réunion de tous.
+ * Quelqu'un qui ouvre la carte en espagnol arrive sur l'Ibérie, comme un
+ * lecteur français arrive sur la France — cadrer d'emblée sur les deux
+ * n'apprendrait rien à personne.
+ *
+ * Les rectangles viennent du manifeste : ils suivent les régions réellement
+ * collectées, sans qu'une seconde emprise soit à tenir à jour ici. Les
+ * identifiants de région (`fr`, `es`) coïncident avec les codes de langue ; la
+ * table le dit tout de même, pour qu'une troisième langue n'hérite pas d'un
+ * domaine par hasard. Région absente — export ancien, collecte partielle — on
+ * retombe sur l'emprise complète. */
+const HOME_REGION = { fr: 'fr', es: 'es' };
+
+const homeRegion = () => zonesController.getManifest()?.regions
+  ?.find(region => region.id === HOME_REGION[getLang()]) || null;
+
+function homeBbox() {
+  const boxes = homeRegion()?.boxes;
+  return boxes?.length ? unionBbox(boxes)
+    : (zonesController.getManifest()?.bbox || FRANCE_BBOX);
+}
+
 function fitDomain(duration = 850) {
-  // L'emprise vient du manifeste : elle suit les régions réellement collectées,
-  // sans qu'une seconde bbox soit à tenir à jour ici.
-  const box = zonesController.getManifest()?.bbox || FRANCE_BBOX;
+  const box = homeBbox();
   const bounds = new maplibregl.LngLatBounds([box[0], box[1]], [box[2], box[3]]);
   const dockH = document.getElementById('dock').offsetHeight;
   map.fitBounds(bounds, {
@@ -743,14 +771,13 @@ function weatherBlock(root, lngLat, { divider = true, stamp = false } = {}) {
   if (Number.isFinite(temperature))
     block.append(popEl('div', 'temp', `${nf(temperature, 1)} °C`));
   const wind = windPhrase(lngLat.lng, lngLat.lat);
-  block.append(popEl('div', 'wind',
-    wind || 'Modèle de vent non couvert à cet endroit.'));
+  block.append(popEl('div', 'wind', wind || t('popup.weather.nowind')));
   const model = windController.modelAt(lngLat.lng, lngLat.lat);
   if (stamp && model)
-    block.append(popEl('div', 'row dim',
-      `${model}, au ${fmt(timelineController.getTime())}`));
+    block.append(popEl('div', 'row dim', t('popup.weather.stamp',
+      { model, date: fmt(timelineController.getTime()) })));
 
-  const button = popEl('button', '', 'Prévisions météo');
+  const button = popEl('button', '', t('popup.weather.button'));
   button.addEventListener('click', () => {
     trackUsage('popup-weather');
     closePopup();
@@ -764,12 +791,12 @@ function weatherBlock(root, lngLat, { divider = true, stamp = false } = {}) {
 function hotspotPopup(feature, lngLat) {
   const p = feature.properties;
   const ts = Number(p.ts);
-  const root = popRoot('Foyer détecté', `${p.source} — ${fmt(ts)}`);
+  const root = popRoot(t('popup.hotspot.title'), `${p.source} — ${fmt(ts)}`);
   popRow(root, ago(shownTs() - ts));
   const frp = Number(p.frp);
   if (Number.isFinite(frp)) {
     const big = popEl('div', 'big', `${nf(frp, 1)} `);
-    big.append(popEl('span', 'unit', 'MW rayonnés'));
+    big.append(popEl('span', 'unit', t('popup.hotspot.frp')));
     root.append(big);
   }
   popRow(root, confidenceText(p.confidence), 'row dim');
@@ -780,37 +807,27 @@ function overviewPopup(feature, lngLat) {
   const p = feature.properties;
   const ts = Number(p.ts);
   const count = Number(p.n) || 0;
-  const root = popRoot(`${nf(count)} foyer${count > 1 ? 's' : ''} en une heure`,
+  const root = popRoot(t('popup.overview.title', { n: count, count: nf(count) }),
                        `${p.source} — ${fmt(ts)}`);
   const frp = Number(p.frp);
   if (Number.isFinite(frp)) {
     const big = popEl('div', 'big', `${nf(frp, 1)} `);
-    big.append(popEl('span', 'unit', 'MW cumulés'));
+    big.append(popEl('span', 'unit', t('popup.overview.frp')));
     root.append(big);
   }
-  popRow(root, 'Regroupement de la vue nationale — zoomez pour le détail.',
-    'row dim');
+  popRow(root, t('popup.overview.hint'), 'row dim');
   return weatherBlock(root, lngLat);
 }
 
 /* Occupation du sol brûlée, telle qu'EFFIS la publie : neuf pourcentages dont
  * la somme fait 100. C'est la donnée la plus parlante du lot — savoir qu'un
  * périmètre a emporté de la pinède, du maquis ou des cultures. */
-const BURNT_COVER = [
-  ['CONIFER',    'conifères'],
-  ['BROADLEA',   'feuillus'],
-  ['MIXED',      'forêt mixte'],
-  ['SCLEROPH',   'maquis, garrigue'],
-  ['TRANSIT',    'landes, recrû'],
-  ['OTHERNATLC', 'autres milieux naturels'],
-  ['AGRIAREAS',  'surfaces agricoles'],
-  ['ARTIFSURF',  'surfaces bâties'],
-  ['OTHERLC',    'autres'],
-];
+const BURNT_COVER = ['CONIFER', 'BROADLEA', 'MIXED', 'SCLEROPH', 'TRANSIT',
+                     'OTHERNATLC', 'AGRIAREAS', 'ARTIFSURF', 'OTHERLC'];
 
 function coverBlock(p) {
   const rows = BURNT_COVER
-    .map(([key, label]) => [label, Number(p[key])])
+    .map(key => [t(`cover.${key}`), Number(p[key])])
     .filter(([, share]) => Number.isFinite(share) && share >= 1)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 4);
@@ -827,9 +844,9 @@ function coverBlock(p) {
 
 function burntPopup(feature, lngLat) {
   const p = feature.properties;
-  const place = p.COMMUNE || p.PROVINCE || 'Périmètre brûlé';
+  const place = p.COMMUNE || p.PROVINCE || t('popup.burnt.title');
   const ts = Number(p.ts);
-  const root = popRoot(place, [p.COMMUNE ? p.PROVINCE : '', 'périmètre EFFIS']
+  const root = popRoot(place, [p.COMMUNE ? p.PROVINCE : '', t('popup.burnt.sub')]
     .filter(Boolean).join(' — '));
   const area = Number(p.AREA_HA);
   if (Number.isFinite(area)) {
@@ -837,19 +854,19 @@ function burntPopup(feature, lngLat) {
     big.append(popEl('span', 'unit', 'ha'));
     root.append(big);
   }
-  if (ts) popRow(root, `Départ le ${fmt(ts)} — ${ago(shownTs() - ts)}`);
+  if (ts) popRow(root,
+    t('popup.burnt.start', { date: fmt(ts), ago: ago(shownTs() - ts) }));
   const cover = coverBlock(p);
   if (cover) root.append(cover);
   const na2k = Number(p.PERCNA2K);
   if (Number.isFinite(na2k) && na2k >= 1)
-    popRow(root, `${nf(na2k)} % en zone Natura 2000`, 'row dim');
+    popRow(root, t('popup.burnt.natura', { share: nf(na2k) }), 'row dim');
   return weatherBlock(root, lngLat);
 }
 
 function nrtPopup(lngLat) {
-  const root = popRoot('Emprise en cours d\'évaluation', 'EFFIS quasi temps réel');
-  popRow(root, 'Publiée sans date ni surface, elle peut englober d\'anciennes'
-    + ' cicatrices.', 'row dim');
+  const root = popRoot(t('popup.nrt.title'), t('popup.nrt.sub'));
+  popRow(root, t('popup.nrt.note'), 'row dim');
   return weatherBlock(root, lngLat);
 }
 
@@ -857,7 +874,7 @@ function nrtPopup(lngLat) {
  * affiché. Les grilles sont déjà en mémoire pour la nappe de vent et la sonde
  * du centre — rien à télécharger, et les 24 h de contexte restent à un bouton. */
 function weatherPopup(lngLat) {
-  const root = popRoot('Météo à ce point', weatherCoordinates(lngLat));
+  const root = popRoot(t('popup.weather.title'), weatherCoordinates(lngLat));
   weatherBlock(root, lngLat, { divider: false, stamp: true });
 
   const popup = openPopup(lngLat, root, 'weather');
@@ -919,8 +936,8 @@ weatherController.startData();
  */
 let started = false, destroyed = false, poll = null;
 function initializationError(error) {
-  console.error('Initialisation de la carte impossible', error);
-  document.getElementById('map').setAttribute('aria-label', 'Carte indisponible');
+  console.error(t('init.failure'), error);
+  document.getElementById('map').setAttribute('aria-label', t('map.unavailable'));
   document.getElementById('init-error').hidden = false;
 }
 
@@ -1015,14 +1032,24 @@ async function init() {
   aircraftController.sync();
 
   if (manifest.generated_at) {
-    document.getElementById('updated').textContent =
-      '— données extraites le ' + fmt(Date.parse(manifest.generated_at) / 1000) + ' (heure de Paris).';
+    document.getElementById('updated').textContent = t('credits.updated', {
+      date: fmt(Date.parse(manifest.generated_at) / 1000),
+      zone: getTimeZoneName(),
+    });
   }
 
   if (!HAS_MAP_HASH) {
     // Le premier cadrage privilégie la lecture du feu principal, tout en
     // restant sous le zoom 9 où ses disques PSFDF s'effacent.
-    if (shortcuts.length) psfdfController.focusIncident(shortcuts[0], 850, 8.8);
+    //
+    // Ces raccourcis sont éditorialisés par PSFDF, donc français. Les écarter
+    // par leurs coordonnées ne marcherait pas : les rectangles ibériques
+    // mordent volontairement sur les Pyrénées et le Roussillon, et un lecteur
+    // espagnol ouvrirait la carte sur un feu de Cerdagne. C'est le manifeste
+    // qui dit quelle région porte ce suivi ; ailleurs, on cadre le domaine.
+    const region = homeRegion();
+    if (shortcuts.length && (!region || region.psfdf))
+      psfdfController.focusIncident(shortcuts[0], 850, 8.8);
     else fitDomain(0);
   }
 

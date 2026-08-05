@@ -1,3 +1,4 @@
+import { t } from '../i18n.js';
 import { json } from './client.js';
 import { zoneId } from '../util/geo.js';
 
@@ -96,7 +97,7 @@ export function createZonesController({
         merge: (key, dedupe) => mergedZones(zones, key, dedupe),
       });
     } catch (error) {
-      warn('Détail indisponible', error);
+      warn(t('zones.detail.error'), error);
       if (token === Z.token) {
         Z.hotspots = [];
         clearDetail('error');

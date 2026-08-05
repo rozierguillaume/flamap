@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 
-<title>Feux archivés | Flamap</title>
-<meta name="description" content="Liste des incendies archivés par Flamap et rejeu de leur évolution : foyers satellite, surfaces brûlées et statut, feu par feu.">
+<title data-i18n="archive.title">Feux archivés | Flamap</title>
+<meta name="description" data-i18n-content="archive.description" content="Liste des incendies archivés par Flamap et rejeu de leur évolution : foyers satellite, surfaces brûlées et statut, feu par feu.">
 <link rel="canonical" href="https://flamap.fr/archives.html">
 <meta name="theme-color" content="#0d0f12">
 <meta name="robots" content="noindex, follow">
@@ -25,6 +25,10 @@
 <link rel="stylesheet" href="/css/tokens.css">
 <link rel="stylesheet" href="/css/archive.css">
 
+<script type="module" src="/js/ui/translate.js"></script>
+
+<link rel="modulepreload" href="/js/i18n.js">
+<link rel="modulepreload" href="/js/strings.js">
 <link rel="modulepreload" href="/js/archive/main.js">
 <link rel="modulepreload" href="/js/archive/api.js">
 <link rel="modulepreload" href="/js/archive/adapt.js">
@@ -35,7 +39,7 @@
 <body>
 
 <header class="archive-head">
-  <a class="brand" href="/" aria-label="Retour à Flamap">
+  <a class="brand" href="/" data-i18n-label="archive.back" aria-label="Retour à Flamap">
     <svg class="mark" viewBox="0 0 36 34" aria-hidden="true" focusable="false">
       <circle cx="19" cy="13" r="7" fill="#ffd84d"/>
       <circle cx="9" cy="22" r="5" fill="#ff6b1a"/>
@@ -49,12 +53,17 @@
     </svg>
     <strong>Fla<span>map</span></strong>
   </a>
-  <a href="/">Voir la carte en direct</a>
+  <div class="archive-head-links">
+    <button id="lang-btn" type="button" lang="es"
+            data-i18n-label="lang.aria" aria-label="Ver Flamap en español"
+            ><span data-i18n="lang.code">ES</span></button>
+    <a href="/" data-i18n="archive.live">Voir la carte en direct</a>
+  </div>
 </header>
 
 <main id="archive-list" class="archive-list">
-  <h1>Feux archivés</h1>
-  <p class="archive-intro">
+  <h1 data-i18n="archive.heading">Feux archivés</h1>
+  <p class="archive-intro" data-i18n="archive.intro">
     Tous les incendies signalés par PSFDF et suivis par Flamap, du plus récent
     au plus ancien. Cliquez sur un feu pour rejouer son évolution.
   </p>
@@ -63,7 +72,7 @@
 </main>
 
 <div id="archive-detail" class="archive-detail" hidden>
-  <button id="archive-back" type="button" class="archive-back glass">&larr; Liste des feux</button>
+  <button id="archive-back" type="button" class="archive-back glass" data-i18n="archive.list.back">&larr; Liste des feux</button>
   <aside id="archive-panel" class="archive-panel glass">
     <div id="archive-summary" class="archive-summary"></div>
     <p id="archive-detail-status" class="archive-status" aria-live="polite"></p>
@@ -74,8 +83,8 @@
   <div id="archive-timebar" class="archive-timebar glass">
     <span id="archive-clock" class="archive-clock"></span>
     <div class="archive-timerow">
-      <button id="archive-play" type="button" aria-label="Lancer l'animation">▶</button>
-      <input id="archive-slider" type="range" aria-label="Curseur temporel">
+      <button id="archive-play" type="button" data-i18n-label="timeline.play" aria-label="Lancer l'animation">▶</button>
+      <input id="archive-slider" type="range" data-i18n-label="archive.slider.aria" aria-label="Curseur temporel">
     </div>
   </div>
 </div>

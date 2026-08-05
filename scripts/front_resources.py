@@ -23,6 +23,10 @@ FRONT_ROOT_FILES = (
 PRESERVED_FRONT_FILES = (
     "fonts/OFL.txt", "vendor/README.md", "vendor/gifenc/LICENSE.md",
     "vendor/maplibre-gl/LICENSE.txt",
+    # Version espagnole des mentions legales : absente des deploiements
+    # anterieurs, donc reprise ici plutot que declaree racine obligatoire. Elle
+    # pourra rejoindre FRONT_ROOT_FILES une fois publiee une premiere fois.
+    "aviso-legal.html",
 )
 
 CSS_URL = re.compile(r"url\(\s*(['\"]?)([^'\")]+)\1\s*\)", re.IGNORECASE)

@@ -1,3 +1,4 @@
+import { t } from '../i18n.js';
 import { buildWarp, ease, unease, warpProgress, warpTime } from './model.js';
 
 
@@ -54,7 +55,7 @@ export function createTimelineController({
     cancelAnimationFrame(playing.raf);
     playing = null;
     playBtn.textContent = '▶';
-    playBtn.setAttribute('aria-label', "Lancer l'animation");
+    playBtn.setAttribute('aria-label', t('timeline.play'));
     smokeLoop();
   }
 
@@ -93,7 +94,7 @@ export function createTimelineController({
       if (p > .995) p = 0;
 
       playBtn.textContent = '❚❚';
-      playBtn.setAttribute('aria-label', "Suspendre l'animation");
+      playBtn.setAttribute('aria-label', t('timeline.pause'));
       // le premier instant s'affiche tout de suite, la boucle ne fait que continuer
       setTime(warpTime(warp, ease(p)));
       playing = { start: performance.now() - p * playMs, paint: 0, raf: 0 };

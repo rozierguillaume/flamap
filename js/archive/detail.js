@@ -1,3 +1,4 @@
+import { t } from '../i18n.js';
 import { EMPTY } from '../data/client.js';
 import { fetchFireDetail } from './api.js';
 import { fitBoundsForFire, toBurnt, toHotspots } from './adapt.js';
@@ -22,16 +23,12 @@ const STATUS_SEVERITY = ['Hors de contrôle', 'En cours', 'Fixé', 'Maîtrisé',
 
 // Même occupation du sol qu'en page d'accueil (main.js::coverBlock), dupliquée
 // ici : js/archive/ ne doit jamais importer main.js (AGENTS.md §5).
-const BURNT_COVER = [
-  ['CONIFER', 'conifères'], ['BROADLEA', 'feuillus'], ['MIXED', 'forêt mixte'],
-  ['SCLEROPH', 'maquis, garrigue'], ['TRANSIT', 'landes, recrû'],
-  ['OTHERNATLC', 'autres milieux naturels'], ['AGRIAREAS', 'surfaces agricoles'],
-  ['ARTIFSURF', 'surfaces bâties'], ['OTHERLC', 'autres'],
-];
+const BURNT_COVER = ['CONIFER', 'BROADLEA', 'MIXED', 'SCLEROPH', 'TRANSIT',
+                     'OTHERNATLC', 'AGRIAREAS', 'ARTIFSURF', 'OTHERLC'];
 
 function coverBlock(p) {
   const rows = BURNT_COVER
-    .map(([key, label]) => [label, Number(p[key])])
+    .map(key => [t(`cover.${key}`), Number(p[key])])
     .filter(([, share]) => Number.isFinite(share) && share >= 1)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 4);
@@ -48,11 +45,11 @@ function coverBlock(p) {
 
 function hotspotPopup(feature) {
   const p = feature.properties;
-  const root = popRoot('Foyer détecté', `${p.source} — ${fmt(p.ts)}`);
+  const root = popRoot(t('popup.hotspot.title'), `${p.source} — ${fmt(p.ts)}`);
   const frp = Number(p.frp);
   if (Number.isFinite(frp)) {
     const big = popEl('div', 'big', `${nf(frp, 1)} `);
-    big.append(popEl('span', 'unit', 'MW rayonnés'));
+    big.append(popEl('span', 'unit', t('popup.hotspot.frp')));
     root.append(big);
   }
   popRow(root, confidenceText(p.confidence), 'row dim');
@@ -61,8 +58,8 @@ function hotspotPopup(feature) {
 
 function burntPopup(feature) {
   const p = feature.properties;
-  const place = p.COMMUNE || p.PROVINCE || 'Périmètre brûlé';
-  const root = popRoot(place, [p.COMMUNE ? p.PROVINCE : '', 'périmètre EFFIS']
+  const place = p.COMMUNE || p.PROVINCE || t('popup.burnt.title');
+  const root = popRoot(place, [p.COMMUNE ? p.PROVINCE : '', t('popup.burnt.sub')]
     .filter(Boolean).join(' — '));
   const area = Number(p.AREA_HA);
   if (Number.isFinite(area)) {
@@ -70,14 +67,15 @@ function burntPopup(feature) {
     big.append(popEl('span', 'unit', 'ha'));
     root.append(big);
   }
-  if (p.ts) popRow(root, `Départ le ${fmt(p.ts)}`);
+  if (p.ts) popRow(root, t('archive.burnt.start', { date: fmt(p.ts) }));
   const cover = coverBlock(p);
   if (cover) root.append(cover);
   return root;
 }
 
 function statusBadge(status) {
-  const badge = popEl('span', 'archive-badge', status || 'Statut inconnu');
+  const badge = popEl('span', 'archive-badge',
+    status ? t(`status.${status}`) : t('status.unknown'));
   if (PSFDF_COLORS[status]) badge.style.setProperty('--incident-color', PSFDF_COLORS[status]);
   return badge;
 }
@@ -90,7 +88,7 @@ function statusBadge(status) {
 // reflète ce que la page rejoue réellement.
 function renderSummary(el, summary, steps) {
   el.innerHTML = '';
-  el.append(popEl('h2', '', summary.commune || 'Commune inconnue'));
+  el.append(popEl('h2', '', summary.commune || t('archive.commune.unknown')));
   if (summary.departement) el.append(popEl('p', 'archive-sub', summary.departement));
   el.append(statusBadge(summary.status));
   const [start, end] = steps && steps.length
@@ -99,14 +97,15 @@ function renderSummary(el, summary, steps) {
   el.append(popEl('p', 'archive-dates', `${fmt(start)} → ${fmt(end)}`));
   if (Number.isFinite(summary.surface_max)) {
     const big = popEl('div', 'archive-surface', `${nf(summary.surface_max)} `);
-    big.append(popEl('span', 'unit', 'ha (surface maximale connue)'));
+    big.append(popEl('span', 'unit', t('archive.surface.max')));
     el.append(big);
   }
   // L'ordre des statuts n'est pas chronologique côté API (triés alphabétiquement) :
   // on ne prétend pas restituer une trajectoire, seulement l'ensemble traversé.
   if (Array.isArray(summary.statuses) && summary.statuses.length > 1) {
     const traversed = STATUS_SEVERITY.filter(s => summary.statuses.includes(s));
-    el.append(popEl('p', 'archive-statuses', 'Statuts traversés : ' + traversed.join(', ')));
+    el.append(popEl('p', 'archive-statuses', t('archive.statuses',
+      { list: traversed.map(status => t(`status.${status}`)).join(', ') })));
   }
 }
 
@@ -137,7 +136,7 @@ export async function openFire(id, elements) {
   renderSummary(elements.summaryEl, summary, steps);
   elements.statusEl.textContent = '';
   if (!steps.length) {
-    elements.statusEl.textContent = 'Pas assez de données conservées pour rejouer ce feu.';
+    elements.statusEl.textContent = t('archive.tooShort');
     return { notFound: false, destroy: () => {} };
   }
 

@@ -554,6 +554,14 @@
   #cr-btn::after { content: " ›"; }
   #cr-btn[aria-expanded="true"]::after { content: " ⌄"; }
 
+  /* Bascule de langue : deux lettres, la couleur d'un lien secondaire. Elle se
+     range à côté des crédits parce qu'elle règle le site et non la carte, et
+     n'a donc rien à faire dans la rangée des calques et de la météo. */
+  #lang-btn { display: block; flex: none; padding: 8px 10px; font: inherit;
+              font-size: 11.5px; font-weight: 700; letter-spacing: .04em;
+              color: #bcb7b1; cursor: pointer; }
+  #lang-btn:hover { color: var(--ink); }
+
   .maplibregl-ctrl-group { background: rgba(13,15,18,.84) !important;
     border: 1px solid rgba(255,255,255,.10) !important; border-radius: 12px !important;
     box-shadow: none !important; }

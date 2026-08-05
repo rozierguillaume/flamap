@@ -1,4 +1,6 @@
+import { t } from '../i18n.js';
 import { EMPTY } from '../data/client.js';
+import { nf } from '../util/format.js';
 import { aircraftBearing, aircraftCurve, distanceKm } from '../util/geo.js';
 /*
  * Moyens aériens : catalogue ICAO24 partagé par des observateurs ADS-B pendant
@@ -106,7 +108,7 @@ export function createAircraftController({
     if (!nearest) return null;
     return {
       distance: Math.round(nearest.distance),
-      name: nearest.feature.properties.name || 'un incendie récent',
+      name: nearest.feature.properties.name || t('aircraft.nearFire'),
     };
   }
 
@@ -200,11 +202,11 @@ export function createAircraftController({
         signal: controller.signal,
       });
       if (!response.ok)
-        throw new Error(`historique aérien HTTP ${response.status}`);
+        throw new Error(t('aircraft.history.http', { status: response.status }));
       const data = await response.json();
       if (!A.on || !getState().atLatest || document.hidden) return;
       if (!data || !Array.isArray(data.aircraft))
-        throw new Error('historique aérien invalide');
+        throw new Error(t('aircraft.history.invalid'));
 
       const allowed = new Set(AIRCRAFT_ICAO);
       const localNow = Date.now();
@@ -374,7 +376,7 @@ export function createAircraftController({
     const requestStartedAt = Date.now();
     A.loading = true;
     A.controller = new AbortController();
-    aircraftStatusText('Recherche des appareils en vol…');
+    aircraftStatusText(t('aircraft.searching'));
     try {
       const response = await fetchImpl(AIRCRAFT_URL, {
         cache: 'no-store',
@@ -408,11 +410,12 @@ export function createAircraftController({
       aircraftLoop();
       const near = fresh.filter(feature => feature.properties.near_fire).length;
       aircraftStatusText(fresh.length
-        ? `${fresh.length} en vol${near ? `, dont ${near} près d'un incendie` : ''}`
-        : 'Aucun appareil suivi actuellement en vol.');
+        ? t(near ? 'aircraft.flying.near' : 'aircraft.flying',
+            { n: fresh.length, near })
+        : t('aircraft.none'));
     } catch (error) {
       if (error.name !== 'AbortError' && A.on)
-        aircraftStatusText('Positions momentanément indisponibles.');
+        aircraftStatusText(t('aircraft.unavailable'));
     } finally {
       A.loading = false;
       A.controller = null;
@@ -442,7 +445,7 @@ export function createAircraftController({
       closeAircraftPopup();
       aircraftSource();
       aircraftTrailsSource();
-      aircraftStatusText('Masqués pendant la lecture du passé.');
+      aircraftStatusText(t('aircraft.past'));
       aircraftLoop();
       return;
     }
@@ -531,9 +534,10 @@ export function createAircraftController({
     root.append(title);
     const rows = [
       [p.description || p.aircraft_type, p.registration],
-      [p.altitude !== null ? `${Number(p.altitude).toLocaleString('fr-FR')} ft` : '',
+      [p.altitude !== null ? `${nf(Number(p.altitude))} ft` : '',
        p.speed !== null ? `${Math.round(Number(p.speed) * 1.852)} km/h` : ''],
-      [p.near_fire ? `à ${p.fire_distance} km de ${p.fire_name}` : '', ''],
+      [p.near_fire
+        ? t('aircraft.distance', { km: p.fire_distance, name: p.fire_name }) : '', ''],
     ];
     for (const values of rows) {
       const text = values.filter(Boolean).join(' — ');
@@ -549,10 +553,10 @@ export function createAircraftController({
       const seconds = Number.isFinite(positionTs)
         ? Math.max(0, Math.round((Date.now() + A.clockOffset - positionTs) / 1000))
         : null;
-      age.textContent = (seconds === null ? 'âge du signal inconnu'
-        : `signal ADS-B reçu il y a ${seconds} s`)
-        + ` — affichage différé de ${AIRCRAFT_DELAY_MS / 1000} s`
-        + ` — ICAO ${p.hex.toUpperCase()}`;
+      age.textContent = (seconds === null
+        ? t('aircraft.age.unknown') : t('aircraft.age', { n: seconds }))
+        + t('aircraft.delay',
+            { n: AIRCRAFT_DELAY_MS / 1000, icao: p.hex.toUpperCase() });
     };
     // Le compteur de l'âge du signal est rafraîchi par le gestionnaire de fiches.
     return openPopup(lngLat, root, 'aircraft-symbol', updateAge);
