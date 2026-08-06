@@ -10,7 +10,9 @@ on:
       - js/**
       - vendor/**
       - fonts/**
+      - archives.html
       - mentions-legales.html
+      - aviso-legal.html
       - social.html
       - og.png
       - favicon.svg
