@@ -111,6 +111,17 @@ button { font: inherit; }
 
 .archive-map-wrap { position: absolute; inset: 0; }
 #archive-map { position: absolute; inset: 0; background: var(--bg); }
+/* Même règle que #wind en page d'accueil (css/map.css) : `width`/`height`
+   explicites parce qu'un canvas est un élément remplacé — `inset: 0` ne
+   l'étire pas, et le code qui recopie clientWidth dans l'attribut width
+   l'agrandirait d'un facteur dpr à chaque appel. La nappe reste sous la frise
+   (499) et sous les popups (450), et n'intercepte aucun geste.
+   Pas de z-index sur `.archive-map-wrap` : il créerait un contexte
+   d'empilement et ferait repasser les fiches sous le vent. */
+#archive-wind {
+  position: absolute; inset: 0; z-index: 400;
+  width: 100%; height: 100%; pointer-events: none;
+}
 
 /* Frise flottante et centrée, comme #timebar en page d'accueil : pas de
    bandeau pleine largeur, une réglette resserrée qu'on ne parcourt pas des
@@ -126,6 +137,27 @@ button { font: inherit; }
   color: #fff; font-size: clamp(15px, 4vw, 17px); font-weight: 700;
   letter-spacing: -.01em; font-variant-numeric: tabular-nums;
 }
+/* Le vent se lit sous l'heure, dans la frise : la page n'a pas de légende où
+   le loger, et c'est de toute façon là que se porte le regard pendant la
+   lecture. La largeur est figée sur le pire cas — « nord-ouest 148 km/h,
+   rafales 190 » — sinon la ligne respire d'un cran à l'autre et fait bouger
+   toute la réglette, comme le fait `lockWidths()` en page d'accueil. */
+.archive-wind-key {
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  margin: -2px 0 8px; color: var(--wind);
+  font-size: 12.5px; font-variant-numeric: tabular-nums;
+}
+.archive-wind-key svg {
+  width: 12px; height: 12px; flex: none;
+  transform: rotate(var(--dir, 0deg));
+}
+.archive-wind-key #windval { display: inline-block; min-width: 15ch; text-align: left; }
+/* Deux façons de ne rien montrer : la nappe existe mais ne couvre pas le
+   centre (on garde la place, la ligne ne saute pas), ou le feu est antérieur à
+   l'archivage du vent (on la retire pour de bon). */
+.archive-wind-key[hidden] { display: flex; visibility: hidden; }
+.archive-wind-key.off { display: none; }
+
 .archive-timerow { display: flex; align-items: center; gap: 10px; }
 #archive-play {
   flex: none; width: 34px; height: 34px; border-radius: 50%;
@@ -158,6 +190,11 @@ button { font: inherit; }
 
 /* Popups au clic sur un foyer / périmètre — mêmes règles que .pop dans
    css/components.css, recopiées ici pour ne pas dépendre de cette feuille. */
+/* MapLibre ne donne aucun `z-index` à ses popups : sans cette règle, elles
+   passent sous la nappe de vent (400) et les particules se dessinent par-dessus
+   la fiche. Même valeur qu'en page d'accueil — entre les nappes et les panneaux
+   (498+), pour que la fiche reste sous le bouton retour et la frise. */
+.maplibregl-popup { z-index: 450; }
 .pop > b { font-size: 13.5px; }
 .pop .sub { display: block; margin-top: 1px; color: var(--ink-dim); font-size: 11.5px; }
 .pop .row { margin-top: 5px; }

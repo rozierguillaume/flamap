@@ -18,5 +18,18 @@ FIRMS et sommets de polygones EFFIS sous-échantillonnés, propriétés EFFIS
 réduites à celles que le front lit réellement. Pas de rafraîchissement prévu
 — si l'API change de forme, mettre ces fixtures à jour à la main.
 
+**Le bloc `wind` de `fire-2018Var.json`, lui, est synthétique** — et c'est la
+seule donnée de ce dossier à ne pas être une capture. L'archive du vent a été
+mise en service le 06/08/2026, après la capture de ces deux feux : il n'y avait
+rien de réel à en tirer. Le champ fabriqué est un mistral de nord-ouest qui
+monte et bascule lentement, aux deux mailles (grossière horaire, fine
+trihoraire), sur la fenêtre exacte de la frise. Il sert à voir la nappe tourner,
+pas à lire une météo : ne rien en conclure, et ne pas s'en servir de référence
+pour valider un calcul.
+
+`fire-2019Ariege.json` porte volontairement `{"fields": [], "tiles": []}` :
+c'est le cas d'un feu antérieur à l'archivage du vent, où la nappe et sa ligne
+de lecture disparaissent. Les deux fixtures couvrent donc les deux chemins.
+
 Servies en statique, même origine que la page : aucune configuration CORS ni
 serveur supplémentaire à lancer pour tester en local.

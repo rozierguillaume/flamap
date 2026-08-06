@@ -9,6 +9,7 @@ import {
 } from '../features/fires.js';
 import { createBurntController } from '../features/burnt.js';
 import { PSFDF_COLORS } from '../features/psfdf.js';
+import { createWindController } from '../fx/wind.js';
 import { buildSteps } from '../timeline/model.js';
 import { createTimelineController } from '../timeline/controller.js';
 import { createPopupRouter } from '../ui/popup-router.js';
@@ -123,12 +124,57 @@ function appearAt(timelineController, ts) {
   return Math.min(Math.max(speed * BIRTH_S, 10 * 60), 4 * 3600);
 }
 
+/* La nappe rejoue le vent qu'il faisait, pas celui qu'il fait : l'API renvoie
+ * les grilles archivées sur la fenêtre du feu, déjà découpées sur son emprise.
+ * Deux mailles, exactement comme en page d'accueil — un champ de fond par
+ * région, des tuiles fines là où la cellule était active — et le contrôleur de
+ * `js/fx/wind.js` les consomme sans rien savoir de l'archive.
+ *
+ * `detail_zoom: 0` parce qu'ici le fondu des tuiles fines ne doit dépendre
+ * d'aucun seuil de zoom : la page ne montre qu'un feu, déjà cadré dessus, là
+ * où l'accueil s'en sert pour ne pas charger le détail au niveau national.
+ * Même raison que `firesController.install({ detail_zoom: 0 })` plus bas. */
+function installWind(map, wind) {
+  const fields = wind?.fields || [];
+  const tiles = wind?.tiles || [];
+  const key = document.getElementById('windkey');
+  const canvas = document.getElementById('archive-wind');
+  if (!fields.length && !tiles.length) {
+    // Feu antérieur à l'archivage du vent : la ligne disparaît, elle ne
+    // réserve pas une place pour une lecture qui ne viendra jamais.
+    key.classList.add('off');
+    return null;
+  }
+  key.classList.remove('off');
+  const controller = createWindController({
+    mobile: MOBILE,
+    map,
+    canvas,
+    key,
+    value: document.getElementById('windval'),
+    getManifest: () => ({ detail_zoom: 0 }),
+  });
+  controller.configure(fields[0]);
+  for (const field of fields.slice(1)) controller.addField(field);
+  controller.setTiles(tiles);
+  controller.resize();
+  map.on('move', () => {
+    controller.sync();
+    // La traînée est peinte en coordonnées écran : la laisser pendant un
+    // déplacement la ferait glisser avec la carte, décalée du champ.
+    controller.clear();
+    controller.badge();
+  });
+  map.on('resize', () => controller.resize());
+  return controller;
+}
+
 // `elements` : { mapContainerId, dock, slider, playBtn, clockEl, summaryEl, statusEl }
 export async function openFire(id, elements) {
   const detail = await fetchFireDetail(id);
   if (!detail) return { notFound: true, destroy: () => {} };
 
-  const { summary, firms, effis } = detail;
+  const { summary, firms, effis, wind } = detail;
 
   const hotspots = toHotspots(firms);
   const burnt = toBurnt(effis);
@@ -148,6 +194,7 @@ export async function openFire(id, elements) {
   });
 
   let timelineController = null;
+  let windController = null;
   let popupClick = null;
   let ready = false;
   let poll = null;
@@ -179,10 +226,16 @@ export async function openFire(id, elements) {
     firesController.install({ detail_zoom: 0, legacy: true });
     burntController.install({ detail_zoom: 0, legacy: true });
 
+    windController = installWind(map, wind);
+
     let renderedAtLatest = true;
     function show(ts) {
       const { atLatest, lastObservedTime } = fireState.getState();
       firesController.setTime(ts, lastObservedTime, appearAt(timelineController, ts));
+      // Le champ n'est refabriqué qu'au changement d'heure : `setTime` écarte
+      // lui-même les appels rapprochés, la lecture peut donc l'appeler à chaque
+      // frame sans coût.
+      windController?.setTime(ts);
       if (renderedAtLatest !== atLatest) {
         renderedAtLatest = atLatest;
         burntController.paint(map, atLatest);
@@ -243,9 +296,21 @@ export async function openFire(id, elements) {
   map.on('load', whenReady);
   poll = setInterval(whenReady, 80);
 
+  // Onglet masqué : `requestAnimationFrame` gèle, la nappe n'a rien à animer.
+  // Au retour, `loop()` la relance — sans quoi elle resterait figée pour de bon.
+  function visibilityChange() {
+    windController?.loop();
+  }
+  document.addEventListener('visibilitychange', visibilityChange);
+
   function destroy() {
     clearInterval(poll);
     timelineController?.stop();
+    document.removeEventListener('visibilitychange', visibilityChange);
+    // Coupe la boucle rAF et efface la traînée : sans ça, la nappe du feu
+    // précédent continuerait de tourner derrière la liste.
+    windController?.setEnabled(false);
+    windController = null;
     if (popupClick) map.off('click', popupClick);
     map.remove();
   }
