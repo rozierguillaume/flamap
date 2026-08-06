@@ -33,17 +33,42 @@ def fc(features):
     return {"type": "FeatureCollection", "features": features}
 
 
+def coarse_wind(data: pathlib.Path) -> dict:
+    """Champs de vent grossiers annoncés par le manifeste, un par région.
+
+    L'identifiant de champ entre dans l'empreinte : le tirer de la région plutôt
+    que du nom de fichier évite qu'un renommage d'export reproduise dix jours de
+    grille en lignes neuves. `wind_fields` porte cet identifiant ; les exports
+    antérieurs à l'archivage du vent se rattrapent sur `regions`, construit dans
+    le même ordre, puis sur le nom de fichier.
+    """
+    manifest = read_json(data / "manifest.json")
+    regions = manifest.get("regions") or []
+    fields = {}
+    for index, entry in enumerate(manifest.get("wind_fields") or []):
+        name = entry.get("file")
+        path = data / name if name else None
+        if path is None or not path.exists():
+            continue
+        region = regions[index].get("id") if index < len(regions) else None
+        key = entry.get("id") or region or path.stem
+        fields[f"coarse:{key}"] = read_json(path)
+    return fields
+
+
 def collect_export(data: pathlib.Path) -> dict:
     """Réassemble le détail complet à partir des zones publiées.
 
-    Les foyers détaillés et les périmètres ne vivent que dans `data/zones/` :
-    seuls l'aperçu agrégé et les périmètres récents sont à la racine. Un
-    polygone à cheval sur plusieurs cellules y est écrit une fois par cellule,
-    d'où la déduplication par `_id` avant la construction du lot.
+    Les foyers détaillés, les périmètres et le vent fin ne vivent que dans
+    `data/zones/` : seuls l'aperçu agrégé, les périmètres récents et les champs
+    de vent grossiers sont à la racine. Un polygone à cheval sur plusieurs
+    cellules y est écrit une fois par cellule, d'où la déduplication par `_id`
+    avant la construction du lot.
     """
     hotspots: list = []
     dated: dict = {}
     nrt: dict = {}
+    wind: dict = {}
     zones = data / "zones"
     for path in sorted(zones.glob("*.json")):
         payload = read_json(path)
@@ -53,6 +78,10 @@ def collect_export(data: pathlib.Path) -> dict:
                 identifier = feature.get("properties", {}).get("_id")
                 if identifier is not None:
                     seen.setdefault(identifier, feature)
+        fine = payload.get("wind")
+        if fine:
+            wind[f"fine:{payload.get('id') or path.stem}"] = fine
+    wind.update(coarse_wind(data))
 
     psfdf_path = data / "psfdf_fires.geojson"
     psfdf = read_json(psfdf_path) if psfdf_path.exists() else fc([])
@@ -61,6 +90,7 @@ def collect_export(data: pathlib.Path) -> dict:
         "burnt_dated": fc(list(dated.values())),
         "burnt_nrt": fc(list(nrt.values())),
         "psfdf": psfdf,
+        "wind": wind,
     }
 
 

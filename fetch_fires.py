@@ -804,8 +804,12 @@ def main():
         ],
         # Le front lit ces champs dans l'ordre : le premier est charge avec le
         # reste de l'apercu national, les suivants viennent en complement.
+        # `id` nomme le champ pour le journal d'archive, ou il entre dans
+        # l'empreinte : un champ qui changerait de nom y reproduirait dix jours
+        # de grille en lignes neuves.
         "wind_fields": [
             {
+                "id": region["id"],
                 "file": region["wind_file"],
                 "model": coarse_exports[region["wind_file"]]["model"],
                 "bbox": coarse_exports[region["wind_file"]]["bbox"],

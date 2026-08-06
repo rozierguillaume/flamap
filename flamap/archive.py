@@ -25,7 +25,21 @@ import json
 from datetime import datetime, timezone
 
 
-ARCHIVE_STREAMS = ("firms", "effis", "effis_nrt", "psfdf")
+ARCHIVE_STREAMS = ("firms", "effis", "effis_nrt", "psfdf", "wind")
+
+# Une heure de vent déjà passée au moment de la collecte ne bouge plus. Mesuré
+# sur deux exports distants de neuf jours : les 39 heures antérieures à leur
+# génération sont identiques au bit près, les 26 suivantes — la queue de
+# prévision, réécrite à chaque run du modèle — diffèrent sur la quasi-totalité
+# des points, jusqu'à 8 m/s. La coupure tombe une à deux heures avant la
+# génération, l'analyse n'ayant pas encore rattrapé l'heure courante.
+#
+# N'archiver qu'en deçà de ce seuil ramène le vent à une version par heure, là
+# où archiver la prévision en produirait quarante-huit. La marge de trois heures
+# couvre la coupure observée, et les dix jours de fenêtre passée
+# (`WIND_PAST_DAYS`) garantissent qu'aucune heure n'est perdue pour autant :
+# elle sera reprise par la collecte suivante, ou par celle d'après-demain.
+WIND_SETTLED_S = 3 * 3600
 
 
 def canonical(record):
@@ -154,6 +168,49 @@ def psfdf_records(psfdf, seen):
         yield stamp(record, seen=seen, at=updated_ts)
 
 
+def wind_records(fields, seen):
+    """Grilles horaires, une ligne par champ et par cran déjà observé.
+
+    Le champ grossier d'une région et le champ fin d'une cellule ont exactement
+    la même forme, à leur maille près : une seule fonction les traite, et
+    `field` les distingue. Cet identifiant entre dans l'empreinte, comme `model`
+    et la géométrie de grille : un champ qui change de modèle — bascule AROME
+    vers `best_match` — n'est pas le même champ, et sa fenêtre doit être
+    réarchivée.
+
+    La partition suit l'heure météorologique, pas la collecte : une heure de
+    juillet archivée le 2 août appartient à juillet.
+
+    Le champ fin n'existe que pour les cellules actives au moment de la
+    collecte, et rien ne pourra le reconstruire ensuite : c'est justement ce que
+    ce journal existe pour retenir.
+    """
+    cutoff = int(seen) - WIND_SETTLED_S
+    for name, grid in sorted((fields or {}).items()):
+        if not grid:
+            continue
+        t0, dt = grid.get("t0"), grid.get("dt")
+        if not t0 or not dt:
+            continue
+        for index in range(len(grid.get("u", []))):
+            ts = t0 + index * dt
+            # Les crans sont croissants par construction : le premier qui
+            # dépasse le seuil clôt le champ.
+            if ts > cutoff:
+                break
+            yield stamp({
+                "field": name,
+                "model": grid.get("model"),
+                "bbox": grid.get("bbox"),
+                "nx": grid.get("nx"),
+                "ny": grid.get("ny"),
+                "ts": ts,
+                "u": grid["u"][index],
+                "v": grid["v"][index],
+                "gust": grid["gust"][index],
+            }, seen=seen, at=ts)
+
+
 def build_lot(export, seen):
     """Rassemble une collecte complète en lignes prêtes pour le journal."""
     return {
@@ -161,4 +218,5 @@ def build_lot(export, seen):
         "effis": list(effis_records(export.get("burnt_dated", {}), seen)),
         "effis_nrt": list(effis_nrt_records(export.get("burnt_nrt", {}), seen)),
         "psfdf": list(psfdf_records(export.get("psfdf", {}), seen)),
+        "wind": list(wind_records(export.get("wind", {}), seen)),
     }

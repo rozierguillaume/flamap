@@ -18,12 +18,14 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 from flamap.archive import (  # noqa: E402
+    WIND_SETTLED_S,
     build_lot,
     effis_records,
     firms_records,
     period,
     psfdf_records,
     record_key,
+    wind_records,
 )
 
 
@@ -159,16 +161,93 @@ class RecordKeyTest(unittest.TestCase):
         self.assertTrue(-(2 ** 63) <= key < 2 ** 63)
 
 
+def grid(t0=JULY - 4 * 3600, nt=8, dt=3600, model="meteofrance_arome_france_hd",
+         gust=18):
+    """Grille minuscule au format publié, deux points, quelques crans."""
+    return {
+        "model": model, "unit": "m/s", "bbox": [2.0, 44.0, 3.0, 44.0],
+        "nx": 2, "ny": 1, "t0": t0, "dt": dt, "nt": nt,
+        "u": [[1.0 + step, 2.0] for step in range(nt)],
+        "v": [[-3.0, 0.5] for _ in range(nt)],
+        "gust": [[gust, 22] for _ in range(nt)],
+    }
+
+
+class WindTest(unittest.TestCase):
+    def test_les_crans_de_prevision_ne_sont_pas_archives(self):
+        """La queue de prévision est réécrite à chaque run : elle ne s'archive pas.
+
+        Seules les heures antérieures d'au moins `WIND_SETTLED_S` à la collecte
+        sont conservées ; les suivantes reviendront quand elles seront figées.
+        """
+        # Crans de JULY - 4 h à JULY + 3 h, seuil à JULY - 3 h.
+        records = list(wind_records({"coarse:fr": grid()}, seen=JULY))
+        self.assertEqual([record["ts"] for record in records],
+                         [JULY - 4 * 3600, JULY - 3 * 3600])
+        self.assertEqual(JULY - records[-1]["ts"], WIND_SETTLED_S)
+
+    def test_une_heure_figee_ne_se_reecrit_pas(self):
+        """Le cœur du dispositif : une heure passée n'a qu'une version.
+
+        Sans quoi la même heure serait archivée quarante-huit fois par jour.
+        """
+        first = list(wind_records({"coarse:fr": grid()}, seen=JULY))
+        later = list(wind_records({"coarse:fr": grid()}, seen=JULY + 7200))
+        keys = {record["_k"] for record in first}
+        self.assertTrue(keys.issubset({record["_k"] for record in later}))
+        # La collecte suivante apporte les heures devenues figées entre-temps.
+        self.assertGreater(len(later), len(first))
+
+    def test_grossier_et_fin_ne_se_confondent_pas(self):
+        """Deux mailles sur le même point et la même heure sont deux lignes."""
+        fields = {"coarse:fr": grid(), "fine:x+02_y+44": grid()}
+        records = list(wind_records(fields, seen=JULY))
+        self.assertEqual(len({record["_k"] for record in records}),
+                         len(records))
+        self.assertEqual({record["field"] for record in records}, set(fields))
+
+    def test_bascule_de_modele_cree_une_version(self):
+        """AROME indisponible, `best_match` prend la suite : ce n'est pas le même champ."""
+        arome = list(wind_records({"coarse:fr": grid()}, seen=JULY))[0]
+        fallback = list(wind_records(
+            {"coarse:fr": grid(model="best_match")}, seen=JULY))[0]
+        self.assertNotEqual(arome["_k"], fallback["_k"])
+        self.assertEqual(arome["ts"], fallback["ts"])
+
+    def test_valeur_revisee_cree_une_version(self):
+        revised = grid()
+        revised["gust"][0][0] = 19
+        base = list(wind_records({"coarse:fr": grid()}, seen=JULY))[0]
+        other = list(wind_records({"coarse:fr": revised}, seen=JULY))[0]
+        self.assertNotEqual(base["_k"], other["_k"])
+
+    def test_partition_suit_l_heure_meteo(self):
+        """Une heure de juillet archivée en août appartient à juillet."""
+        august = JULY + 13 * 86400  # 2 août 2026
+        records = list(wind_records(
+            {"coarse:fr": grid(t0=JULY, nt=2)}, seen=august))
+        self.assertEqual([record["_p"] for record in records], ["2026-07"] * 2)
+        self.assertEqual(records[0]["_seen"], august)
+
+    def test_champ_sans_base_de_temps_est_ignore(self):
+        """Un export tronqué ne doit pas faire tomber la collecte entière."""
+        broken = grid()
+        del broken["t0"]
+        self.assertEqual(list(wind_records(
+            {"coarse:fr": broken, "fine:x": None}, seen=JULY)), [])
+
+
 class LotTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = pathlib.Path(self.tmp.name)
         self.addCleanup(self.tmp.cleanup)
 
-    def write_export(self, data: pathlib.Path):
+    def write_export(self, data: pathlib.Path, manifest=None):
         zones = data / "zones"
         zones.mkdir(parents=True)
-        # Un polygone à cheval est écrit dans les deux cellules qu'il touche.
+        # Un polygone à cheval est écrit dans les deux cellules qu'il touche ;
+        # le vent fin, lui, n'existe que pour la cellule active.
         for name in ("x2y44", "x3y44"):
             with (zones / f"{name}.json").open("w", encoding="utf-8") as out:
                 json.dump({
@@ -177,11 +256,21 @@ class LotTest(unittest.TestCase):
                                                       else 3.5)]},
                     "burnt_dated": {"features": [polygon()]},
                     "burnt_nrt": {"features": []},
+                    "wind": grid() if name == "x2y44" else None,
                 }, out)
         with (data / "psfdf_fires.geojson").open("w", encoding="utf-8") as out:
             json.dump({"features": [fire()]}, out)
+        for name in ("wind_coarse.json", "wind_coarse_es.json"):
+            with (data / name).open("w", encoding="utf-8") as out:
+                json.dump(grid(), out)
+        payload = {"generated_at": "2026-07-20T08:26:40+00:00"}
+        payload.update(manifest if manifest is not None else {
+            "regions": [{"id": "fr"}, {"id": "es"}],
+            "wind_fields": [{"id": "fr", "file": "wind_coarse.json"},
+                            {"id": "es", "file": "wind_coarse_es.json"}],
+        })
         with (data / "manifest.json").open("w", encoding="utf-8") as out:
-            json.dump({"generated_at": "2026-07-20T08:26:40+00:00"}, out)
+            json.dump(payload, out)
 
     def test_reassemblage_dedoublonne_les_polygones_a_cheval(self):
         data = self.root / "data"
@@ -198,6 +287,34 @@ class LotTest(unittest.TestCase):
         seen = PUSH.collection_time(data)
         self.assertEqual(seen, JULY)
 
+    def test_reassemblage_du_vent_grossier_et_fin(self):
+        data = self.root / "data"
+        self.write_export(data)
+        wind = PUSH.collect_export(data)["wind"]
+        self.assertEqual(set(wind), {"coarse:fr", "coarse:es", "fine:x2y44"})
+
+    def test_champ_grossier_nomme_par_la_region_a_defaut_d_identifiant(self):
+        """Exports antérieurs à l'archivage du vent : `wind_fields` n'a pas d'`id`.
+
+        Le repli sur `regions`, construit dans le même ordre, doit donner le
+        même nom de champ — sinon la bascule reproduirait dix jours de grille.
+        """
+        data = self.root / "data"
+        self.write_export(data, manifest={
+            "regions": [{"id": "fr"}, {"id": "es"}],
+            "wind_fields": [{"file": "wind_coarse.json"},
+                            {"file": "wind_coarse_es.json"}],
+        })
+        self.assertEqual(set(PUSH.collect_export(data)["wind"]),
+                         {"coarse:fr", "coarse:es", "fine:x2y44"})
+
+    def test_manifeste_sans_champ_de_vent_reste_exploitable(self):
+        data = self.root / "data"
+        self.write_export(data, manifest={})
+        export = PUSH.collect_export(data)
+        self.assertEqual(set(export["wind"]), {"fine:x2y44"})
+        self.assertEqual(len(export["hotspots"]["features"]), 2)
+
     def test_ecriture_du_lot(self):
         data = self.root / "data"
         self.write_export(data)
@@ -206,6 +323,10 @@ class LotTest(unittest.TestCase):
                               run="essai", seen=JULY)
         self.assertEqual(meta["counts"]["firms"], 2)
         self.assertEqual(meta["counts"]["psfdf"], 1)
+        # Trois champs de vent, deux crans figés chacun.
+        self.assertEqual(meta["counts"]["wind"], 6)
+        self.assertTrue(
+            (self.root / "outbox" / "essai" / "wind.ndjson.gz").exists())
         path = self.root / "outbox" / "essai" / "firms.ndjson.gz"
         with gzip.open(path, "rt", encoding="utf-8") as source:
             lines = [json.loads(line) for line in source if line.strip()]
