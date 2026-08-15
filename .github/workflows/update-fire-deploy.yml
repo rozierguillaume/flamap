@@ -42,6 +42,7 @@ jobs:
       deploy: ${{ steps.collect.outputs.deploy }}
       dry: ${{ github.event.inputs.deploy == 'false' }}
       fresh: ${{ steps.diff.outputs.fresh }}
+      push: ${{ steps.diff.outputs.push }}
       message: ${{ steps.diff.outputs.message }}
     steps:
       - uses: actions/checkout@v5
@@ -123,6 +124,14 @@ jobs:
         if: steps.collect.outputs.deploy == 'true'
         run: python3 scripts/assemble_site.py fire
 
+      - name: Conserver l'événement de notification
+        if: steps.diff.outputs.push == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: flamap-notification
+          path: notification.json
+          if-no-files-found: error
+
       - name: Vérifier la taille du site
         if: steps.collect.outputs.deploy == 'true'
         run: python3 scripts/validate_export.py size _site
@@ -157,6 +166,32 @@ jobs:
     if: needs.build.outputs.fresh == 'true' && needs.build.outputs.dry != 'true'
     runs-on: ubuntu-latest
     steps:
+      - name: Reprendre l'événement de notification
+        if: needs.build.outputs.push == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: flamap-notification
+
+      - name: Publier les alertes Web Push
+        if: needs.build.outputs.push == 'true'
+        env:
+          NOTIFY_WEBHOOK_SECRET: ${{ secrets.NOTIFY_WEBHOOK_SECRET }}
+        shell: bash
+        run: |
+          if [ -z "$NOTIFY_WEBHOOK_SECRET" ]; then
+            echo "::warning::Secret de notifications absent, alertes non envoyées."
+            exit 0
+          fi
+          stamp=$(date +%s)
+          signature=$(printf '%s.' "$stamp" | cat - notification.json \
+            | openssl dgst -sha256 -hmac "$NOTIFY_WEBHOOK_SECRET" -hex | sed 's/^.* //')
+          curl -sS --fail-with-body --retry 2 --retry-all-errors \
+            -X POST https://api.flamap.fr/notifications/v1/publications \
+            -H 'Content-Type: application/json' \
+            -H "X-Flamap-Timestamp: $stamp" \
+            -H "X-Flamap-Signature: sha256=$signature" \
+            --data-binary @notification.json
+
       - name: Publier sur Telegram
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}

@@ -16,6 +16,7 @@ pire que de rater une mise à jour.
 """
 
 import argparse
+import hashlib
 import json
 import os
 import pathlib
@@ -215,6 +216,32 @@ def emit(outputs):
                 handle.write(f"{name}={value}\n")
 
 
+def push_event(manifest, hotspots):
+    """Événement géolocalisé et idempotent, distinct du rendu Telegram.
+
+    Les périmètres EFFIS n'ont pas ici de point représentatif fiable ; leur
+    intersection géométrique sera traitée côté notifications dans une étape
+    dédiée. Les foyers FIRMS, eux, portent leur position exacte.
+    """
+    changes = [
+        {"kind": "hotspot", "lon": lon, "lat": lat}
+        for _source, _ts, lon, lat in sorted(hotspots)
+    ]
+    if not changes:
+        return None
+    useful = json.dumps(changes, sort_keys=True, separators=(",", ":"))
+    generated = manifest.get("generated_at")
+    try:
+        published_at = int(datetime.fromisoformat(generated.replace("Z", "+00:00")).timestamp())
+    except (AttributeError, ValueError):
+        published_at = int(datetime.now(timezone.utc).timestamp())
+    return {
+        "event_key": hashlib.sha256(useful.encode("utf-8")).hexdigest(),
+        "published_at": published_at,
+        "changes": changes,
+    }
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--prev", default="prev",
@@ -232,7 +259,7 @@ def main():
     except Exception as error:
         print(f"::warning::Pas de référence publiée exploitable ({error}) ; "
               "aucune notification.")
-        emit({"fresh": "false"})
+        emit({"fresh": "false", "push": "false"})
         return 0
 
     # Le manifeste de la référence ne liste que les zones réellement reprises :
@@ -258,7 +285,7 @@ def main():
         print(f"::warning::{count} {plural(count, 'zone')} "
               f"{plural(count, 'manque', 'nt')} dans la référence publiée ; "
               "aucune notification pour ce cycle.")
-        emit({"fresh": "false"})
+        emit({"fresh": "false", "push": "false"})
         return 0
 
     after = load_zones(data_root / "zones", zones, regions)
@@ -279,13 +306,18 @@ def main():
 
     if not new_hotspots and not new_dated and not new_nrt:
         print("Rien de neuf depuis la publication précédente.")
-        emit({"fresh": "false"})
+        emit({"fresh": "false", "push": "false"})
         return 0
 
     message = compose(new_hotspots, new_dated, new_nrt)
     print("--- message ---")
     print(message)
-    emit({"fresh": "true", "message": message})
+    event = push_event(manifest, new_hotspots)
+    if event:
+        pathlib.Path("notification.json").write_text(
+            json.dumps(event, separators=(",", ":")), encoding="utf-8"
+        )
+    emit({"fresh": "true", "message": message, "push": str(bool(event)).lower()})
     return 0
 
 
