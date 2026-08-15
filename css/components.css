@@ -589,7 +589,7 @@
   #notifications-panel h2 { margin: 0; font-size: 16px; }
   #notifications-panel p { font-size: 12px; line-height: 1.4; color: var(--ink-dim); }
   #notifications-panel label { display: grid; gap: 4px; font-size: 12px; }
-  #notifications-panel input, #notifications-panel select { min-width: 0; padding: 7px; background: #22262d; color: var(--ink); border: 1px solid #4a4742; border-radius: 6px; }
+  #notifications-panel input, #notifications-panel select { min-width: 0; padding: 9px; font-size: 16px; background: #22262d; color: var(--ink); border: 1px solid #4a4742; border-radius: 6px; }
   #notifications-panel form { display: grid; gap: 8px; margin: 10px 0; }
   #notifications-panel form[hidden] { display: none; }
   #notifications-panel button, #notifications-open { font: inherit; cursor: pointer; border: 1px solid rgba(255,255,255,.15); border-radius: 7px; background: #252a32; color: var(--ink); }
@@ -599,6 +599,7 @@
   .notify-results { display: grid; gap: 3px; margin: 6px 0; }
   .notify-results button { display: grid; gap: 2px; text-align: left; padding: 8px 10px; }
   .notify-results button span { color: var(--ink-dim); font-size: 11px; }
+  .notify-search-step[hidden], .notify-radius-step[hidden], .notify-list[hidden] { display: none; }
   .notify-radius { display: flex; gap: 5px; margin: 4px 0; padding: 0; border: 0; }
   .notify-radius legend { width: 100%; margin-bottom: 4px; font-size: 12px; }
   .notify-radius button { flex: 1; padding: 7px 3px; }

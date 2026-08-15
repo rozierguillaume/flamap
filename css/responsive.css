@@ -341,8 +341,9 @@
     #updates-panel h2 { font-size: 17px; }
     #updates-close { width: 38px; height: 38px; font-size: 25px; } /* cible tactile */
     #updates-list { max-height: calc(100vh - 220px); }
+    #updates-panel { max-height: calc(100vh - 70px); overflow-y: auto; box-sizing: border-box; }
     #notifications-open { position: sticky; bottom: 0; }
-    #notifications-panel { right: 50%; bottom: auto; top: 50%; transform: translate(50%, -50%); max-height: calc(100vh - 36px); overflow-y: auto; }
+    #notifications-panel { z-index: 650; right: 10px; left: 10px; bottom: 14px; top: auto; transform: none; width: auto; max-height: 48vh; overflow-y: auto; }
     #updates-list li { grid-template-columns: 84px 1fr; padding: 13px 0; }
     #updates-list time { font-size: 12px; }
     #updates-list strong { font-size: 13px; }

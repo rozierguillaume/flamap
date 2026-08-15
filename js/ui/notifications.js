@@ -13,6 +13,9 @@ export function createNotificationsController({ button, panel, close, map }) {
   const areas = panel.querySelector('.notify-areas');
   const empty = panel.querySelector('.notify-empty');
   const add = panel.querySelector('.notify-add');
+  const list = panel.querySelector('.notify-list');
+  const searchStep = panel.querySelector('.notify-search-step');
+  const radiusStep = panel.querySelector('.notify-radius-step');
   const state = panel.querySelector('.notify-state');
   let chosen = null, radius = 15, timer = null;
   const circle = () => {
@@ -68,7 +71,7 @@ export function createNotificationsController({ button, panel, close, map }) {
       const geojson = await fetch(url).then(response => response.json());
       geojson.features.forEach(feature => {
         const option = document.createElement('button'); option.type = 'button'; option.role = 'option'; option.innerHTML = `<strong>${feature.properties.name || feature.properties.label}</strong><span>${feature.properties.context || ''}</span>`;
-        option.onclick = () => { const [lon, lat] = feature.geometry.coordinates; chosen = {lon, lat, label: feature.properties.label}; map.flyTo({center: [lon, lat], zoom: 11}); results.replaceChildren(option); circle(); message('notifications.selected'); };
+        option.onclick = () => { const [lon, lat] = feature.geometry.coordinates; chosen = {lon, lat, label: feature.properties.label}; map.flyTo({center: [lon, lat], zoom: 11}); panel.querySelector('.notify-picked').textContent = feature.properties.label; searchStep.hidden = true; radiusStep.hidden = false; circle(); message('notifications.selected'); };
         results.append(option);
       });
     } catch { message('notifications.searchError'); }
@@ -77,11 +80,11 @@ export function createNotificationsController({ button, panel, close, map }) {
   address.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(search, 250); });
   panel.querySelectorAll('[data-radius]').forEach(button => button.onclick = () => { radius = Number(button.dataset.radius); panel.querySelectorAll('[data-radius]').forEach(item => item.setAttribute('aria-pressed', String(item === button))); circle(); });
   panel.querySelector('.notify-enable').onclick = () => enable().catch(() => message('notifications.error'));
-  add.onclick = () => { form.hidden = false; address.focus(); };
+  add.onclick = () => { list.hidden = true; form.hidden = false; searchStep.hidden = false; radiusStep.hidden = true; address.value = ''; results.replaceChildren(); address.focus(); };
   button.onclick = () => {
     document.getElementById('updates-panel').classList.remove('open');
     document.getElementById('updates-btn').setAttribute('aria-expanded', 'false');
-    panel.hidden = false; form.hidden = true; render();
+    panel.hidden = false; list.hidden = false; form.hidden = true; render();
   };
   close.onclick = () => { panel.hidden = true; button.focus(); };
   navigator.serviceWorker?.register('/sw.js'); render();

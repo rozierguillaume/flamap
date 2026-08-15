@@ -110,6 +110,7 @@ export const STRINGS = {
   'notifications.title': { fr: 'Notifications', es: 'Notificaciones' },
   'notifications.intro': { fr: 'Recevez une alerte lorsqu’un nouveau foyer est publié près de vos adresses.', es: 'Recibe una alerta cuando se publique un nuevo foco cerca de tus direcciones.' },
   'notifications.empty': { fr: 'Aucune adresse enregistrée.', es: 'No hay direcciones registradas.' },
+  'notifications.searchIntro': { fr: 'Recherchez une commune française.', es: 'Busca un municipio francés.' },
   'notifications.add': { fr: 'Ajouter une adresse', es: 'Añadir una dirección' },
   'notifications.address': { fr: 'Adresse en France', es: 'Dirección en Francia' },
   'notifications.search': { fr: 'Rechercher', es: 'Buscar' },

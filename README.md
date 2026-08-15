@@ -31,7 +31,8 @@ le panneau « Mises à jour des données ». On y ajoute une adresse française,
 choisit un rayon de 5 à 50 km et le navigateur reçoit les nouveaux foyers
 FIRMS publiés dans ce périmètre. Le navigateur demande l'autorisation seulement
 au moment de la validation ; l'adresse et le rayon restent modifiables ou
-supprimables dans le même panneau.
+supprimables dans le même panneau. Sur mobile, l'ajout se fait en deux écrans
+courts — commune, puis périmètre — pour laisser le cercle visible sur la carte.
 
 Une page séparée, [**Feux archivés**](https://flamap.fr/archives.html), liste
 tous les incendies suivis par PSFDF depuis le début de l'archive et permet de
