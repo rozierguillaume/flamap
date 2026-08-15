@@ -125,6 +125,7 @@
 
   /* =======================  MOBILE  ======================== */
   @media (max-width: 720px) {
+    #top-controls { display: contents; }
     /* Le retour laisse sa place au bandeau : `left` démarre après le bouton. */
     #psfdf-back {
       position: fixed; z-index: 499; top: 73px; left: 10px;
@@ -242,11 +243,16 @@
     #layers { position: fixed; top: 60px; right: 62px;
               max-height: calc(100vh - 130px); overflow-y: auto;
               padding: 10px 13px; font-size: 12px; }
-    #weather-btn { position: fixed; top: auto; right: 10px; width: 42px;
+    #location-btn, #weather-btn { position: fixed; top: auto; right: 10px; width: 42px;
                    height: 42px; padding: 0; font-size: 17px; }
+    #location-btn { display: grid; place-items: center; }
+    #location-btn .location-label { display: none; }
+    #location-btn .location-icon { width: 20px; height: 20px; }
     #weather-btn .weather-label { display: none; }
     #weather-btn .weather-icon { margin: 0; }
     #weather-btn::after { content: none; }
+    #location-status { top: auto; right: 62px; width: min(250px, calc(100vw - 72px));
+                       max-height: 72px; overflow: auto; }
     #export-btn { position: fixed; top: auto; right: 10px;
                   width: 42px; height: 42px; }
     #export-btn .export-icon, #export-btn .export-loader { width: 19px; height: 19px; }
