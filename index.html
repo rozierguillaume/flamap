@@ -14,7 +14,7 @@
 <link rel="alternate" hreflang="es" href="https://flamap.fr/?lang=es">
 <link rel="alternate" hreflang="x-default" href="https://flamap.fr/">
 <meta name="theme-color" content="#0d0f12">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; script-src 'self' 'sha256-DWxYuUWoe8pTdDte9SzXJM+JAgUNdWaV03Y4VMzKrX0=' https://analytics.flamap.fr; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://data.geopf.fr https://tiles.maps.eox.at; font-src 'self'; connect-src 'self' https://analytics.flamap.fr https://api.airplanes.live https://api.flamap.fr https://data.geopf.fr https://tiles.openfreemap.org https://tiles.maps.eox.at; worker-src blob:; manifest-src 'self'; form-action 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; script-src 'self' 'sha256-DWxYuUWoe8pTdDte9SzXJM+JAgUNdWaV03Y4VMzKrX0=' https://analytics.flamap.fr; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://data.geopf.fr https://tiles.maps.eox.at; font-src 'self'; connect-src 'self' https://analytics.flamap.fr https://api.airplanes.live https://api.flamap.fr https://data.geopf.fr https://tiles.openfreemap.org https://tiles.maps.eox.at; worker-src 'self' blob:; manifest-src 'self'; form-action 'self'">
 <!-- Google Search exige une URL de favicon stable et explorabile. -->
 <link rel="icon" href="/favicon.ico" sizes="48x48">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml" sizes="any">
@@ -471,6 +471,7 @@
          aria-label="Dernières mises à jour des données">
     <header><h2 data-i18n="updates.title">Mises à jour des données</h2><button id="updates-close" data-i18n-label="common.close" aria-label="Fermer">×</button></header>
     <ul id="updates-list"></ul>
+    <button id="notifications-open" type="button" data-i18n="notifications.title">Notifications</button>
   </aside>
 
   <!-- `glass` pour le fond sur ordinateur, où le bouton flotte seul au-dessus de
@@ -485,6 +486,15 @@
     <button id="cr-btn" class="glass" aria-expanded="false"
             aria-controls="credits"><span class="wide" data-i18n="credits.btn.wide">Sources &amp; </span><span data-i18n="credits.btn">crédits</span></button>
   </div>
+
+  <aside id="notifications-panel" class="glass" hidden aria-labelledby="notifications-title">
+    <header><h2 id="notifications-title" data-i18n="notifications.title">Notifications</h2><button id="notifications-close" data-i18n-label="common.close" aria-label="Fermer">×</button></header>
+    <p data-i18n="notifications.intro">Recevez une alerte lorsqu’un nouveau foyer est publié près de vos adresses.</p>
+    <ul class="notify-areas"></ul><p class="notify-empty" data-i18n="notifications.empty">Aucune adresse enregistrée.</p>
+    <button class="notify-add" type="button" data-i18n="notifications.add">Ajouter une adresse</button>
+    <form hidden><label><span data-i18n="notifications.address">Adresse en France</span><input name="address" required autocomplete="street-address" placeholder="Commune, rue ou code postal"></label><div class="notify-results" role="listbox"></div><fieldset class="notify-radius"><legend data-i18n="notifications.radius">Rayon autour de l’adresse</legend><button type="button" data-radius="5">5 km</button><button type="button" data-radius="15" aria-pressed="true">15 km</button><button type="button" data-radius="30">30 km</button><button type="button" data-radius="50">50 km</button></fieldset><button class="notify-enable" type="button" data-i18n="notifications.confirm">Valider cette adresse</button></form>
+    <p class="notify-state" aria-live="polite"></p>
+  </aside>
 
   <div id="credits" class="glass">
     <ul>

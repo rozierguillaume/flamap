@@ -30,6 +30,7 @@ import { createTimelineController } from './timeline/controller.js';
 import { addForecast, buildSteps } from './timeline/model.js';
 import { createLocationController } from './ui/location.js';
 import { createPanelManager } from './ui/panel-manager.js';
+import { createNotificationsController } from './ui/notifications.js';
 import { createPopupRouter } from './ui/popup-router.js';
 import { createPopupView, popEl, popRoot, popRow } from './ui/popup-view.js';
 import {
@@ -113,6 +114,7 @@ const FRANCE_BBOX = [-5.5, 41.0, 10.0, 51.5];
 // lien partagé qui porte déjà une caméra.
 const HAS_MAP_HASH = /^#map=/.test(location.hash);
 const map = createMap({ maplibregl, mobile: MOBILE });
+createNotificationsController({ button: document.getElementById('notifications-open'), panel: document.getElementById('notifications-panel'), close: document.getElementById('notifications-close'), map });
 const panelManager = createPanelManager();
 const locationController = createLocationController({
   map,

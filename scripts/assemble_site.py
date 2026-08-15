@@ -10,7 +10,7 @@ import shutil
 
 
 FRONT_FILES = (
-    "index.html", "archives.html", "mentions-legales.html", "aviso-legal.html",
+    "index.html", "archives.html", "mentions-legales.html", "aviso-legal.html", "sw.js",
     "social.html", "og.png",
     "favicon.svg", "favicon.ico", "apple-touch-icon.png", "icon-192.png",
     "icon-512.png", "site.webmanifest", "robots.txt", "sitemap.xml",

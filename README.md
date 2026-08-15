@@ -26,6 +26,13 @@ Un **curseur temporel** rejoue la progression du feu sur dix jours. Un menu
 donne les prévisions horaires d'un point, et un bouton d'export produit une
 image PNG ou un GIF de l'évolution.
 
+Les **notifications** sont volontairement discrètes : elles se règlent depuis
+le panneau « Mises à jour des données ». On y ajoute une adresse française,
+choisit un rayon de 5 à 50 km et le navigateur reçoit les nouveaux foyers
+FIRMS publiés dans ce périmètre. Le navigateur demande l'autorisation seulement
+au moment de la validation ; l'adresse et le rayon restent modifiables ou
+supprimables dans le même panneau.
+
 Une page séparée, [**Feux archivés**](https://flamap.fr/archives.html), liste
 tous les incendies suivis par PSFDF depuis le début de l'archive et permet de
 rejouer l'évolution de chacun (foyers, périmètres brûlés, statut) au-delà de

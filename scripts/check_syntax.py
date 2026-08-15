@@ -20,7 +20,7 @@ PYTHON_FILES = tuple(sorted(
 ))
 HTML_FILES = (
     ROOT / "index.html",
-    ROOT / "archives.html",
+    ROOT / "archives.html", ROOT / "sw.js",
     ROOT / "social.html",
     ROOT / "mentions-legales.html",
     ROOT / "aviso-legal.html",

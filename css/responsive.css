@@ -81,7 +81,7 @@
     #updates-panel { position: fixed; z-index: 502; right: 14px; bottom: 84px;
                      width: 350px; max-height: min(570px, calc(100vh - 120px));
                      padding: 15px 17px; }
-    #updates-list { max-height: min(470px, calc(100vh - 220px)); }
+    #updates-list { max-height: min(420px, calc(100vh - 270px)); }
     #activity-panel { position: fixed; z-index: 503; top: 88px; right: 14px;
                       width: min(450px, calc(100vw - 28px)); padding: 17px 19px; }
     #weather-panel { position: fixed; z-index: 504; top: 64px; right: 14px;
@@ -340,7 +340,9 @@
                      bottom: 10px; left: 10px; padding: 18px; }
     #updates-panel h2 { font-size: 17px; }
     #updates-close { width: 38px; height: 38px; font-size: 25px; } /* cible tactile */
-    #updates-list { max-height: calc(100vh - 100px); }
+    #updates-list { max-height: calc(100vh - 220px); }
+    #notifications-open { position: sticky; bottom: 0; }
+    #notifications-panel { right: 50%; bottom: auto; top: 50%; transform: translate(50%, -50%); max-height: calc(100vh - 36px); overflow-y: auto; }
     #updates-list li { grid-template-columns: 84px 1fr; padding: 13px 0; }
     #updates-list time { font-size: 12px; }
     #updates-list strong { font-size: 13px; }

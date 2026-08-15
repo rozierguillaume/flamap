@@ -13,7 +13,7 @@ from collections.abc import Callable, Iterable
 
 # Pages conservées même lorsqu'elles ne sont pas chargées par index.html.
 FRONT_ROOT_FILES = (
-    "index.html", "archives.html", "mentions-legales.html", "social.html", "og.png",
+    "index.html", "archives.html", "mentions-legales.html", "social.html", "og.png", "sw.js",
     "favicon.svg", "favicon.ico", "apple-touch-icon.png", "icon-192.png",
     "icon-512.png", "site.webmanifest", "robots.txt", "sitemap.xml",
 )
