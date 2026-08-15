@@ -28,6 +28,7 @@ import { CARD, createWindController } from './fx/wind.js';
 import { createActivityController } from './timeline/activity.js';
 import { createTimelineController } from './timeline/controller.js';
 import { addForecast, buildSteps } from './timeline/model.js';
+import { createLocationController } from './ui/location.js';
 import { createPanelManager } from './ui/panel-manager.js';
 import { createPopupRouter } from './ui/popup-router.js';
 import { createPopupView, popEl, popRoot, popRow } from './ui/popup-view.js';
@@ -113,6 +114,15 @@ const FRANCE_BBOX = [-5.5, 41.0, 10.0, 51.5];
 const HAS_MAP_HASH = /^#map=/.test(location.hash);
 const map = createMap({ maplibregl, mobile: MOBILE });
 const panelManager = createPanelManager();
+const locationController = createLocationController({
+  map,
+  trackUsage,
+  elements: {
+    button: document.getElementById('location-btn'),
+    status: document.getElementById('location-status'),
+  },
+});
+void locationController.checkPermission();
 const popupView = createPopupView({
   map, maplibregl, dock: document.getElementById('dock'),
 });
@@ -317,6 +327,8 @@ function placeClock() {
     document.getElementById('export-toast').style.bottom = `${exportBottom}px`;
     document.getElementById('weather-btn').style.bottom = `${stackBottom + 100}px`;
     document.getElementById('layers-btn').style.bottom = `${stackBottom + 150}px`;
+    document.getElementById('location-btn').style.bottom = `${stackBottom + 200}px`;
+    document.getElementById('location-status').style.bottom = `${stackBottom + 200}px`;
   }
 }
 addEventListener('resize', placeClock);

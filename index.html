@@ -103,6 +103,7 @@
 <link rel="modulepreload" href="/js/ui/panel-manager.js">
 <link rel="modulepreload" href="/js/ui/popup-router.js">
 <link rel="modulepreload" href="/js/ui/popup-view.js">
+<link rel="modulepreload" href="/js/ui/location.js">
 <link rel="modulepreload" href="/js/export/map-export.js">
 
 <script type="application/ld+json">
@@ -305,6 +306,16 @@
   pas son évolution. Ramenez le curseur à droite pour les revoir.</div>
 </div>
 
+<div id="top-controls" role="group" data-i18n-label="map.controls.aria" aria-label="Commandes de la carte">
+<button id="location-btn" class="glass" type="button"
+        data-i18n-label="location.aria" aria-label="Me localiser"
+        data-i18n-title="location.title" title="Utiliser ma position">
+  <svg class="location-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+       stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <path d="M20 10c0 5.2-8 11-8 11S4 15.2 4 10a8 8 0 1 1 16 0Z"></path>
+    <circle cx="12" cy="10" r="2.6"></circle>
+  </svg><span class="location-label" data-i18n="location.btn.label">Ma position</span>
+</button>
 <button id="weather-btn" class="glass" aria-expanded="false"
         aria-controls="weather-panel"
         data-i18n-label="weather.btn.aria" aria-label="Prévisions météo au centre de la carte"
@@ -317,6 +328,8 @@
     <path d="M13 22H7a5 5 0 1 1 4.9-6H13a3 3 0 0 1 0 6Z"/>
   </svg><span class="weather-label" data-i18n="weather.btn.label">Météo</span>
 </button>
+</div>
+<div id="location-status" class="glass" role="status" aria-live="polite" hidden></div>
 <aside id="weather-panel" class="glass" role="dialog" aria-labelledby="weather-title">
   <header>
     <h2 id="weather-title" data-i18n="weather.title.center">Météo au centre de la carte</h2>

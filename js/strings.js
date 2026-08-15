@@ -49,6 +49,7 @@ export const STRINGS = {
     es: 'Mapa satelital de las superficies quemadas y de los focos de incendio detectados',
   },
   'map.unavailable': { fr: 'Carte indisponible', es: 'Mapa no disponible' },
+  'map.controls.aria': { fr: 'Commandes de la carte', es: 'Controles del mapa' },
   'init.error': {
     fr: 'La carte n’a pas pu être chargée. Rechargez la page pour réessayer.',
     es: 'No se ha podido cargar el mapa. Recarga la página para volver a intentarlo.',
@@ -68,6 +69,41 @@ export const STRINGS = {
   'home.title': {
     fr: 'Recentrer sur la vue d’ensemble',
     es: 'Centrar en la vista general',
+  },
+  'location.aria': { fr: 'Me localiser', es: 'Localizarme' },
+  'location.title': { fr: 'Utiliser ma position', es: 'Usar mi ubicación' },
+  'location.title.denied': {
+    fr: 'Localisation refusée — autorisez-la dans les réglages du navigateur',
+    es: 'Localización rechazada — autorízala en los ajustes del navegador',
+  },
+  'location.btn.label': { fr: 'Ma position', es: 'Mi ubicación' },
+  'location.loading': {
+    fr: 'Recherche de votre position…',
+    es: 'Buscando tu ubicación…',
+  },
+  'location.denied': {
+    fr: 'Accès à la localisation refusé. Autorisez-la dans les réglages du navigateur puis réessayez.',
+    es: 'Acceso a la localización rechazado. Autorízalo en los ajustes del navegador y vuelve a intentarlo.',
+  },
+  'location.unavailable': {
+    fr: 'Votre position est momentanément indisponible.',
+    es: 'Tu ubicación no está disponible por el momento.',
+  },
+  'location.system': {
+    fr: 'Votre position n’a pas pu être déterminée. Vérifiez que les Services de localisation sont activés pour ce navigateur dans Réglages Système → Confidentialité et sécurité → Service de localisation.',
+    es: 'No se ha podido determinar tu ubicación. Comprueba que los Servicios de localización están activados para este navegador en Ajustes del Sistema → Privacidad y seguridad → Servicios de localización.',
+  },
+  'location.timeout': {
+    fr: 'La recherche de votre position a expiré. Réessayez.',
+    es: 'La búsqueda de tu ubicación ha caducado. Vuelve a intentarlo.',
+  },
+  'location.unsupported': {
+    fr: 'La localisation n’est pas disponible dans ce navigateur.',
+    es: 'La localización no está disponible en este navegador.',
+  },
+  'location.invalid': {
+    fr: 'Le navigateur a renvoyé une position invalide.',
+    es: 'El navegador ha devuelto una ubicación no válida.',
   },
   'lang.aria': { fr: 'Ver Flamap en español', es: 'Voir Flamap en français' },
   'lang.code': { fr: 'ES', es: 'FR' },

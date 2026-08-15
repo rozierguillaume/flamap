@@ -365,13 +365,36 @@
   #updates-list span { grid-column: 2; color: var(--ink-dim); font-size: 11px; }
   #updates-empty { color: var(--ink-dim); font-size: 12px; padding: 16px 0; }
 
-  /* ---- previsions meteo, repliees tant qu'elles ne sont pas demandees ---- */
-  #weather-btn {
-    position: absolute; z-index: 501; top: 14px; right: 165px;
+  /* ---- commandes de carte en haut a droite ---- */
+  #top-controls { position: absolute; z-index: 501; top: 14px; right: 165px;
+                  display: flex; align-items: center; gap: 6px; }
+  #location-btn, #weather-btn {
     height: 35px; padding: 0 12px; color: #cbc7c2;
     font: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
   }
-  #weather-btn:hover, #weather-btn[aria-expanded="true"] { color: var(--ink); }
+  #location-btn { display: inline-flex; align-items: center; justify-content: center; gap: 5px; }
+  #location-btn:hover, #location-btn:focus-visible,
+  #location-btn.locating, #weather-btn:hover, #weather-btn[aria-expanded="true"] {
+    color: var(--ink);
+  }
+  #location-btn .location-icon { width: 17px; height: 17px; stroke-width: 1.9; }
+  #location-btn.locating .location-icon {
+    animation: location-pulse 1.1s ease-in-out infinite;
+  }
+  #location-btn[aria-busy="true"] { cursor: wait; }
+  @keyframes location-pulse { 50% { opacity: .38; transform: scale(.82); } }
+  #location-status {
+    position: fixed; z-index: 505; top: 58px; right: 165px;
+    width: min(310px, calc(100vw - 190px)); padding: 8px 10px;
+    color: #d7d3ce; font-size: 11.5px; line-height: 1.35;
+  }
+  #location-status[hidden] { display: none; }
+  #location-status.error { color: #efb09f; }
+
+  /* ---- previsions meteo, repliees tant qu'elles ne sont pas demandees ---- */
+  #weather-btn {
+    position: static;
+  }
   #weather-btn .weather-icon { margin-right: 5px; color: #fff; vertical-align: -3px; }
   #weather-btn::after { content: " ›"; }
   #weather-btn[aria-expanded="true"]::after { content: " ⌄"; }
