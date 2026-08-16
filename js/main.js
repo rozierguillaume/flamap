@@ -114,7 +114,7 @@ const FRANCE_BBOX = [-5.5, 41.0, 10.0, 51.5];
 // lien partagé qui porte déjà une caméra.
 const HAS_MAP_HASH = /^#map=/.test(location.hash);
 const map = createMap({ maplibregl, mobile: MOBILE });
-createNotificationsController({ button: document.getElementById('notifications-open'), panel: document.getElementById('notifications-panel'), close: document.getElementById('notifications-close'), map });
+const notificationsController = createNotificationsController({ button: document.getElementById('notifications-open'), panel: document.getElementById('notifications-panel'), close: document.getElementById('notifications-close'), map });
 const panelManager = createPanelManager();
 const locationController = createLocationController({
   map,
@@ -936,7 +936,10 @@ const popupRouter = createPopupRouter({
     openPopup(event.lngLat, content, hit.id);
   },
 });
-const mapClick = event => popupRouter.click(event);
+const mapClick = event => {
+  if (notificationsController.handleMapClick(event)) return;
+  popupRouter.click(event);
+};
 
 const dataP = loadInitialData(buildSteps);
 
