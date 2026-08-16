@@ -345,7 +345,10 @@
     #notifications-open { position: sticky; bottom: 0; }
     /* Le panneau reste une feuille basse : même pendant la saisie, la moitié
        haute de l'écran demeure disponible pour placer et contrôler le rayon. */
-    #notifications-panel { z-index: 650; right: 10px; left: 10px; bottom: 14px; top: auto; transform: none; width: auto; max-height: 48vh; overflow-y: auto; }
+    /* Le panneau vit dans #dock : relever seulement ce parent à l'ouverture
+       l'empêche de rester sous l'export, qui est ancré directement au body. */
+    #dock.notifications-open { z-index: 800; }
+    #notifications-panel { z-index: 800; right: 10px; left: 10px; bottom: 14px; top: auto; transform: none; width: auto; max-height: 48vh; overflow-y: auto; }
     #updates-list li { grid-template-columns: 84px 1fr; padding: 13px 0; }
     #updates-list time { font-size: 12px; }
     #updates-list strong { font-size: 13px; }

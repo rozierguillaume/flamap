@@ -7,6 +7,7 @@ const save = value => localStorage.setItem(STORE, JSON.stringify(value));
 const bytes = value => Uint8Array.from(atob(value.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
 
 export function createNotificationsController({ button, panel, close, map }) {
+  const dock = panel.parentElement;
   const form = panel.querySelector('form');
   const address = panel.querySelector('[name=address]');
   const results = panel.querySelector('.notify-results');
@@ -68,13 +69,24 @@ export function createNotificationsController({ button, panel, close, map }) {
     empty.hidden = data.areas.length > 0;
     areas.replaceChildren(...data.areas.map((area, index) => {
       const item = document.createElement('li');
+      item.tabIndex = 0; item.ariaLabel = area.label;
+      const focusArea = () => {
+        chosen = area; radius = area.radius_km; circle();
+        map.flyTo({center: [area.lon, area.lat], zoom: 11});
+      };
+      item.onclick = event => { if (!event.target.closest('select, button')) focusArea(); };
+      item.onkeydown = event => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault(); focusArea();
+      };
       const label = document.createElement('span'); label.className = 'notify-area-label'; label.textContent = area.label; item.append(label);
       const select = document.createElement('select'); [5, 15, 30, 50].forEach(value => { const option = new Option(`${value} km`, value, false, value === area.radius_km); select.add(option); });
+      select.onclick = event => event.stopPropagation();
       select.onchange = () => { area.radius_km = Number(select.value); save(data); sync(); };
       item.append(select);
       const remove = document.createElement('button');
       remove.type = 'button'; remove.textContent = '×'; remove.ariaLabel = t('common.close');
-      remove.onclick = () => { data.areas.splice(index, 1); save(data); sync(); render(); };
+      remove.onclick = event => { event.stopPropagation(); data.areas.splice(index, 1); save(data); sync(); render(); };
       item.append(remove); return item;
     }));
   };
@@ -137,13 +149,13 @@ export function createNotificationsController({ button, panel, close, map }) {
   button.onclick = () => {
     document.getElementById('updates-panel').classList.remove('open');
     document.getElementById('updates-btn').setAttribute('aria-expanded', 'false');
-    panel.hidden = false; showList();
+    dock.classList.add('notifications-open'); panel.hidden = false; showList();
   };
-  close.onclick = () => { pickingOnMap = false; map.getCanvas().style.cursor = ''; panel.hidden = true; button.focus(); };
+  close.onclick = () => { pickingOnMap = false; map.getCanvas().style.cursor = ''; dock.classList.remove('notifications-open'); panel.hidden = true; button.focus(); };
   map.on('style.load', () => { renderMarkers(); circle(); });
   navigator.serviceWorker?.register('/sw.js'); render();
   return {
-    close: () => { pickingOnMap = false; map.getCanvas().style.cursor = ''; panel.hidden = true; },
+    close: () => { pickingOnMap = false; map.getCanvas().style.cursor = ''; dock.classList.remove('notifications-open'); panel.hidden = true; },
     handleMapClick: event => {
       if (pickingOnMap) {
         const { lng, lat } = event.lngLat;
